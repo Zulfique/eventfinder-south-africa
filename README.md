@@ -45,13 +45,14 @@ and runs on a physical device or emulator.
 | **Map** | Event locations plotted on a free OpenStreetMap map (osmdroid) — no Google Maps key or billing. |
 | **Event detail** | Hero image, organiser, attendee count, venue map link, **weather forecast at the venue** on the event day, share and RSVP. |
 | **Search** | Debounced keyword search with recent-search history and popular events. |
-| **Create event** | A 3-step wizard (details → date/time → location) for community-created events. |
+| **Create event** | A 3-step wizard (details → date/time → location) with an optional photo picked from the system photo picker. |
+| **My events** | Organisers can edit or delete the events they created from the detail screen's overflow menu. |
 | **Favourites** | Save events offline; favourites survive app restarts and are queued for sync. |
 | **Profile** | Account header, activity stats (created / attending / favourites), My Events and Attending lists. |
 | **Edit profile** | Update display name and email with validation. |
-| **Settings** | Language switch (English / Afrikaans), biometric login toggle, event reminders, new-event alerts. |
+| **Settings** | Language switch (English / Afrikaans), biometric login toggle, event reminders, new-event alerts, plus account tools (change password, clear local cache, delete account). |
 | **Auth** | Local email + password registration and login (PBKDF2-hashed), plus biometric unlock. |
-| **Reminders** | `AlarmManager` + `NotificationChannel` reminder one hour before an attended event. |
+| **Reminders** | `AlarmManager` + `NotificationChannel` reminders **24 hours and 1 hour** before an attended event, cancelled when the RSVP is declined. |
 
 ## Screenshots
 
@@ -271,10 +272,26 @@ no emulator:
 | `EventCategoryTest` | Ticketmaster segment ↔ local category mapping in both directions. |
 | `TicketmasterMapperTest` | Full payload mapping, malformed-row skipping, coordinate fallback, image selection, date parsing. |
 | `WeatherRepositoryTest` | WMO weather-code descriptions and Open-Meteo payload handling. |
-| `EventRepositoryTest` | Seeding, sync (network + no-key), favourite/RSVP toggling, event creation, cache clearing — using in-memory DAO fakes. |
+| `EventRepositoryTest` | Seeding, sync (network + no-key), favourite/RSVP toggling, event creation, editing/deleting with ownership guard, cache clearing — using in-memory DAO fakes. |
 | `SampleEventsProviderTest` | Demo catalogue integrity (unique ids, valid SA coordinates, sane dates). |
 
 HTML reports are written to `app/build/reports/tests/testDebugUnitTest/index.html`.
+
+### Instrumented UI tests
+
+A small **Compose UI test** suite runs on a connected device/emulator and covers the shared
+widgets (`app/src/androidTest/.../ui/components/CommonComponentsTest.kt`):
+
+```bash
+./gradlew connectedDebugAndroidTest
+```
+
+| Test | Covers |
+| --- | --- |
+| `eventCard_displaysTitleAndVenue` | Card renders the event title, venue and metadata. |
+| `eventCard_clickInvokesCallback` | Tapping the card fires its `onClick`. |
+| `eventCard_favouriteToggleInvokesCallback` | The heart button reports add/remove from its content description. |
+| `categoryChips_selectsACategoryAndCanClearIt` | Category chips select and clear the filter. |
 
 ## Continuous integration
 
@@ -309,6 +326,7 @@ app/src/main/java/com/eventfinder/app/
 │   └── theme/           Material 3 colour scheme & typography
 └── utils/              Logging, date/time, distance, validation, hashing, locale, network
 app/src/test/java/com/eventfinder/app/   JVM unit tests
+app/src/androidTest/java/com/eventfinder/app/   Compose instrumented UI tests
 docs/screenshots/                        Real device screenshots
 ```
 
@@ -320,7 +338,7 @@ docs/screenshots/                        Real device screenshots
 | External library integration | Room, Retrofit/OkHttp, DataStore, Coil, osmdroid, AndroidX Biometric |
 | Native Android SDK integration | `AlarmManager` + `NotificationManager` reminders, `LocationManager`/location permissions, biometrics |
 | Offline-first / robustness | Room cache + `pending_sync` queue, graceful fallbacks, validation on every form |
-| Unit testing | 72 JVM tests + GitHub Actions CI |
+| Unit testing | 72 JVM tests + 4 Compose instrumented tests + GitHub Actions CI |
 | Logging & comments | `AppLogger` used across data/UI layers; KDoc on every class |
 | Documentation | This README with Mermaid architecture diagrams |
 
