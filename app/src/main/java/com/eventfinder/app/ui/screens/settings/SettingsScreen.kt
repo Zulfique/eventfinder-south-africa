@@ -3,6 +3,7 @@ package com.eventfinder.app.ui.screens.settings
 import android.app.Activity
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -23,6 +24,7 @@ import androidx.compose.material.icons.outlined.NotificationsActive
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
@@ -294,10 +296,13 @@ private fun LanguageSelector(
 ) {
     var expanded by remember { mutableStateOf(false) }
 
-    ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }) {
+    // A plain Box + DropdownMenu is used (instead of ExposedDropdownMenuBox) so the
+    // custom row reliably opens the menu on tap.
+    Box {
         Row(
-            modifier = Modifier.menuAnchor()
+            modifier = Modifier
                 .fillMaxWidth()
+                .clickable { expanded = true }
                 .padding(horizontal = 16.dp, vertical = 8.dp),
             verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
         ) {
@@ -313,7 +318,7 @@ private fun LanguageSelector(
             }
             ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded)
         }
-        ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
             DropdownMenuItem(
                 text = { Text(SupportedLanguage.ENGLISH.displayName) },
                 onClick = {

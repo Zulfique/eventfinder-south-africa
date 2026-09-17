@@ -5,6 +5,7 @@ import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -35,6 +36,7 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
@@ -304,17 +306,31 @@ private fun StepDateVenue(
 ) {
     val state = viewModel.uiState.collectAsState().value
 
-    OutlinedTextField(
-        value = if (state.dateMillis == 0L) "" else DateTimeUtils.formatFullDateTime(state.dateMillis),
-        onValueChange = {},
-        readOnly = true,
-        label = { Text(stringResource(R.string.date_time)) },
-        trailingIcon = { Icon(Icons.Outlined.EditCalendar, contentDescription = null) },
-        placeholder = { Text(stringResource(R.string.tap_to_pick_date)) },
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onPickDate)
-    )
+    // A read-only text field consumes taps for its own cursor, so an overlay owns the click.
+    Box(Modifier.fillMaxWidth()) {
+        OutlinedTextField(
+            value = if (state.dateMillis == 0L) "" else DateTimeUtils.formatFullDateTime(state.dateMillis),
+            onValueChange = {},
+            readOnly = true,
+            enabled = false,
+            label = { Text(stringResource(R.string.date_time)) },
+            trailingIcon = { Icon(Icons.Outlined.EditCalendar, contentDescription = null) },
+            placeholder = { Text(stringResource(R.string.tap_to_pick_date)) },
+            colors = OutlinedTextFieldDefaults.colors(
+                disabledTextColor = MaterialTheme.colorScheme.onSurface,
+                disabledBorderColor = MaterialTheme.colorScheme.outline,
+                disabledLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                disabledPlaceholderColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                disabledTrailingIconColor = MaterialTheme.colorScheme.onSurfaceVariant
+            ),
+            modifier = Modifier.fillMaxWidth()
+        )
+        Box(
+            Modifier
+                .matchParentSize()
+                .clickable(onClick = onPickDate)
+        )
+    }
     OutlinedTextField(
         value = state.venueName,
         onValueChange = viewModel::onVenueChange,

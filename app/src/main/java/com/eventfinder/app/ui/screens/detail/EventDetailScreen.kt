@@ -63,6 +63,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import com.eventfinder.app.R
@@ -96,6 +98,9 @@ fun EventDetailScreen(
     var showDeleteDialog by remember { mutableStateOf(false) }
 
     BackHandler { onBack() }
+
+    // Re-read the event when returning from the create/edit screen.
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { viewModel.refresh() }
 
     LaunchedEffect(Unit) {
         viewModel.messages.collect { msg ->

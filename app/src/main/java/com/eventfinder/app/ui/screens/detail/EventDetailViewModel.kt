@@ -44,6 +44,9 @@ class EventDetailViewModel(
 
     private val eventRepository = container.eventRepository
 
+    private val eventFlow = MutableStateFlow<com.eventfinder.app.domain.model.Event?>(null)
+    private var weatherKey: Triple<Double, Double, Long>? = null
+
     private val _uiState = MutableStateFlow(EventDetailUiState())
     val uiState = _uiState.asStateFlow()
 
@@ -52,38 +55,47 @@ class EventDetailViewModel(
 
     init {
         viewModelScope.launch {
-            val event = eventRepository.getEvent(eventId)
-            if (event == null) {
-                _uiState.value = EventDetailUiState(loading = false, notFound = true)
-                return@launch
-            }
-
-            // Stream favourite + RSVP updates reactively.
             kotlinx.coroutines.flow.combine(
+                eventFlow,
                 eventRepository.observeFavoriteIds(),
                 eventRepository.observeRsvpStatuses()
-            ) { favoriteIds, rsvps ->
-                _uiState.update { current ->
-                    current.copy(
-                        loading = false,
-                        eventView = current.eventView?.let {
-                            it.copy(
-                                event = it.event.copy(isFavorite = favoriteIds.contains(it.event.id)),
-                                rsvpStatus = rsvps[it.event.id]
+            ) { event, favoriteIds, rsvps -> Triple(event, favoriteIds, rsvps) }
+                .collect { (event, favoriteIds, rsvps) ->
+                    if (event == null) return@collect
+                    _uiState.update { current ->
+                        current.copy(
+                            loading = false,
+                            notFound = false,
+                            eventView = EventView(
+                                event = event.copy(isFavorite = favoriteIds.contains(event.id)),
+                                rsvpStatus = rsvps[event.id]
                             )
-                        } ?: com.eventfinder.app.domain.model.EventView(
-                            event = event.copy(isFavorite = favoriteIds.contains(event.id)),
-                            rsvpStatus = rsvps[event.id]
                         )
-                    )
+                    }
                 }
-            }.collect {}
+        }
+        refresh()
+    }
 
+    /**
+     * Reloads the event from the cache. Called again whenever the screen resumes
+     * so edits made on the create/edit screen are reflected immediately.
+     */
+    fun refresh() {
+        viewModelScope.launch {
+            val event = eventRepository.getEvent(eventId)
+            if (event == null) {
+                _uiState.update { it.copy(loading = false, notFound = true, eventView = null) }
+                return@launch
+            }
+            eventFlow.value = event
             loadWeather(event.latitude, event.longitude, event.startDate)
         }
     }
 
     private suspend fun loadWeather(lat: Double, lng: Double, startDate: Long) {
+        if (Triple(lat, lng, startDate) == weatherKey) return
+        weatherKey = Triple(lat, lng, startDate)
         val weatherRepository: WeatherRepository = container.weatherRepository
         if (!DateTimeUtils.isInFuture(startDate) ||
             DateTimeUtils.daysUntil(startDate) > 16L
@@ -93,7 +105,7 @@ class EventDetailViewModel(
         }
         weatherRepository.forecastFor(eventId, lat, lng, startDate)
             .onSuccess { weather ->
-                _uiState.update { it.copy(weather = weather) }
+                _uiState.update { it.copy(weather = weather, weatherUnavailable = false) }
                 AppLogger.d("EventDetailViewModel", "Weather loaded for $eventId")
             }
             .onFailure {
