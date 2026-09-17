@@ -92,7 +92,7 @@ object RegistrationValidator {
             errors += "invalid_email"
         }
 
-        when (val passwordResult = PasswordValidator.validate(password)) {
+        when (PasswordValidator.validate(password)) {
             is ValidationResult.Invalid -> errors +=
                 PasswordValidator.ruleMessageKeys(password)
             else -> Unit

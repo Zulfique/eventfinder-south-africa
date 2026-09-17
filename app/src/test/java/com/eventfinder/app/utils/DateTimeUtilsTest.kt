@@ -32,9 +32,11 @@ class DateTimeUtilsTest {
     @Test
     fun `isToday and isTomorrow follow the current clock`() {
         val now = System.currentTimeMillis()
-        assertTrue(DateTimeUtils.isToday(now + 1_000L))
-        assertTrue(DateTimeUtils.isTomorrow(now + day + 5_000L))
-        assertFalse(DateTimeUtils.isTomorrow(now + 2 * day))
+        // Offsets sit an hour inside each day boundary so the millisecond
+        // elapsed between calls can never shift the truncated day count.
+        assertTrue(DateTimeUtils.isToday(now + hour))
+        assertTrue(DateTimeUtils.isTomorrow(now + day + hour))
+        assertFalse(DateTimeUtils.isTomorrow(now + 2 * day + hour))
     }
 
     @Test

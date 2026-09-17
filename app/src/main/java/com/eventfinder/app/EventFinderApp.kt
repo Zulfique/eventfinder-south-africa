@@ -1,6 +1,7 @@
 package com.eventfinder.app
 
 import android.app.Application
+import android.content.Context
 import android.os.Build
 import android.util.Log
 import com.eventfinder.app.di.AppContainer
@@ -43,7 +44,10 @@ class EventFinderApp : Application() {
      *  - osmdroid wiki: https://github.com/osmdroid/osmdroid/wiki/How-to-use-the-osmdroid-library
      */
     private fun initialiseMapSdk() {
-        Configuration.getInstance().load(this, android.preference.PreferenceManager.getDefaultSharedPreferences(this))
+        Configuration.getInstance().load(
+            this,
+            getSharedPreferences("${packageName}_preferences", Context.MODE_PRIVATE)
+        )
         Configuration.getInstance().userAgentValue = "com.eventfinder.app"
         AppLogger.d("EventFinderApp", "osmdroid configured with ${TileSourceFactory.MAPNIK.name()}")
     }
