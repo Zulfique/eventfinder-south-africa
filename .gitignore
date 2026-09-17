@@ -1,0 +1,19 @@
+# Gradle files
+.gradle/
+build/
+!gradle/wrapper/gradle-wrapper.jar
+
+# Local configuration files (machine specific - contains SDK paths & API keys)
+local.properties
+
+# IDE files
+.idea/
+*.iml
+.DS_Store
+captures/
+.externalNativeBuild
+.cxx
+
+# Key store files (never commit signing keys)
+*.jks
+*.keystore
