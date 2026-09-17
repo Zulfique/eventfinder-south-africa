@@ -5,6 +5,8 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import android.content.Context
+import android.net.Uri
 import com.eventfinder.app.R
 import com.eventfinder.app.data.repository.EventRepository
 import com.eventfinder.app.data.repository.NewEventDraft
@@ -13,6 +15,7 @@ import com.eventfinder.app.domain.model.EventCategory
 import com.eventfinder.app.ui.components.UiMessage
 import com.eventfinder.app.utils.AppLogger
 import com.eventfinder.app.utils.DateTimeUtils
+import com.eventfinder.app.utils.ImageStorage
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asSharedFlow
@@ -36,7 +39,8 @@ data class CreateEventUiState(
     val address: String = "",
     val latitude: String = "",
     val longitude: String = "",
-    val isPublic: Boolean = true
+    val isPublic: Boolean = true,
+    val imageUrl: String? = null
 )
 
 /**
@@ -85,9 +89,30 @@ class CreateEventViewModel(
                 address = event.address,
                 latitude = event.latitude.toString(),
                 longitude = event.longitude.toString(),
-                isPublic = event.isPublic
+                isPublic = event.isPublic,
+                imageUrl = event.imageUrl
             )
         }
+    }
+
+    /** Imports a picked gallery image into internal storage (FR-06). */
+    fun importImage(context: Context, uri: Uri) {
+        viewModelScope.launch {
+            val previous = _uiState.value.imageUrl
+            val imported = ImageStorage.importImage(context, uri)
+            if (imported != null) {
+                ImageStorage.deleteIfLocal(previous)
+                _uiState.update { it.copy(imageUrl = imported) }
+            } else {
+                _messages.emit(UiMessage.Resource(R.string.image_pick_failed))
+            }
+        }
+    }
+
+    /** Removes the chosen image (and its local copy, if any). */
+    fun removeImage() {
+        ImageStorage.deleteIfLocal(_uiState.value.imageUrl)
+        _uiState.update { it.copy(imageUrl = null) }
     }
 
     fun onTitleChange(v: String) = _uiState.update { it.copy(title = v) }
@@ -159,7 +184,8 @@ class CreateEventViewModel(
                 address = state.address.trim().ifBlank { state.venueName.trim() },
                 latitude = lat,
                 longitude = lng,
-                isPublic = state.isPublic
+                isPublic = state.isPublic,
+                imageUrl = state.imageUrl
             )
             val result: Result<*> = if (eventId != null) {
                 eventRepository.updateEvent(eventId, draft)

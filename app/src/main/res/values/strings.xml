@@ -110,6 +110,11 @@
     <string name="no_results">No results for this search</string>
     <string name="clear_history">Clear history</string>
 
+    <string name="image_pick_failed">Could not use that image</string>
+    <string name="add_photo">Add a photo</string>
+    <string name="change_photo">Change photo</string>
+    <string name="remove_photo">Remove</string>
+
     <!-- Create event -->
     <string name="create_event_title">Create Event</string>
     <string name="step_x_of_y">Step %1$d of %2$d</string>

@@ -187,7 +187,7 @@ class EventRepositoryImpl(
             address = draft.address.trim(),
             latitude = draft.latitude,
             longitude = draft.longitude,
-            imageUrl = null,
+            imageUrl = draft.imageUrl,
             isPublic = draft.isPublic,
             organizerId = "local-user",
             organizerName = "You",

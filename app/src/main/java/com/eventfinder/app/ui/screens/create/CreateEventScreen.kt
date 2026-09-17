@@ -1,5 +1,8 @@
 package com.eventfinder.app.ui.screens.create
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -11,8 +14,10 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.AddPhotoAlternate
 import androidx.compose.material.icons.outlined.ArrowForward
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.CheckCircle
@@ -28,6 +33,7 @@ import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
@@ -48,10 +54,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import coil.compose.AsyncImage
 import com.eventfinder.app.R
 import com.eventfinder.app.di.AppContainer
 import com.eventfinder.app.domain.model.EventCategory
@@ -79,6 +88,18 @@ fun CreateEventScreen(
 
     var showDatePicker by remember { mutableStateOf(false) }
     var showTimePicker by remember { mutableStateOf(false) }
+
+    // System photo picker: free, no storage permission required (FR-06).
+    val imagePicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.PickVisualMedia()
+    ) { uri ->
+        if (uri != null) viewModel.importImage(context, uri)
+    }
+    val pickImage: () -> Unit = {
+        imagePicker.launch(
+            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+        )
+    }
 
     LaunchedEffect(Unit) {
         viewModel.messages.collect { msg ->
@@ -208,7 +229,7 @@ fun CreateEventScreen(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 when (state.step) {
-                    1 -> StepDetails(viewModel)
+                    1 -> StepDetails(viewModel, onPickImage = pickImage)
                     2 -> StepDateVenue(viewModel, onPickDate = { showDatePicker = true })
                     else -> StepReview(state, viewModel)
                 }
@@ -222,8 +243,31 @@ private fun getString(resId: Int, vararg args: Any): String =
     androidx.compose.ui.res.stringResource(resId, *args)
 
 @Composable
-private fun StepDetails(viewModel: CreateEventViewModel) {
+private fun StepDetails(viewModel: CreateEventViewModel, onPickImage: () -> Unit) {
     val state = viewModel.uiState.collectAsState().value
+
+    if (state.imageUrl != null) {
+        AsyncImage(
+            model = state.imageUrl,
+            contentDescription = stringResource(R.string.event_image),
+            contentScale = ContentScale.Crop,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(170.dp)
+                .clip(RoundedCornerShape(16.dp))
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(onClick = onPickImage) { Text(stringResource(R.string.change_photo)) }
+            TextButton(onClick = viewModel::removeImage) { Text(stringResource(R.string.remove_photo)) }
+        }
+    } else {
+        OutlinedButton(onClick = onPickImage, modifier = Modifier.fillMaxWidth()) {
+            Icon(Icons.Outlined.AddPhotoAlternate, contentDescription = null)
+            Spacer(Modifier.width(8.dp))
+            Text(stringResource(R.string.add_photo))
+        }
+    }
+
     OutlinedTextField(
         value = state.title,
         onValueChange = viewModel::onTitleChange,
@@ -312,6 +356,17 @@ private fun StepDateVenue(
 private fun StepReview(state: CreateEventUiState, viewModel: CreateEventViewModel) {
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            state.imageUrl?.let { image ->
+                AsyncImage(
+                    model = image,
+                    contentDescription = stringResource(R.string.event_image),
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(150.dp)
+                        .clip(RoundedCornerShape(16.dp))
+                )
+            }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(
                     Icons.Outlined.CheckCircle,
