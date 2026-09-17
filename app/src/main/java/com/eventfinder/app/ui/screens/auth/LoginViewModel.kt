@@ -1,0 +1,136 @@
+package com.eventfinder.app.ui.screens.auth
+
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.viewModelScope
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
+import com.eventfinder.app.R
+import com.eventfinder.app.data.repository.AuthRepository
+import com.eventfinder.app.ui.components.UiMessage
+import com.eventfinder.app.utils.AppLogger
+import com.eventfinder.app.utils.RegistrationValidator
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
+
+/** UI state for the login screen. */
+data class LoginUiState(
+    val email: String = "",
+    val password: String = "",
+    val showPassword: Boolean = false,
+    val isSubmitting: Boolean = false,
+    val emailError: Int? = null,
+    val passwordError: Int? = null,
+    val biometricAvailable: Boolean = false,
+    val biometricEnabled: Boolean = false
+)
+
+/**
+ * Login flow (FR-01). Validates fields client-side before invoking the
+ * repository; a successful login updates the persisted session (FR-01).
+ */
+class LoginViewModel(
+    private val authRepository: AuthRepository,
+    biometricAvailable: Boolean
+) : ViewModel() {
+
+    private val _uiState = MutableStateFlow(
+        LoginUiState(biometricAvailable = biometricAvailable)
+    )
+    val uiState = _uiState.asStateFlow()
+
+    private val _messages = MutableSharedFlow<UiMessage>()
+    val messages = _messages.asSharedFlow()
+
+    init {
+        viewModelScope.launch {
+            authRepository.currentUser.collect { user ->
+                if (user?.biometricEnabled == true && _uiState.value.biometricAvailable) {
+                    _uiState.update { it.copy(biometricEnabled = true) }
+                }
+            }
+        }
+    }
+
+    fun onEmailChange(value: String) {
+        _uiState.update { it.copy(email = value, emailError = null) }
+    }
+
+    fun onPasswordChange(value: String) {
+        _uiState.update { it.copy(password = value, passwordError = null) }
+    }
+
+    fun togglePasswordVisibility() {
+        _uiState.update { it.copy(showPassword = !it.showPassword) }
+    }
+
+    /** Validates and attempts a password login. */
+    fun login(onSuccess: () -> Unit) {
+        val state = _uiState.value
+        val validation = RegistrationValidator.validateLogin(state.email, state.password)
+        if (validation is com.eventfinder.app.utils.ValidationResult.Invalid) {
+            // Map the shared validation keys to per-field errors.
+            val errors = validation.messages
+            _uiState.update {
+                it.copy(
+                    emailError = if (errors.contains("invalid_email")) R.string.invalid_email else null,
+                    passwordError = if (errors.contains("invalid_password")) R.string.invalid_password else null
+                )
+            }
+            return
+        }
+
+        viewModelScope.launch {
+            _uiState.update { it.copy(isSubmitting = true) }
+            authRepository.login(state.email, state.password)
+                .onSuccess { user ->
+                    AppLogger.i("LoginViewModel", "Login succeeded for ${user.email}")
+                    _messages.emit(UiMessage.Resource(R.string.login_success))
+                    onSuccess()
+                }
+                .onFailure { throwable ->
+                    AppLogger.w("LoginViewModel", "Login failed: ${throwable.message}")
+                    _messages.emit(UiMessage.Resource(R.string.login_failed))
+                    _uiState.update { it.copy(passwordError = R.string.login_failed) }
+                }
+            _uiState.update { it.copy(isSubmitting = false) }
+        }
+    }
+
+    /** Completes a biometric unlock straight into the app. */
+    fun confirmBiometricLogin(onSuccess: () -> Unit) {
+        viewModelScope.launch {
+            authRepository.biometricLogin()
+                .onSuccess {
+                    AppLogger.i("LoginViewModel", "Biometric login succeeded")
+                    onSuccess()
+                }
+                .onFailure {
+                    _messages.emit(UiMessage.Resource(R.string.login_failed))
+                }
+        }
+    }
+
+    fun requestPasswordReset() {
+        viewModelScope.launch {
+            authRepository.resetPassword(_uiState.value.email)
+                .onSuccess { _messages.emit(UiMessage.Resource(R.string.reset_sent)) }
+                .onFailure { _messages.emit(UiMessage.Resource(R.string.invalid_email)) }
+        }
+    }
+
+    companion object {
+        fun factory(
+            authRepository: AuthRepository,
+            biometricAvailable: Boolean
+        ): ViewModelProvider.Factory = viewModelFactory {
+            initializer {
+                LoginViewModel(authRepository, biometricAvailable)
+            }
+        }
+    }
+}
