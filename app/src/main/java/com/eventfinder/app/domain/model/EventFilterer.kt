@@ -15,7 +15,7 @@ object EventFilterer {
      * Applies category + keyword + radius filtering (FR-02).
      *
      * @param events      source list
-     * @param query       free-text keyword matched against title, venue & city
+     * @param query       free-text keyword matched against title, description, venue & address/city
      * @param category    category chip filter (null = all)
      * @param userLat     current latitude (null disables radius filtering)
      * @param userLng     current longitude
@@ -33,7 +33,9 @@ object EventFilterer {
         return events.filter { event ->
             val matchesQuery = normalizedQuery.isNullOrEmpty() ||
                 event.title.lowercase().contains(normalizedQuery) ||
+                event.description.lowercase().contains(normalizedQuery) ||
                 event.venueName.lowercase().contains(normalizedQuery) ||
+                event.address.lowercase().contains(normalizedQuery) ||
                 event.organizerName.lowercase().contains(normalizedQuery)
 
             val matchesCategory = category == null || event.category == category

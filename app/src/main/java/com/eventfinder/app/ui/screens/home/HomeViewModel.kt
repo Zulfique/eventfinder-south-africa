@@ -22,12 +22,10 @@ import com.eventfinder.app.utils.LocationUtils
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 @Suppress("unused")
@@ -260,8 +258,4 @@ class HomeViewModel(
                 initializer { HomeViewModel(container, appContext) }
             }
     }
-}
-
-private fun <T> MutableStateFlow<T>.update(transform: (T) -> T) {
-    value = transform(value)
 }
