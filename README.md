@@ -5,7 +5,7 @@
 ![Jetpack Compose](https://img.shields.io/badge/Jetpack%20Compose-BOM%202024.02-4285F4?logo=jetpackcompose&logoColor=white)
 ![minSdk](https://img.shields.io/badge/minSdk-26-brightgreen)
 ![targetSdk](https://img.shields.io/badge/targetSdk-34-brightgreen)
-![Tests](https://img.shields.io/badge/unit%20tests-72%20passing-success)
+![Tests](https://img.shields.io/badge/unit%20tests-92%20passing-success)
 
 A native **Android (Kotlin + Jetpack Compose)** app that helps people across South Africa
 discover, save and create local events — from Joburg jazz nights to Cape Town food markets
@@ -20,18 +20,19 @@ and runs on a physical device or emulator.
 ## Table of contents
 
 1. [Features](#features)
-2. [Tech stack](#tech-stack)
-3. [Architecture](#architecture)
-4. [External APIs](#external-apis)
-5. [Localisation](#localisation)
-6. [Offline-first behaviour](#offline-first-behaviour)
-7. [Security](#security)
-8. [Getting started](#getting-started)
-9. [Testing](#testing)
-10. [Continuous integration](#continuous-integration)
-11. [Project structure](#project-structure)
-12. [Requirement traceability](#requirement-traceability)
-13. [Attribution & licences](#attribution--licences)
+2. [Screenshots](#screenshots)
+3. [Tech stack](#tech-stack)
+4. [Architecture](#architecture)
+5. [External APIs](#external-apis)
+6. [Localisation](#localisation)
+7. [Offline-first behaviour](#offline-first-behaviour)
+8. [Security](#security)
+9. [Getting started](#getting-started)
+10. [Testing](#testing)
+11. [Continuous integration](#continuous-integration)
+12. [Project structure](#project-structure)
+13. [Requirement traceability](#requirement-traceability)
+14. [Attribution & licences](#attribution--licences)
 
 ---
 
@@ -52,6 +53,27 @@ and runs on a physical device or emulator.
 | **Settings** | Language switch (English / Afrikaans), biometric login toggle, event reminders, new-event alerts, plus account tools (change password, clear local cache, delete account). |
 | **Auth** | Local email + password registration and login (PBKDF2-hashed), plus biometric unlock. |
 | **Reminders** | `AlarmManager` + `NotificationChannel` reminders **24 hours and 1 hour** before an attended event, cancelled when the RSVP is declined. |
+
+## Screenshots
+
+Every screen below was captured from the running app on an Android 14 (API 34)
+emulator at 1080 × 2340.
+
+| Login | Register | Forgot password | Home (Discover) |
+| :---: | :---: | :---: | :---: |
+| ![Login](docs/screenshots/01-login.png) | ![Register](docs/screenshots/11-register.png) | ![Forgot password](docs/screenshots/12-forgot-password.png) | ![Home](docs/screenshots/02-home.png) |
+
+| Event detail | Map | Favourites | Search |
+| :---: | :---: | :---: | :---: |
+| ![Event detail](docs/screenshots/03-event-detail.png) | ![Map](docs/screenshots/09-map.png) | ![Favourites](docs/screenshots/04-favorites.png) | ![Search](docs/screenshots/05-search.png) |
+
+| Create – details | Create – date & venue | Date picker | Create – review |
+| :---: | :---: | :---: | :---: |
+| ![Create details](docs/screenshots/06-create-event.png) | ![Create date and venue](docs/screenshots/13-create-event-location.png) | ![Date picker](docs/screenshots/14-date-picker.png) | ![Create review](docs/screenshots/15-create-event-review.png) |
+
+| Profile | Edit profile | Settings |
+| :---: | :---: | :---: |
+| ![Profile](docs/screenshots/07-profile.png) | ![Edit profile](docs/screenshots/10-edit-profile.png) | ![Settings](docs/screenshots/08-settings.png) |
 
 ## Tech stack
 
@@ -243,7 +265,7 @@ adb install -r app\build\outputs\apk\debug\app-debug.apk
 
 ## Testing
 
-The project has **72 JVM unit tests** across 9 suites, all runnable from the command line with
+The project has **92 JVM unit tests** across 11 suites, all runnable from the command line with
 no emulator:
 
 ```bash
@@ -261,6 +283,7 @@ no emulator:
 | `WeatherRepositoryTest` | WMO weather-code descriptions and Open-Meteo payload handling. |
 | `EventRepositoryTest` | Seeding, sync (network + no-key), favourite/RSVP toggling, event creation, editing/deleting with ownership guard, cache clearing — using in-memory DAO fakes. |
 | `SampleEventsProviderTest` | Demo catalogue integrity (unique ids, valid SA coordinates, sane dates). |
+| `CreateEventValidationTest` | Per-step wizard validation (required title/description, future date, venue, coordinate ranges) that drives the inline error messages. |
 
 HTML reports are written to `app/build/reports/tests/testDebugUnitTest/index.html`.
 
@@ -314,6 +337,7 @@ app/src/main/java/com/eventfinder/app/
 └── utils/              Logging, date/time, distance, validation, hashing, locale, network
 app/src/test/java/com/eventfinder/app/   JVM unit tests
 app/src/androidTest/java/com/eventfinder/app/   Compose instrumented UI tests
+docs/screenshots/                        Real device screenshots
 ```
 
 ## Requirement traceability
@@ -324,7 +348,7 @@ app/src/androidTest/java/com/eventfinder/app/   Compose instrumented UI tests
 | External library integration | Room, Retrofit/OkHttp, DataStore, Coil, osmdroid, AndroidX Biometric |
 | Native Android SDK integration | `AlarmManager` + `NotificationManager` reminders, `LocationManager`/location permissions, biometrics |
 | Offline-first / robustness | Room cache + `pending_sync` queue, graceful fallbacks, validation on every form |
-| Unit testing | 72 JVM tests + 4 Compose instrumented tests + GitHub Actions CI |
+| Unit testing | 92 JVM tests + 4 Compose instrumented tests + GitHub Actions CI |
 | Logging & comments | `AppLogger` used across data/UI layers; KDoc on every class |
 | Documentation | This README with Mermaid architecture diagrams |
 
