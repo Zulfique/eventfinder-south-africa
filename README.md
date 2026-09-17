@@ -20,19 +20,18 @@ and runs on a physical device or emulator.
 ## Table of contents
 
 1. [Features](#features)
-2. [Screenshots](#screenshots)
-3. [Tech stack](#tech-stack)
-4. [Architecture](#architecture)
-5. [External APIs](#external-apis)
-6. [Localisation](#localisation)
-7. [Offline-first behaviour](#offline-first-behaviour)
-8. [Security](#security)
-9. [Getting started](#getting-started)
-10. [Testing](#testing)
-11. [Continuous integration](#continuous-integration)
-12. [Project structure](#project-structure)
-13. [Requirement traceability](#requirement-traceability)
-14. [Attribution & licences](#attribution--licences)
+2. [Tech stack](#tech-stack)
+3. [Architecture](#architecture)
+4. [External APIs](#external-apis)
+5. [Localisation](#localisation)
+6. [Offline-first behaviour](#offline-first-behaviour)
+7. [Security](#security)
+8. [Getting started](#getting-started)
+9. [Testing](#testing)
+10. [Continuous integration](#continuous-integration)
+11. [Project structure](#project-structure)
+12. [Requirement traceability](#requirement-traceability)
+13. [Attribution & licences](#attribution--licences)
 
 ---
 
@@ -53,18 +52,6 @@ and runs on a physical device or emulator.
 | **Settings** | Language switch (English / Afrikaans), biometric login toggle, event reminders, new-event alerts, plus account tools (change password, clear local cache, delete account). |
 | **Auth** | Local email + password registration and login (PBKDF2-hashed), plus biometric unlock. |
 | **Reminders** | `AlarmManager` + `NotificationChannel` reminders **24 hours and 1 hour** before an attended event, cancelled when the RSVP is declined. |
-
-## Screenshots
-
-All screenshots below were captured from the running app on an Android 14 (API 34) emulator.
-
-| Login | Discover (Home) | Event detail | Favourites |
-| :---: | :---: | :---: | :---: |
-| ![Login](docs/screenshots/01-login.png) | ![Home](docs/screenshots/02-home.png) | ![Event detail](docs/screenshots/03-event-detail.png) | ![Favourites](docs/screenshots/04-favorites.png) |
-
-| Search | Create event | Profile | Settings |
-| :---: | :---: | :---: | :---: |
-| ![Search](docs/screenshots/05-search.png) | ![Create event](docs/screenshots/06-create-event.png) | ![Profile](docs/screenshots/07-profile.png) | ![Settings](docs/screenshots/08-settings.png) |
 
 ## Tech stack
 
@@ -327,7 +314,6 @@ app/src/main/java/com/eventfinder/app/
 └── utils/              Logging, date/time, distance, validation, hashing, locale, network
 app/src/test/java/com/eventfinder/app/   JVM unit tests
 app/src/androidTest/java/com/eventfinder/app/   Compose instrumented UI tests
-docs/screenshots/                        Real device screenshots
 ```
 
 ## Requirement traceability
