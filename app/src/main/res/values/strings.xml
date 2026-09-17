@@ -97,6 +97,8 @@
     <string name="distance_away">away</string>
     <string name="added_to_favorites">Added to favorites</string>
     <string name="removed_from_favorites">Removed from favorites</string>
+    <string name="favorite_add">Add to favourites</string>
+    <string name="favorite_remove">Remove from favourites</string>
     <string name="reminder_scheduled">Reminders set for 24 hours and 1 hour before</string>
     <string name="reminders_cancelled">Event reminders cancelled</string>
     <string name="rsvp_updated">RSVP updated</string>

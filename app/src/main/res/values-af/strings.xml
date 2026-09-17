@@ -97,6 +97,8 @@
     <string name="distance_away">weg</string>
     <string name="added_to_favorites">By gunstelinge gevoeg</string>
     <string name="removed_from_favorites">Uit gunstelinge verwyder</string>
+    <string name="favorite_add">Voeg by gunstelinge</string>
+    <string name="favorite_remove">Verwyder uit gunstelinge</string>
     <string name="reminder_scheduled">Herinneringe gestel vir 24 uur en 1 uur voor</string>
     <string name="reminders_cancelled">Gebeurtenisherinneringe gekanselleer</string>
     <string name="rsvp_updated">RSVP opgedateer</string>

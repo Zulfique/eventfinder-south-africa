@@ -201,7 +201,9 @@ fun EventCard(
                 Spacer(Modifier.width(8.dp))
                 Image(
                     if (event.isFavorite) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
-                    contentDescription = null,
+                    contentDescription = stringResource(
+                        if (event.isFavorite) R.string.favorite_remove else R.string.favorite_add
+                    ),
                     modifier = Modifier
                         .size(28.dp)
                         .clickable { onFavoriteToggle() }
