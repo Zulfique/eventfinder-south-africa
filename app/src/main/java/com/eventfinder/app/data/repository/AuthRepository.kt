@@ -34,7 +34,13 @@ interface AuthRepository {
     suspend fun logout()
     suspend fun updateProfile(fullName: String, email: String): Result<User>
     suspend fun setBiometricEnabled(enabled: Boolean)
-    suspend fun resetPassword(email: String): Result<Unit>
+
+    /**
+     * Resets a forgotten password. The prototype runs entirely on-device, so no
+     * email is sent: the call validates that [email] belongs to a local account
+     * and stores a fresh PBKDF2 hash for [newPassword].
+     */
+    suspend fun resetPassword(email: String, newPassword: String): Result<Unit>
 
     /** Changes the signed-in user's password after verifying the current one. */
     suspend fun changePassword(currentPassword: String, newPassword: String): Result<Unit>
@@ -146,17 +152,24 @@ class AuthRepositoryImpl(
         AppLogger.i("AuthRepository", "Biometric preference updated: $enabled")
     }
 
-    override suspend fun resetPassword(email: String): Result<Unit> {
+    override suspend fun resetPassword(email: String, newPassword: String): Result<Unit> {
         if (!EmailValidator.isValid(email)) {
             return Result.failure(IllegalArgumentException("invalid_email"))
         }
-        // Prototype: confirm the address exists locally, then treat the reset as sent.
-        val user = userDao.findByEmail(email.trim().lowercase())
+        val normalizedEmail = email.trim().lowercase()
+        val user = userDao.findByEmail(normalizedEmail)
         if (user == null) {
-            AppLogger.w("AuthRepository", "Password reset requested for unknown email")
-        } else {
-            AppLogger.i("AuthRepository", "Password reset requested for ${user.email} (prototype)")
+            AppLogger.w("AuthRepository", "Password reset requested for unknown email: $normalizedEmail")
+            return Result.failure(IllegalArgumentException("unknown_email"))
         }
+        if (PasswordValidator.validate(newPassword) is ValidationResult.Invalid) {
+            return Result.failure(IllegalArgumentException("weak_password"))
+        }
+        if (PasswordHasher.verify(newPassword, user.passwordHash)) {
+            return Result.failure(IllegalArgumentException("same_password"))
+        }
+        userDao.upsert(user.copy(passwordHash = PasswordHasher.hash(newPassword)))
+        AppLogger.i("AuthRepository", "Local password reset completed for ${user.email}")
         return Result.success(Unit)
     }
 

@@ -45,8 +45,12 @@
     <string name="register_success">Rekening geskep</string>
     <string name="login_failed">Verkeerde e-pos of wagwoord</string>
     <string name="biometric_hint">Bevestig met jou vingerafdruk</string>
-    <string name="forgot_password_hint">Voer jou e-pos in om jou wagwoord te herstel (prototipe herstel plaaslik)</string>
-    <string name="reset_sent">Wagwoordherstelskakel gestuur</string>
+    <string name="forgot_password_hint">Voer jou rekening se e-pos in en kies \'n nuwe wagwoord. Die demo herstel dit op hierdie toestel — geen e-pos word gestuur nie.</string>
+    <string name="reset_password_title">Herstel wagwoord</string>
+    <string name="reset_password_action">Herstel wagwoord</string>
+    <string name="reset_success">Wagwoord herstel — teken in met jou nuwe wagwoord</string>
+    <string name="unknown_email">Geen rekening vir daardie e-pos gevind nie</string>
+    <string name="reset_failed">Kon nie die wagwoord herstel nie</string>
 
     <!-- Common -->
     <string name="error">Fout</string>
@@ -212,6 +216,15 @@
     <string name="reminder_notification_body">%1$s begin oor 1 uur by %2$s</string>
     <string name="reminder_tomorrow_title">Gebeurtenis môre</string>
     <string name="reminder_tomorrow_body">%1$s begin môre by %2$s</string>
+    <string name="alerts_channel_name">Gebeurteniswaarskuwings</string>
+    <string name="alerts_channel_description">Nuwe en opgedateerde gebeurtenisse wat jy volg</string>
+    <string name="new_events_alert_title">Nuwe gebeurtenisse naby jou</string>
+    <string name="favorite_alert_title">Gunstelinggebeurtenis opgedateer</string>
+    <string name="favorite_alert_body">%1$s het nuwe besonderhede — tik om te sien</string>
+    <plurals name="new_events_alert_body">
+        <item quantity="one">%1$d nuwe gebeurtenis pas by jou belangstellings</item>
+        <item quantity="other">%1$d nuwe gebeurtenisse pas by jou belangstellings</item>
+    </plurals>
 
     <!-- Misc -->
     <string name="event_image">Gebeurtenisbeeld</string>

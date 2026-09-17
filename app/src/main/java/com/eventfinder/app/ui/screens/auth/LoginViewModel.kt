@@ -26,7 +26,8 @@ data class LoginUiState(
     val emailError: Int? = null,
     val passwordError: Int? = null,
     val biometricAvailable: Boolean = false,
-    val biometricEnabled: Boolean = false
+    val biometricEnabled: Boolean = false,
+    val passwordResetComplete: Boolean = false
 )
 
 /**
@@ -115,12 +116,38 @@ class LoginViewModel(
         }
     }
 
-    fun requestPasswordReset() {
-        viewModelScope.launch {
-            authRepository.resetPassword(_uiState.value.email)
-                .onSuccess { _messages.emit(UiMessage.Resource(R.string.reset_sent)) }
-                .onFailure { _messages.emit(UiMessage.Resource(R.string.invalid_email)) }
+    fun requestPasswordReset(newPassword: String, confirmPassword: String) {
+        val email = _uiState.value.email
+        if (newPassword != confirmPassword) {
+            viewModelScope.launch { _messages.emit(UiMessage.Resource(R.string.passwords_mismatch)) }
+            return
         }
+        viewModelScope.launch {
+            authRepository.resetPassword(email, newPassword)
+                .onSuccess {
+                    AppLogger.i("LoginViewModel", "Local password reset succeeded")
+                    _uiState.update { it.copy(passwordResetComplete = true) }
+                    _messages.emit(UiMessage.Resource(R.string.reset_success))
+                }
+                .onFailure { throwable ->
+                    AppLogger.w("LoginViewModel", "Password reset failed: ${throwable.message}")
+                    when (throwable.message) {
+                        "invalid_email" -> {
+                            _uiState.update { it.copy(emailError = R.string.invalid_email) }
+                            _messages.emit(UiMessage.Resource(R.string.invalid_email))
+                        }
+                        "unknown_email" -> _messages.emit(UiMessage.Resource(R.string.unknown_email))
+                        "weak_password" -> _messages.emit(UiMessage.Resource(R.string.weak_password))
+                        "same_password" -> _messages.emit(UiMessage.Resource(R.string.password_unchanged))
+                        else -> _messages.emit(UiMessage.Resource(R.string.reset_failed))
+                    }
+                }
+        }
+    }
+
+    /** Clears the one-shot flag once the screen has closed the reset dialog. */
+    fun consumePasswordReset() {
+        _uiState.update { it.copy(passwordResetComplete = false) }
     }
 
     companion object {

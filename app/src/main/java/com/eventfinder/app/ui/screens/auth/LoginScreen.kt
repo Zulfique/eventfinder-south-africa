@@ -103,15 +103,58 @@ fun LoginScreen(
     }
 
     if (showForgotDialog) {
+        var newPassword by remember { mutableStateOf("") }
+        var confirmPassword by remember { mutableStateOf("") }
+
+        LaunchedEffect(uiState.passwordResetComplete) {
+            if (uiState.passwordResetComplete) {
+                showForgotDialog = false
+                viewModel.consumePasswordReset()
+            }
+        }
+
         androidx.compose.material3.AlertDialog(
             onDismissRequest = { showForgotDialog = false },
-            title = { Text(stringResource(R.string.forgot_password)) },
-            text = { Text(stringResource(R.string.forgot_password_hint)) },
+            title = { Text(stringResource(R.string.reset_password_title)) },
+            text = {
+                Column {
+                    Text(stringResource(R.string.forgot_password_hint))
+                    Spacer(Modifier.height(12.dp))
+                    OutlinedTextField(
+                        value = uiState.email,
+                        onValueChange = viewModel::onEmailChange,
+                        label = { Text(stringResource(R.string.email)) },
+                        singleLine = true,
+                        isError = uiState.emailError != null,
+                        supportingText = {
+                            uiState.emailError?.let { res -> Text(stringResource(res)) }
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = newPassword,
+                        onValueChange = { newPassword = it },
+                        label = { Text(stringResource(R.string.new_password)) },
+                        singleLine = true,
+                        visualTransformation = PasswordVisualTransformation(),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = confirmPassword,
+                        onValueChange = { confirmPassword = it },
+                        label = { Text(stringResource(R.string.confirm_password)) },
+                        singleLine = true,
+                        visualTransformation = PasswordVisualTransformation(),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
             confirmButton = {
-                TextButton(onClick = {
-                    viewModel.requestPasswordReset()
-                    showForgotDialog = false
-                }) { Text(stringResource(R.string.ok)) }
+                TextButton(onClick = { viewModel.requestPasswordReset(newPassword, confirmPassword) }) {
+                    Text(stringResource(R.string.reset_password_action))
+                }
             },
             dismissButton = {
                 TextButton(onClick = { showForgotDialog = false }) {
