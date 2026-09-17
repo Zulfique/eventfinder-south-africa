@@ -146,7 +146,15 @@ fun EventFinderNavHost(
         }
 
         composable(AppDestinations.SETTINGS) {
-            SettingsScreen(container = container, onBack = { navController.popBackStack() })
+            SettingsScreen(
+                container = container,
+                onBack = { navController.popBackStack() },
+                onLoggedOut = {
+                    navController.navigate(AppDestinations.LOGIN) {
+                        popUpTo(AppDestinations.MAIN) { inclusive = true }
+                    }
+                }
+            )
         }
 
         composable(AppDestinations.EDIT_PROFILE) {

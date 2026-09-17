@@ -116,4 +116,10 @@ class UserPreferences(private val context: Context) {
     fun currentLanguageBlocking(): String =
         runCatching { runBlocking { context.eventFinderDataStore.data.first()[Keys.LANGUAGE] ?: "en" } }
             .getOrDefault("en")
+
+    /** Wipes every stored preference, including the session (account deletion). */
+    suspend fun clearAll() {
+        context.eventFinderDataStore.edit { it.clear() }
+        AppLogger.i("UserPreferences", "All preferences cleared")
+    }
 }

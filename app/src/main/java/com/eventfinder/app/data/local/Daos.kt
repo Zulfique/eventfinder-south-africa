@@ -31,6 +31,9 @@ interface UserDao {
 
     @Query("DELETE FROM users")
     suspend fun deleteAll()
+
+    @Query("DELETE FROM users WHERE id = :id")
+    suspend fun deleteById(id: String)
 }
 
 /** Data access for the event directory. */

@@ -8,6 +8,8 @@ import com.eventfinder.app.domain.model.User
 import com.eventfinder.app.utils.AppLogger
 import com.eventfinder.app.utils.EmailValidator
 import com.eventfinder.app.utils.PasswordHasher
+import com.eventfinder.app.utils.PasswordValidator
+import com.eventfinder.app.utils.ValidationResult
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
@@ -33,6 +35,13 @@ interface AuthRepository {
     suspend fun updateProfile(fullName: String, email: String): Result<User>
     suspend fun setBiometricEnabled(enabled: Boolean)
     suspend fun resetPassword(email: String): Result<Unit>
+
+    /** Changes the signed-in user's password after verifying the current one. */
+    suspend fun changePassword(currentPassword: String, newPassword: String): Result<Unit>
+
+    /** Permanently removes the signed-in user's account and clears the session. */
+    suspend fun deleteAccount(): Result<Unit>
+
     fun isLoggedIn(): Boolean
 }
 
@@ -148,6 +157,35 @@ class AuthRepositoryImpl(
         } else {
             AppLogger.i("AuthRepository", "Password reset requested for ${user.email} (prototype)")
         }
+        return Result.success(Unit)
+    }
+
+    override suspend fun changePassword(currentPassword: String, newPassword: String): Result<Unit> {
+        val current = currentUser.first() ?: return Result.failure(IllegalStateException("no_session"))
+        val entity = userDao.findById(current.id)
+            ?: return Result.failure(IllegalStateException("user_missing"))
+
+        if (!PasswordHasher.verify(currentPassword, entity.passwordHash)) {
+            AppLogger.w("AuthRepository", "Password change rejected - current password incorrect")
+            return Result.failure(IllegalArgumentException("wrong_password"))
+        }
+        if (PasswordValidator.validate(newPassword) is ValidationResult.Invalid) {
+            return Result.failure(IllegalArgumentException("weak_password"))
+        }
+        if (PasswordHasher.verify(newPassword, entity.passwordHash)) {
+            return Result.failure(IllegalArgumentException("same_password"))
+        }
+
+        userDao.upsert(entity.copy(passwordHash = PasswordHasher.hash(newPassword)))
+        AppLogger.i("AuthRepository", "Password changed for ${entity.email}")
+        return Result.success(Unit)
+    }
+
+    override suspend fun deleteAccount(): Result<Unit> {
+        val current = currentUser.first() ?: return Result.failure(IllegalStateException("no_session"))
+        userDao.deleteById(current.id)
+        preferences.clearAll()
+        AppLogger.i("AuthRepository", "Account deleted for ${current.email}")
         return Result.success(Unit)
     }
 
