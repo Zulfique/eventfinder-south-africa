@@ -19,7 +19,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AddPhotoAlternate
-import androidx.compose.material.icons.outlined.ArrowForward
+import androidx.compose.material.icons.automirrored.outlined.ArrowForward
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.EditCalendar
@@ -59,6 +59,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -191,7 +196,7 @@ fun CreateEventScreen(
                     ) {
                         Text(if (state.step == CREATE_STEPS - 1) stringResource(R.string.preview)
                         else stringResource(R.string.next))
-                        Icon(Icons.Outlined.ArrowForward, contentDescription = null)
+                        Icon(Icons.AutoMirrored.Outlined.ArrowForward, contentDescription = null)
                     }
                 } else {
                     Button(
@@ -233,7 +238,7 @@ fun CreateEventScreen(
                 when (state.step) {
                     1 -> StepDetails(viewModel, onPickImage = pickImage)
                     2 -> StepDateVenue(viewModel, onPickDate = { showDatePicker = true })
-                    else -> StepReview(state, viewModel)
+                    else -> StepReview(state)
                 }
             }
         }
@@ -247,6 +252,8 @@ private fun getString(resId: Int, vararg args: Any): String =
 @Composable
 private fun StepDetails(viewModel: CreateEventViewModel, onPickImage: () -> Unit) {
     val state = viewModel.uiState.collectAsState().value
+    val titleError = state.showErrors && state.title.isBlank()
+    val descriptionError = state.showErrors && state.description.length < MIN_DESCRIPTION_LENGTH
 
     if (state.imageUrl != null) {
         AsyncImage(
@@ -275,6 +282,10 @@ private fun StepDetails(viewModel: CreateEventViewModel, onPickImage: () -> Unit
         onValueChange = viewModel::onTitleChange,
         label = { Text(stringResource(R.string.title)) },
         singleLine = true,
+        isError = titleError,
+        supportingText = if (titleError) {
+            { Text(stringResource(R.string.title_required)) }
+        } else null,
         modifier = Modifier.fillMaxWidth()
     )
     OutlinedTextField(
@@ -282,6 +293,10 @@ private fun StepDetails(viewModel: CreateEventViewModel, onPickImage: () -> Unit
         onValueChange = viewModel::onDescriptionChange,
         label = { Text(stringResource(R.string.description)) },
         minLines = 4,
+        isError = descriptionError,
+        supportingText = if (descriptionError) {
+            { Text(stringResource(R.string.description_required)) }
+        } else null,
         modifier = Modifier.fillMaxWidth()
     )
     Text(stringResource(R.string.category), style = MaterialTheme.typography.labelLarge)
@@ -305,16 +320,31 @@ private fun StepDateVenue(
     onPickDate: () -> Unit
 ) {
     val state = viewModel.uiState.collectAsState().value
+    val dateLabel = stringResource(R.string.date_time)
+    val pickAction = stringResource(R.string.date_pick_action)
+    val dateValue = if (state.dateMillis == 0L) {
+        stringResource(R.string.tap_to_pick_date)
+    } else {
+        DateTimeUtils.formatFullDateTime(state.dateMillis)
+    }
 
-    // A read-only text field consumes taps for its own cursor, so an overlay owns the click.
+    val dateError = state.showErrors &&
+        (state.dateMillis == 0L || !DateTimeUtils.isInFuture(state.dateMillis))
+    val venueError = state.showErrors && state.venueName.isBlank()
+    val latitudeError = state.showErrors && !isValidLatitude(state.latitude)
+    val longitudeError = state.showErrors && !isValidLongitude(state.longitude)
+
+    // A read-only text field consumes taps for its own cursor, so an overlay owns
+    // the click. The overlay also carries the semantics the disabled field would
+    // otherwise hide from accessibility services.
     Box(Modifier.fillMaxWidth()) {
         OutlinedTextField(
             value = if (state.dateMillis == 0L) "" else DateTimeUtils.formatFullDateTime(state.dateMillis),
             onValueChange = {},
             readOnly = true,
             enabled = false,
-            label = { Text(stringResource(R.string.date_time)) },
-            trailingIcon = { Icon(Icons.Outlined.EditCalendar, contentDescription = null) },
+            label = { Text(dateLabel) },
+            trailingIcon = { Icon(Icons.Outlined.EditCalendar, contentDescription = pickAction) },
             placeholder = { Text(stringResource(R.string.tap_to_pick_date)) },
             colors = OutlinedTextFieldDefaults.colors(
                 disabledTextColor = MaterialTheme.colorScheme.onSurface,
@@ -328,7 +358,21 @@ private fun StepDateVenue(
         Box(
             Modifier
                 .matchParentSize()
+                .semantics {
+                    contentDescription = dateLabel
+                    stateDescription = dateValue
+                    role = Role.Button
+                }
                 .clickable(onClick = onPickDate)
+        )
+    }
+    if (dateError) {
+        Text(
+            stringResource(
+                if (state.dateMillis == 0L) R.string.date_required else R.string.date_in_past
+            ),
+            color = MaterialTheme.colorScheme.error,
+            style = MaterialTheme.typography.bodySmall
         )
     }
     OutlinedTextField(
@@ -336,6 +380,10 @@ private fun StepDateVenue(
         onValueChange = viewModel::onVenueChange,
         label = { Text(stringResource(R.string.venue)) },
         singleLine = true,
+        isError = venueError,
+        supportingText = if (venueError) {
+            { Text(stringResource(R.string.venue_required)) }
+        } else null,
         modifier = Modifier.fillMaxWidth()
     )
     OutlinedTextField(
@@ -349,16 +397,25 @@ private fun StepDateVenue(
         OutlinedTextField(
             value = state.latitude,
             onValueChange = viewModel::onLatitudeChange,
-            label = { Text("Latitude") },
+            label = { Text(stringResource(R.string.latitude)) },
             singleLine = true,
+            isError = latitudeError,
             modifier = Modifier.weight(1f)
         )
         OutlinedTextField(
             value = state.longitude,
             onValueChange = viewModel::onLongitudeChange,
-            label = { Text("Longitude") },
+            label = { Text(stringResource(R.string.longitude)) },
             singleLine = true,
+            isError = longitudeError,
             modifier = Modifier.weight(1f)
+        )
+    }
+    if (latitudeError || longitudeError) {
+        Text(
+            stringResource(R.string.invalid_coordinates),
+            color = MaterialTheme.colorScheme.error,
+            style = MaterialTheme.typography.bodySmall
         )
     }
     Text(
@@ -369,7 +426,7 @@ private fun StepDateVenue(
 }
 
 @Composable
-private fun StepReview(state: CreateEventUiState, viewModel: CreateEventViewModel) {
+private fun StepReview(state: CreateEventUiState) {
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             state.imageUrl?.let { image ->

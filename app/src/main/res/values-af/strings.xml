@@ -140,6 +140,8 @@
     <string name="description_required">Beskrywing is verpligtend</string>
     <string name="invalid_coordinates">Voer geldige koördinate in (breedte -90..90, lengte -180..180)</string>
     <string name="date_in_past">Datum kan nie in die verlede wees nie</string>
+    <string name="date_required">Kies asseblief \'n datum &amp; tyd</string>
+    <string name="date_pick_action">Kies datum &amp; tyd</string>
     <string name="review_publish">Kyk oor &amp; publiseer</string>
     <string name="edit_event_title">Wysig gebeurtenis</string>
     <string name="edit_event">Wysig gebeurtenis</string>

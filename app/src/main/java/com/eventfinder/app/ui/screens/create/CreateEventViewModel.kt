@@ -40,8 +40,54 @@ data class CreateEventUiState(
     val latitude: String = "",
     val longitude: String = "",
     val isPublic: Boolean = true,
-    val imageUrl: String? = null
+    val imageUrl: String? = null,
+    /** True once the user has tried to advance an invalid step, enabling inline errors. */
+    val showErrors: Boolean = false
 )
+
+/** A field-level validation failure for the create-event wizard. */
+enum class ValidationError {
+    TITLE_REQUIRED,
+    DESCRIPTION_REQUIRED,
+    DATE_REQUIRED,
+    DATE_IN_PAST,
+    VENUE_REQUIRED,
+    INVALID_COORDINATES
+}
+
+/**
+ * Pure, framework-free validation for a wizard step. Kept out of the class so it
+ * can be covered directly by JVM unit tests (see [CreateEventValidationTest]).
+ */
+internal fun validateCreateStep(state: CreateEventUiState): ValidationError? = when (state.step) {
+    1 -> when {
+        state.title.isBlank() -> ValidationError.TITLE_REQUIRED
+        state.description.length < MIN_DESCRIPTION_LENGTH -> ValidationError.DESCRIPTION_REQUIRED
+        else -> null
+    }
+    2 -> when {
+        state.dateMillis == 0L -> ValidationError.DATE_REQUIRED
+        !DateTimeUtils.isInFuture(state.dateMillis) -> ValidationError.DATE_IN_PAST
+        state.venueName.isBlank() -> ValidationError.VENUE_REQUIRED
+        !isValidLatitude(state.latitude) || !isValidLongitude(state.longitude) ->
+            ValidationError.INVALID_COORDINATES
+        else -> null
+    }
+    else -> null
+}
+
+internal fun isValidLatitude(raw: String): Boolean = isValidCoordinate(raw, -90.0, 90.0)
+
+internal fun isValidLongitude(raw: String): Boolean = isValidCoordinate(raw, -180.0, 180.0)
+
+internal fun isValidCoordinate(raw: String, min: Double, max: Double): Boolean {
+    if (raw.isBlank()) return true
+    val value = raw.toDoubleOrNull() ?: return false
+    return value in min..max
+}
+
+/** Minimum description length enforced by step 1. */
+internal const val MIN_DESCRIPTION_LENGTH = 20
 
 /**
  * Create event wizard (Screen 8). Multi-step form with validation on each
@@ -128,39 +174,26 @@ class CreateEventViewModel(
     /** Advances to the next step if the current one validates. */
     fun nextStep() {
         val state = _uiState.value
-        val errorRes = validateStep(state)
-        if (errorRes != null) {
-            _messages.tryEmit(UiMessage.Resource(errorRes))
+        val error = validateCreateStep(state)
+        if (error != null) {
+            _uiState.update { it.copy(showErrors = true) }
+            _messages.tryEmit(UiMessage.Resource(error.messageRes()))
             return
         }
-        _uiState.update { it.copy(step = (it.step + 1).coerceAtMost(CREATE_STEPS)) }
+        _uiState.update { it.copy(step = (it.step + 1).coerceAtMost(CREATE_STEPS), showErrors = false) }
     }
 
     fun previousStep() {
-        _uiState.update { it.copy(step = (it.step - 1).coerceAtLeast(1)) }
+        _uiState.update { it.copy(step = (it.step - 1).coerceAtLeast(1), showErrors = false) }
     }
 
-    private fun validateStep(state: CreateEventUiState): Int? = when (state.step) {
-        1 -> when {
-            state.title.isBlank() -> R.string.title_required
-            state.description.length < 20 -> R.string.description_required
-            else -> null
-        }
-        2 -> when {
-            state.dateMillis == 0L || !DateTimeUtils.isInFuture(state.dateMillis) ->
-                R.string.date_in_past
-            state.venueName.isBlank() -> R.string.venue_required
-            !isValidCoordinate(state.latitude, -90.0, 90.0) -> R.string.invalid_coordinates
-            !isValidCoordinate(state.longitude, -180.0, 180.0) -> R.string.invalid_coordinates
-            else -> null
-        }
-        else -> null
-    }
-
-    private fun isValidCoordinate(raw: String, min: Double, max: Double): Boolean {
-        if (raw.isBlank()) return true
-        val value = raw.toDoubleOrNull() ?: return false
-        return value in min..max
+    private fun ValidationError.messageRes(): Int = when (this) {
+        ValidationError.TITLE_REQUIRED -> R.string.title_required
+        ValidationError.DESCRIPTION_REQUIRED -> R.string.description_required
+        ValidationError.DATE_REQUIRED -> R.string.date_required
+        ValidationError.DATE_IN_PAST -> R.string.date_in_past
+        ValidationError.VENUE_REQUIRED -> R.string.venue_required
+        ValidationError.INVALID_COORDINATES -> R.string.invalid_coordinates
     }
 
     /** Publishes the event to the local cache + offline queue. */

@@ -140,6 +140,8 @@
     <string name="description_required">Description is required</string>
     <string name="invalid_coordinates">Enter valid coordinates (lat -90..90, lng -180..180)</string>
     <string name="date_in_past">Date cannot be in the past</string>
+    <string name="date_required">Please pick a date &amp; time</string>
+    <string name="date_pick_action">Pick date &amp; time</string>
     <string name="review_publish">Review &amp; publish</string>
     <string name="edit_event_title">Edit event</string>
     <string name="edit_event">Edit event</string>
