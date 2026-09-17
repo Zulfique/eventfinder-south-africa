@@ -114,15 +114,25 @@ class EventDetailViewModel(
     fun setRsvp(status: RsvpStatus) {
         viewModelScope.launch {
             eventRepository.setRsvp(eventId, status)
-            if (status == RsvpStatus.ATTENDING) {
-                val event = eventRepository.getEvent(eventId)
-                val remindersEnabled = container.preferences.remindersEnabled.first()
-                if (event != null && remindersEnabled) {
-                    NotificationHelper.scheduleEventReminder(appContext, event)
-                    _messages.emit(UiMessage.Resource(R.string.reminder_scheduled))
+            when (status) {
+                RsvpStatus.ATTENDING -> {
+                    val event = eventRepository.getEvent(eventId)
+                    val remindersEnabled = container.preferences.remindersEnabled.first()
+                    if (event != null && remindersEnabled) {
+                        val scheduled = NotificationHelper.scheduleEventReminders(appContext, event)
+                        _messages.emit(
+                            if (scheduled > 0) UiMessage.Resource(R.string.reminder_scheduled)
+                            else UiMessage.Resource(R.string.rsvp_updated)
+                        )
+                    } else {
+                        _messages.emit(UiMessage.Resource(R.string.rsvp_updated))
+                    }
                 }
-            } else {
-                _messages.emit(UiMessage.Resource(R.string.rsvp_updated))
+                RsvpStatus.DECLINED -> {
+                    NotificationHelper.cancelEventReminders(appContext, eventId)
+                    _messages.emit(UiMessage.Resource(R.string.reminders_cancelled))
+                }
+                else -> _messages.emit(UiMessage.Resource(R.string.rsvp_updated))
             }
         }
     }

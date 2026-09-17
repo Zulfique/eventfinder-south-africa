@@ -97,7 +97,8 @@
     <string name="distance_away">weg</string>
     <string name="added_to_favorites">By gunstelinge gevoeg</string>
     <string name="removed_from_favorites">Uit gunstelinge verwyder</string>
-    <string name="reminder_scheduled">Herinnering geskeduleer 1 uur voor die tyd</string>
+    <string name="reminder_scheduled">Herinneringe gestel vir 24 uur en 1 uur voor</string>
+    <string name="reminders_cancelled">Gebeurtenisherinneringe gekanselleer</string>
     <string name="rsvp_updated">RSVP opgedateer</string>
 
     <!-- Search -->
@@ -174,6 +175,8 @@
     <string name="reminder_channel_name">Gebeurtenisherinnerings</string>
     <string name="reminder_notification_title">Gebeurtenis begin binnekort</string>
     <string name="reminder_notification_body">%1$s begin oor 1 uur by %2$s</string>
+    <string name="reminder_tomorrow_title">Gebeurtenis môre</string>
+    <string name="reminder_tomorrow_body">%1$s begin môre by %2$s</string>
 
     <!-- Misc -->
     <string name="event_image">Gebeurtenisbeeld</string>
@@ -208,7 +211,7 @@
     <string name="biometric_available">Ontsluit met vingerafdruk of gesig</string>
     <string name="biometric_unavailable">Geen biometriese hardeware op hierdie toestel nie</string>
     <string name="event_reminders">Gebeurtenisherinnerings</string>
-    <string name="event_reminders_hint">Laat my een uur voor \'n gebeurtenis wat ek bywoon weet</string>
+    <string name="event_reminders_hint">Laat my 24 uur en 1 uur voor \'n gebeurtenis wat ek bywoon weet</string>
     <string name="new_events_alerts">Nuwe gebeurteniswaarskuwings</string>
     <string name="settings_about">%1$s-prototipe — gebou met gratis API\'s (Ticketmaster, Open-Meteo, OpenStreetMap).</string>
 </resources>

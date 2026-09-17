@@ -17,6 +17,8 @@ import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -32,6 +34,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.eventfinder.app.R
 import com.eventfinder.app.di.AppContainer
+import kotlinx.coroutines.flow.MutableStateFlow
 import com.eventfinder.app.ui.screens.auth.LoginScreen
 import com.eventfinder.app.ui.screens.auth.RegisterScreen
 import com.eventfinder.app.ui.screens.create.CreateEventScreen
@@ -60,10 +63,23 @@ object AppDestinations {
 /**
  * Root navigation graph. The splash screen routes the user to Login or the main
  * experience based on the persisted auth session (FR-01 session persistence).
+ *
+ * [deepLinkEventId] carries an event id coming from a reminder notification tap;
+ * once consumed it is reset so it is not replayed on recomposition.
  */
 @Composable
-fun EventFinderNavHost(container: AppContainer) {
+fun EventFinderNavHost(
+    container: AppContainer,
+    deepLinkEventId: MutableStateFlow<String?>? = null
+) {
     val navController = rememberNavController()
+
+    val pendingEventId = deepLinkEventId?.collectAsState()?.value
+    LaunchedEffect(pendingEventId) {
+        val eventId = pendingEventId ?: return@LaunchedEffect
+        navController.navigate(AppDestinations.eventDetail(eventId))
+        deepLinkEventId.value = null
+    }
 
     NavHost(navController = navController, startDestination = AppDestinations.SPLASH) {
 

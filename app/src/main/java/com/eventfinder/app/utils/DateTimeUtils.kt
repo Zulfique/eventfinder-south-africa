@@ -43,6 +43,8 @@ object DateTimeUtils {
 
     fun hourBefore(epochMillis: Long): Long = epochMillis - HOUR_MILLIS
 
+    fun dayBefore(epochMillis: Long): Long = epochMillis - DAY_MILLIS
+
     /** Local date (yyyy-MM-dd) converted to an epoch timestamp at 00:00. */
     fun startOfDay(epochMillis: Long): Long = epochMillis - (epochMillis % DAY_MILLIS)
 }
