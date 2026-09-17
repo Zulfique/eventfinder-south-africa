@@ -20,7 +20,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.ArrowBack
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.Favorite
 import androidx.compose.material.icons.outlined.FavoriteBorder
@@ -148,7 +148,7 @@ fun EventDetailScreen(
                                     .clip(RoundedCornerShape(50))
                                     .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.9f))
                             ) {
-                                Icon(Icons.Outlined.ArrowBack, contentDescription = stringResource(R.string.back))
+                                Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = stringResource(R.string.back))
                             }
                             Row(
                                 modifier = Modifier

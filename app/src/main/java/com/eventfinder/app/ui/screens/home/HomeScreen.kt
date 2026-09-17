@@ -17,13 +17,14 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.FilterList
-import androidx.compose.material.icons.outlined.List
+import androidx.compose.material.icons.automirrored.outlined.List
 import androidx.compose.material.icons.outlined.Map
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconToggleButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
@@ -40,7 +41,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -58,7 +58,6 @@ import com.eventfinder.app.ui.components.LoadingView
 import com.eventfinder.app.ui.components.resolve
 import com.eventfinder.app.utils.AppLogger
 import com.eventfinder.app.utils.LocationUtils
-import kotlinx.coroutines.launch
 
 /**
  * Screen 4 & 5 (Home): interactive OpenStreetMap view + scrollable event list
@@ -77,7 +76,6 @@ fun HomeScreen(
     )
     val state by viewModel.uiState.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
-    val scope = rememberCoroutineScope()
 
     // Location permission + one-time capture of the last-known position.
     val locationLauncher = rememberLauncherForActivityResult(
@@ -104,9 +102,12 @@ fun HomeScreen(
             TopAppBar(
                 title = { Text(stringResource(R.string.discover_events), fontWeight = FontWeight.SemiBold) },
                 actions = {
-                    IconButton(onClick = { viewModel.onToggleMapView() }) {
+                    IconToggleButton(
+                        checked = state.isMapView,
+                        onCheckedChange = { viewModel.onToggleMapView() }
+                    ) {
                         Icon(
-                            if (state.isMapView) Icons.Outlined.List else Icons.Outlined.Map,
+                            if (state.isMapView) Icons.AutoMirrored.Outlined.List else Icons.Outlined.Map,
                             contentDescription = stringResource(
                                 if (state.isMapView) R.string.list_view else R.string.map_view
                             )
@@ -162,8 +163,7 @@ fun HomeScreen(
                 EventList(
                     state = state,
                     onEventClick = onEventClick,
-                    onFavoriteToggle = viewModel::toggleFavorite,
-                    onRefresh = { scope.launch { viewModel.refresh() } }
+                    onFavoriteToggle = viewModel::toggleFavorite
                 )
             }
         }
@@ -185,8 +185,7 @@ fun HomeScreen(
 private fun EventList(
     state: HomeUiState,
     onEventClick: (String) -> Unit,
-    onFavoriteToggle: (String) -> Unit,
-    onRefresh: () -> Unit
+    onFavoriteToggle: (String) -> Unit
 ) {
     if (state.events.isEmpty()) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {

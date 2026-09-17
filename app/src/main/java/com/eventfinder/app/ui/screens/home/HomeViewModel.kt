@@ -244,7 +244,7 @@ class HomeViewModel(
     }
 
     private suspend fun syncFromApi() {
-        when (val result = eventRepository.syncFromApi()) {
+        when (eventRepository.syncFromApi()) {
             com.eventfinder.app.data.repository.SyncResult.Synced ->
                 AppLogger.i("HomeViewModel", "Live sync completed")
             com.eventfinder.app.data.repository.SyncResult.NoApiKey ->
