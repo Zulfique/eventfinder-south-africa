@@ -358,6 +358,20 @@ docs/screenshots/                        Real device screenshots
 | Logging & comments | `AppLogger` used across data/UI layers; KDoc on every class |
 | Documentation | This README with Mermaid architecture diagrams |
 
+## Known limitations
+
+The app is a **single-user, offline-first prototype** built entirely on free services, so a few
+features that need a shared server are intentionally out of scope:
+
+- **RSVP attendee management** — there is no way to approve or decline other people's attendance
+  because accounts and events live only on the device. The RSVP counter and reminder cancellation
+  work locally; a real attendee list would need a multi-user backend.
+- **Google sign-in** is shown but stubbed, and password reset re-hashes locally instead of sending a
+  verification email (that would require a paid mail/SMTP provider).
+- **Push notifications** are replaced by on-device sync alerts (`AlarmManager` +
+  `NotificationManager`); true push would need Firebase Cloud Messaging.
+- **Default city / radius** preferences exist in the data layer but have no settings UI yet.
+
 ## Attribution & licences
 
 - Ticketmaster Discovery API — © Ticketmaster, used under the free developer terms.
