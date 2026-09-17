@@ -76,6 +76,29 @@ class EventFiltererTest {
     }
 
     @Test
+    fun `keyword filter matches address and description`() {
+        val sandton = jhb.copy(address = "Sandton, Johannesburg")
+        val cricket = cpt.copy(description = "A family friendly cricket day")
+        val list = listOf(sandton, cricket, durban)
+
+        assertEquals(listOf(sandton), EventFilterer.filter(list, query = "sandton"))
+        assertEquals(listOf(cricket), EventFilterer.filter(list, query = "cricket"))
+    }
+
+    @Test
+    fun `radius of zero disables distance filtering`() {
+        assertEquals(
+            all,
+            EventFilterer.filter(all, userLat = -26.2, userLng = 28.0, radiusKm = 0)
+        )
+    }
+
+    @Test
+    fun `blank query is ignored`() {
+        assertEquals(all, EventFilterer.filter(all, query = "   "))
+    }
+
+    @Test
     fun `category filter keeps only the requested category`() {
         assertEquals(listOf(cpt), EventFilterer.filter(all, category = EventCategory.SPORTS))
     }

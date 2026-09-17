@@ -1,6 +1,10 @@
 package com.eventfinder.app.ui.components
 
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.EventBusy
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsNotSelected
+import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
@@ -100,5 +104,30 @@ class CommonComponentsTest {
 
         assertTrue(selections.first() == EventCategory.MUSIC)
         assertTrue(selections.last() == null)
+    }
+
+    @Test
+    fun categoryChips_selectsTheActiveChip() {
+        composeRule.setContent {
+            CategoryChips(selected = EventCategory.SPORTS, onSelect = {})
+        }
+
+        composeRule.onNodeWithText(context.getString(R.string.cat_sports)).assertIsSelected()
+        composeRule.onNodeWithText(context.getString(R.string.cat_music)).assertIsNotSelected()
+        composeRule.onNodeWithText(context.getString(R.string.all_categories)).assertIsNotSelected()
+    }
+
+    @Test
+    fun emptyState_displaysTitleAndSubtitle() {
+        composeRule.setContent {
+            EmptyState(
+                icon = Icons.Outlined.EventBusy,
+                title = "Nothing here",
+                subtitle = "Try again later"
+            )
+        }
+
+        composeRule.onNodeWithText("Nothing here").assertIsDisplayed()
+        composeRule.onNodeWithText("Try again later").assertIsDisplayed()
     }
 }
