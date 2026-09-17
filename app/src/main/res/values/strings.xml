@@ -109,6 +109,7 @@
     <string name="popular_events">Popular now</string>
     <string name="no_results">No results for this search</string>
     <string name="clear_history">Clear history</string>
+    <string name="clear_search">Clear search</string>
 
     <string name="image_pick_failed">Could not use that image</string>
     <string name="add_photo">Add a photo</string>

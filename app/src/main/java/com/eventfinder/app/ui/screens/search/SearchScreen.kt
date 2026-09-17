@@ -1,7 +1,6 @@
 package com.eventfinder.app.ui.screens.search
 
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -16,6 +15,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.outlined.SearchOff
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -36,6 +36,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.eventfinder.app.R
 import com.eventfinder.app.di.AppContainer
+import com.eventfinder.app.ui.components.EmptyState
 import com.eventfinder.app.ui.components.EventCard
 
 /**
@@ -65,7 +66,10 @@ fun SearchScreen(
                 trailingIcon = {
                     if (state.query.isNotBlank()) {
                         IconButton(onClick = { viewModel.onQueryChange("") }) {
-                            Icon(Icons.Outlined.Close, contentDescription = null)
+                            Icon(
+                                Icons.Outlined.Close,
+                                contentDescription = stringResource(R.string.clear_search)
+                            )
                         }
                     }
                 },
@@ -111,9 +115,10 @@ fun SearchScreen(
             }
 
             if (state.results.isEmpty() && state.query.isNotBlank()) {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text(stringResource(R.string.no_results))
-                }
+                EmptyState(
+                    icon = Icons.Outlined.SearchOff,
+                    title = stringResource(R.string.no_results)
+                )
             } else {
                 LazyColumn(
                     contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
@@ -122,7 +127,8 @@ fun SearchScreen(
                     items(state.results, key = { it.event.id }) { eventView ->
                         EventCard(
                             view = eventView,
-                            onClick = { onEventClick(eventView.event.id) }
+                            onClick = { onEventClick(eventView.event.id) },
+                            onFavoriteToggle = { viewModel.toggleFavorite(eventView.event.id) }
                         )
                     }
                 }

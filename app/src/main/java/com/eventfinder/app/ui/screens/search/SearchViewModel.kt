@@ -10,6 +10,7 @@ import com.eventfinder.app.di.AppContainer
 import com.eventfinder.app.domain.model.EventFilterer
 import com.eventfinder.app.domain.model.EventView
 import com.eventfinder.app.data.repository.EventRepository
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.combine
@@ -28,6 +29,7 @@ data class SearchUiState(
  * Search (Screen 7): debounced live search across the local catalogue plus
  * recent-search history from DataStore. Empty queries show "popular now".
  */
+@OptIn(FlowPreview::class)
 class SearchViewModel(
     private val eventRepository: EventRepository,
     private val preferences: UserPreferences
@@ -60,6 +62,10 @@ class SearchViewModel(
 
     fun onQueryChange(value: String) {
         queryFlow.value = value
+    }
+
+    fun toggleFavorite(eventId: String) {
+        viewModelScope.launch { eventRepository.toggleFavorite(eventId) }
     }
 
     /** Called when the user commits a search (keyboard action). */

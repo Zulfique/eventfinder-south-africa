@@ -5,7 +5,6 @@ import android.annotation.SuppressLint
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -16,6 +15,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.EventBusy
 import androidx.compose.material.icons.outlined.FilterList
 import androidx.compose.material.icons.automirrored.outlined.List
 import androidx.compose.material.icons.outlined.Map
@@ -53,6 +53,7 @@ import com.eventfinder.app.R
 import com.eventfinder.app.di.AppContainer
 import com.eventfinder.app.domain.model.EventSort
 import com.eventfinder.app.ui.components.CategoryChips
+import com.eventfinder.app.ui.components.EmptyState
 import com.eventfinder.app.ui.components.EventCard
 import com.eventfinder.app.ui.components.LoadingView
 import com.eventfinder.app.ui.components.resolve
@@ -188,9 +189,10 @@ private fun EventList(
     onFavoriteToggle: (String) -> Unit
 ) {
     if (state.events.isEmpty()) {
-        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text(stringResource(R.string.no_events), color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
+        EmptyState(
+            icon = Icons.Outlined.EventBusy,
+            title = stringResource(R.string.no_events)
+        )
     } else {
         LazyColumn(
             modifier = Modifier.fillMaxSize(),

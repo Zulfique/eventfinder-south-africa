@@ -109,6 +109,7 @@
     <string name="popular_events">Gewild tans</string>
     <string name="no_results">Geen resultate vir hierdie soektog nie</string>
     <string name="clear_history">Vee geskiedenis uit</string>
+    <string name="clear_search">Vee soektog uit</string>
 
     <string name="image_pick_failed">Kon nie daardie beeld gebruik nie</string>
     <string name="add_photo">Voeg \'n foto by</string>
