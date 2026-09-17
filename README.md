@@ -5,7 +5,7 @@
 ![Jetpack Compose](https://img.shields.io/badge/Jetpack%20Compose-BOM%202024.02-4285F4?logo=jetpackcompose&logoColor=white)
 ![minSdk](https://img.shields.io/badge/minSdk-26-brightgreen)
 ![targetSdk](https://img.shields.io/badge/targetSdk-34-brightgreen)
-![Tests](https://img.shields.io/badge/unit%20tests-92%20passing-success)
+![Tests](https://img.shields.io/badge/unit%20tests-113%20passing-success)
 
 A native **Android (Kotlin + Jetpack Compose)** app that helps people across South Africa
 discover, save and create local events — from Joburg jazz nights to Cape Town food markets
@@ -51,8 +51,9 @@ and runs on a physical device or emulator.
 | **Profile** | Account header, activity stats (created / attending / favourites), My Events and Attending lists. |
 | **Edit profile** | Update display name and email with validation. |
 | **Settings** | Language switch (English / Afrikaans), biometric login toggle, event reminders, new-event alerts, plus account tools (change password, clear local cache, delete account). |
-| **Auth** | Local email + password registration and login (PBKDF2-hashed), plus biometric unlock. |
+| **Auth** | Local email + password registration and login (PBKDF2-hashed), plus biometric unlock. Forgot password re-hashes a new password on-device (the free prototype sends no email). |
 | **Reminders** | `AlarmManager` + `NotificationChannel` reminders **24 hours and 1 hour** before an attended event, cancelled when the RSVP is declined. |
+| **Event alerts** | After each background sync, on-device notifications flag brand-new future events and changes to favourited events — computed by a pure diff, no push service required. |
 
 ## Screenshots
 
@@ -265,7 +266,7 @@ adb install -r app\build\outputs\apk\debug\app-debug.apk
 
 ## Testing
 
-The project has **92 JVM unit tests** across 11 suites, all runnable from the command line with
+The project has **113 JVM unit tests** across 14 suites, all runnable from the command line with
 no emulator:
 
 ```bash
@@ -277,13 +278,16 @@ no emulator:
 | `ValidatorsTest` | Email, password strength, name and the multi-field registration form. |
 | `PasswordHasherTest` | PBKDF2 hashing, salting, verification and fail-closed behaviour on malformed values. |
 | `DistanceCalculatorTest` | Haversine distance, symmetry, rounding and radius checks. |
-| `EventFiltererTest` | Keyword / category / radius filtering, three sort orders, distance attachment. |
+| `EventFiltererTest` | Keyword / category / radius filtering (including address and description matching), three sort orders, distance attachment. |
 | `EventCategoryTest` | Ticketmaster segment ↔ local category mapping in both directions. |
 | `TicketmasterMapperTest` | Full payload mapping, malformed-row skipping, coordinate fallback, image selection, date parsing. |
 | `WeatherRepositoryTest` | WMO weather-code descriptions and Open-Meteo payload handling. |
-| `EventRepositoryTest` | Seeding, sync (network + no-key), favourite/RSVP toggling, event creation, editing/deleting with ownership guard, cache clearing — using in-memory DAO fakes. |
+| `EventRepositoryTest` | Seeding, sync (network + no-key) including new/updated-favourite alert payloads, favourite/RSVP toggling, event creation, editing/deleting with ownership guard, cache clearing — using in-memory DAO fakes. |
 | `SampleEventsProviderTest` | Demo catalogue integrity (unique ids, valid SA coordinates, sane dates). |
 | `CreateEventValidationTest` | Per-step wizard validation (required title/description, future date, venue, coordinate ranges) that drives the inline error messages. |
+| `EventAlertDetectorTest` | Pure new-event / favourite-changed diffing, including quiet first sync and past-event suppression. |
+| `DateTimeUtilsTest` | Relative date helpers (today/tomorrow, day & hour offsets) and stable date formatting. |
+| `LoginViewModelTest` | Local password-reset flow (mismatch, unknown email, success) with a fake repository. |
 
 HTML reports are written to `app/build/reports/tests/testDebugUnitTest/index.html`.
 
@@ -302,6 +306,8 @@ widgets (`app/src/androidTest/.../ui/components/CommonComponentsTest.kt`):
 | `eventCard_clickInvokesCallback` | Tapping the card fires its `onClick`. |
 | `eventCard_favouriteToggleInvokesCallback` | The heart button reports add/remove from its content description. |
 | `categoryChips_selectsACategoryAndCanClearIt` | Category chips select and clear the filter. |
+| `categoryChips_selectsTheActiveChip` | The active category exposes selected semantics; the others do not. |
+| `emptyState_displaysTitleAndSubtitle` | The reusable `EmptyState` renders its icon, title and subtitle. |
 
 ## Continuous integration
 
@@ -348,7 +354,7 @@ docs/screenshots/                        Real device screenshots
 | External library integration | Room, Retrofit/OkHttp, DataStore, Coil, osmdroid, AndroidX Biometric |
 | Native Android SDK integration | `AlarmManager` + `NotificationManager` reminders, `LocationManager`/location permissions, biometrics |
 | Offline-first / robustness | Room cache + `pending_sync` queue, graceful fallbacks, validation on every form |
-| Unit testing | 92 JVM tests + 4 Compose instrumented tests + GitHub Actions CI |
+| Unit testing | 113 JVM tests + 6 Compose instrumented tests + GitHub Actions CI |
 | Logging & comments | `AppLogger` used across data/UI layers; KDoc on every class |
 | Documentation | This README with Mermaid architecture diagrams |
 
