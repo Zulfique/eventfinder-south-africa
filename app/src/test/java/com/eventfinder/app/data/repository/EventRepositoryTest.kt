@@ -74,6 +74,9 @@ class EventRepositoryTest {
 
         override suspend fun count(): Int = rows.size
 
+        override suspend fun getSynced(): List<EventEntity> =
+            rows.values.filter { !it.isCreatedByUser }
+
         override suspend fun deleteSynced() {
             rows.values.filter { !it.isCreatedByUser }.map { it.id }.forEach { rows.remove(it) }
             emit()
@@ -236,7 +239,7 @@ class EventRepositoryTest {
     fun `sync without an API key reports NoApiKey in demo mode`() = runTest {
         val repo = repository(apiKey = "")
 
-        assertEquals(SyncResult.NoApiKey, repo.syncFromApi())
+        assertEquals(SyncResult.NoApiKey, repo.syncFromApi().result)
     }
 
     @Test
@@ -246,7 +249,7 @@ class EventRepositoryTest {
 
         val result = repo.syncFromApi()
 
-        assertEquals(SyncResult.Synced, result)
+        assertEquals(SyncResult.Synced, result.result)
         assertEquals(1, dao.count())
         val stored = repo.observeAllEvents().first().first()
         assertEquals("tm-Z1", stored.id)
@@ -283,6 +286,85 @@ class EventRepositoryTest {
     }
 
     // ---------------------------------------------------------- favourites
+
+    @Test
+    fun `sync reports newly added events and updated favourites`() = runTest {
+        val dao = FakeEventDao()
+        val favorites = FakeFavoriteDao()
+        dao.upsert(
+            knownSyncedEvent(
+                id = "tm-OLD",
+                title = "Old Name",
+                venue = "Old Venue",
+                favorite = true
+            )
+        )
+        favorites.insert(FavoriteEntity(eventId = "tm-OLD", createdAt = 0L, isSynced = true))
+
+        val response = TmEventsResponse(
+            embedded = TmEmbedded(
+                events = listOf(
+                    TmEvent(
+                        id = "OLD",
+                        name = "Old Name Renamed",
+                        dates = TmDates(start = TmStart(localDate = "2026-11-20", localTime = "20:00:00"))
+                    ),
+                    TmEvent(
+                        id = "NEW",
+                        name = "Brand New Concert",
+                        dates = TmDates(start = TmStart(localDate = "2026-12-01", localTime = "19:00:00"))
+                    )
+                )
+            )
+        )
+        val repo = repository(
+            eventDao = dao,
+            favoriteDao = favorites,
+            api = FakeTicketmasterApi(response)
+        )
+
+        val outcome = repo.syncFromApi()
+
+        assertEquals(SyncResult.Synced, outcome.result)
+        assertEquals(listOf("tm-NEW"), outcome.newEvents.map { it.id })
+        assertEquals(listOf("tm-OLD"), outcome.updatedFavorites.map { it.id })
+    }
+
+    @Test
+    fun `first sync of a fresh install never alerts about the whole catalogue`() = runTest {
+        val repo = repository()
+
+        val outcome = repo.syncFromApi()
+
+        assertTrue(outcome.newEvents.isEmpty())
+        assertTrue(outcome.updatedFavorites.isEmpty())
+    }
+
+    private fun knownSyncedEvent(
+        id: String,
+        title: String,
+        venue: String,
+        favorite: Boolean
+    ) = EventEntity(
+        id = id,
+        title = title,
+        description = "Existing synced event",
+        category = "music",
+        startDate = 4_000_000_000_000L,
+        endDate = 4_000_003_600_000L,
+        venueName = venue,
+        address = "Johannesburg",
+        latitude = -26.2,
+        longitude = 28.0,
+        imageUrl = null,
+        isPublic = true,
+        organizerId = "org",
+        organizerName = "Organizer",
+        attendeeCount = 0,
+        isFavorite = favorite,
+        isCreatedByUser = false,
+        isSynced = true
+    )
 
     @Test
     fun `toggleFavorite adds then removes a favourite and queues offline actions`() = runTest {

@@ -12,11 +12,13 @@ import com.eventfinder.app.data.local.toDomain
 import com.eventfinder.app.data.remote.TicketmasterApi
 import com.eventfinder.app.data.remote.TicketmasterMapper
 import com.eventfinder.app.domain.model.Event
+import com.eventfinder.app.domain.model.EventAlertDetector
 import com.eventfinder.app.domain.model.EventCategory
 import com.eventfinder.app.domain.model.RsvpStatus
 import com.eventfinder.app.utils.AppLogger
 import com.google.gson.Gson
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import java.io.IOException
 import java.util.UUID
@@ -27,6 +29,16 @@ sealed interface SyncResult {
     data object NoApiKey : SyncResult
     data object Failed : SyncResult
 }
+
+/**
+ * Richer sync outcome carrying the alerts a sync produced so the caller can
+ * post local notifications (new events / updated favourites).
+ */
+data class SyncOutcome(
+    val result: SyncResult,
+    val newEvents: List<Event> = emptyList(),
+    val updatedFavorites: List<Event> = emptyList()
+)
 
 /** Draft for creating a new community event (FR-06). */
 data class NewEventDraft(
@@ -64,7 +76,7 @@ interface EventRepository {
     suspend fun ensureSeeded()
 
     /** Pulls fresh events from the free Ticketmaster API. Returns the outcome. */
-    suspend fun syncFromApi(): SyncResult
+    suspend fun syncFromApi(): SyncOutcome
 
     suspend fun toggleFavorite(eventId: String): Boolean
 
@@ -126,29 +138,41 @@ class EventRepositoryImpl(
         }
     }
 
-    override suspend fun syncFromApi(): SyncResult {
+    override suspend fun syncFromApi(): SyncOutcome {
         if (apiKey.isBlank()) {
             AppLogger.w(tag, "Sync skipped - no Ticketmaster API key configured (demo mode)")
-            return SyncResult.NoApiKey
+            return SyncOutcome(SyncResult.NoApiKey)
         }
         return try {
+            val previous = eventDao.getSynced().map { it.toDomain() }
+            val favoriteIds = favoriteDao.observeAll().first().map { it.eventId }.toSet()
+
             val response = ticketmasterApi.getEvents(apiKey = apiKey, size = 100)
             val mapped = mapper.mapPage(response)
             if (mapped.isEmpty()) {
                 AppLogger.w(tag, "Sync returned zero events - keeping existing cache")
-                return SyncResult.Synced
+                return SyncOutcome(SyncResult.Synced)
             }
+
+            val alerts = EventAlertDetector.detect(previous, mapped, favoriteIds)
+
             // Replace the synced catalogue but preserve user-created events.
             eventDao.deleteSynced()
             eventDao.upsertAll(mapped.map { it.toEntity(isSynced = true, isCreatedByUser = false) })
             AppLogger.i(tag, "Sync complete - ${mapped.size} live events stored")
-            SyncResult.Synced
+            if (!alerts.isEmpty) {
+                AppLogger.i(
+                    tag,
+                    "Alerts ready - ${alerts.newEvents.size} new, ${alerts.updatedFavorites.size} updated favourites"
+                )
+            }
+            SyncOutcome(SyncResult.Synced, alerts.newEvents, alerts.updatedFavorites)
         } catch (t: IOException) {
             AppLogger.e(tag, "Sync failed - network unavailable, offline mode", t)
-            SyncResult.Failed
+            SyncOutcome(SyncResult.Failed)
         } catch (t: Exception) {
             AppLogger.e(tag, "Sync failed - unexpected error", t)
-            SyncResult.Failed
+            SyncOutcome(SyncResult.Failed)
         }
     }
 

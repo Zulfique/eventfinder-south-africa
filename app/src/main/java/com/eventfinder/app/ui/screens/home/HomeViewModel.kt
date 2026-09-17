@@ -242,13 +242,19 @@ class HomeViewModel(
     }
 
     private suspend fun syncFromApi() {
-        when (eventRepository.syncFromApi()) {
+        val outcome = eventRepository.syncFromApi()
+        when (outcome.result) {
             com.eventfinder.app.data.repository.SyncResult.Synced ->
                 AppLogger.i("HomeViewModel", "Live sync completed")
             com.eventfinder.app.data.repository.SyncResult.NoApiKey ->
                 AppLogger.w("HomeViewModel", "No API key - running in demo mode with seeded data")
             com.eventfinder.app.data.repository.SyncResult.Failed ->
                 AppLogger.e("HomeViewModel", "Sync failed - preserving cached events")
+        }
+        if (outcome.newEvents.isNotEmpty() || outcome.updatedFavorites.isNotEmpty()) {
+            if (preferences.newEventAlertsEnabled.first()) {
+                NotificationHelper.postEventAlerts(appContext, outcome.newEvents, outcome.updatedFavorites)
+            }
         }
     }
 

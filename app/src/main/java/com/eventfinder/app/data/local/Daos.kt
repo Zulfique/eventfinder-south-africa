@@ -64,6 +64,9 @@ interface EventDao {
     @Query("SELECT COUNT(*) FROM events")
     suspend fun count(): Int
 
+    @Query("SELECT * FROM events WHERE isCreatedByUser = 0")
+    suspend fun getSynced(): List<EventEntity>
+
     @Query("DELETE FROM events WHERE isCreatedByUser = 0")
     suspend fun deleteSynced()
 

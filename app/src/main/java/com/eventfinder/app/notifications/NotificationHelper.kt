@@ -33,21 +33,107 @@ object NotificationHelper {
 
     private const val TAG = "NotificationHelper"
     const val CHANNEL_REMINDERS = "event_reminders"
+    const val CHANNEL_ALERTS = "event_alerts"
     private const val REQUEST_CODE_BASE = 8000
+    private const val ALERT_ID_BASE = 9000
 
     fun createChannel(context: Context) {
         val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
+            val reminders = NotificationChannel(
                 CHANNEL_REMINDERS,
                 context.getString(R.string.reminder_channel_name),
                 NotificationManager.IMPORTANCE_HIGH
             ).apply {
                 description = context.getString(R.string.reminder_notification_title)
             }
-            manager.createNotificationChannel(channel)
-            AppLogger.d(TAG, "Notification channel created")
+            manager.createNotificationChannel(reminders)
+
+            val alerts = NotificationChannel(
+                CHANNEL_ALERTS,
+                context.getString(R.string.alerts_channel_name),
+                NotificationManager.IMPORTANCE_DEFAULT
+            ).apply {
+                description = context.getString(R.string.alerts_channel_description)
+            }
+            manager.createNotificationChannel(alerts)
+            AppLogger.d(TAG, "Notification channels created")
         }
+    }
+
+    /**
+     * Posts the local "new events" and "favourite updated" alerts produced by a
+     * sync (FR-04). Delivered entirely on-device - no push service required.
+     */
+    fun postEventAlerts(
+        context: Context,
+        newEvents: List<Event>,
+        updatedFavorites: List<Event>
+    ) {
+        if (newEvents.isEmpty() && updatedFavorites.isEmpty()) return
+        createChannel(context)
+        if (!hasNotificationPermission(context)) {
+            AppLogger.w(TAG, "Notification permission missing - skipping event alerts")
+            return
+        }
+        if (newEvents.isNotEmpty()) {
+            val body = context.resources.getQuantityString(
+                R.plurals.new_events_alert_body,
+                newEvents.size,
+                newEvents.size
+            )
+            postAlert(
+                context = context,
+                title = context.getString(R.string.new_events_alert_title),
+                body = body,
+                notificationId = ALERT_ID_BASE,
+                eventId = null
+            )
+        }
+        updatedFavorites.forEachIndexed { index, event ->
+            postAlert(
+                context = context,
+                title = context.getString(R.string.favorite_alert_title),
+                body = context.getString(R.string.favorite_alert_body, event.title),
+                notificationId = ALERT_ID_BASE + 1 + index,
+                eventId = event.id
+            )
+        }
+        AppLogger.i(
+            TAG,
+            "Posted ${newEvents.size} new-event and ${updatedFavorites.size} favourite-update alert(s)"
+        )
+    }
+
+    private fun postAlert(
+        context: Context,
+        title: String,
+        body: String,
+        notificationId: Int,
+        eventId: String?
+    ) {
+        val builder = NotificationCompat.Builder(context, CHANNEL_ALERTS)
+            .setSmallIcon(android.R.drawable.ic_popup_reminder)
+            .setContentTitle(title)
+            .setContentText(body)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(body))
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setAutoCancel(true)
+
+        if (eventId != null) {
+            builder.setContentIntent(
+                PendingIntent.getActivity(
+                    context,
+                    notificationId,
+                    Intent(context, MainActivity::class.java).apply {
+                        addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                        putExtra(ReminderReceiver.EXTRA_EVENT_ID, eventId)
+                    },
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                )
+            )
+        }
+        NotificationManagerCompat.from(context).notify(notificationId, builder.build())
     }
 
     fun hasNotificationPermission(context: Context): Boolean =
