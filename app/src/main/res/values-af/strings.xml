@@ -1,0 +1,214 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">EventFinder Suid-Afrika</string>
+    <string name="tagline">Ontdek wat naby jou gebeur</string>
+
+    <!-- Splash -->
+    <string name="splash_loading">Laai…</string>
+    <string name="splash_welcome">Welkom by EventFinder</string>
+
+    <!-- Auth -->
+    <string name="login_title">Teken in</string>
+    <string name="login_subtitle">Vind jou volgende plaaslike gebeurtenis</string>
+    <string name="email">E-pos</string>
+    <string name="password">Wagwoord</string>
+    <string name="login">Teken in</string>
+    <string name="login_with_biometrics">Teken in met biometrie</string>
+    <string name="login_google">Gaan voort met Google</string>
+    <string name="forgot_password">Wagwoord vergeet?</string>
+    <string name="create_account">Skep \'n rekening</string>
+    <string name="login_no_account">Nog nie \'n rekening nie? Skep een</string>
+    <string name="register_title">Skep \'n rekening</string>
+    <string name="register_subtitle">Sluit by die gemeenskap aan</string>
+    <string name="full_name">Volle naam</string>
+    <string name="confirm_password">Bevestig wagwoord</string>
+    <string name="language_preference">Taalvoorkeur</string>
+    <string name="register">Registreer</string>
+    <string name="already_have_account">Reeds \'n rekening? Teken in</string>
+
+    <!-- Validation -->
+    <string name="invalid_email">Voer \'n geldige e-posadres in</string>
+    <string name="password_too_short">Ten minste 8 karakters</string>
+    <string name="password_no_upper">Ten minste een hoofletter</string>
+    <string name="password_no_digit">Ten minste een syfer</string>
+    <string name="password_no_special">Ten minste een spesiale karakter</string>
+    <string name="passwords_mismatch">Wagwoorde stem nie ooreen nie</string>
+    <string name="name_required">Naam is verpligtend</string>
+    <string name="invalid_password">Voer jou wagwoord in</string>
+    <string name="name_too_short">Naam moet ten minste 2 karakters wees</string>
+    <string name="password_strength_weak">Swak</string>
+    <string name="password_strength_medium">Gemiddeld</string>
+    <string name="password_strength_strong">Sterk</string>
+
+    <!-- Auth messages -->
+    <string name="login_success">Suksesvol ingeteken</string>
+    <string name="register_success">Rekening geskep</string>
+    <string name="login_failed">Verkeerde e-pos of wagwoord</string>
+    <string name="biometric_hint">Bevestig met jou vingerafdruk</string>
+    <string name="forgot_password_hint">Voer jou e-pos in om jou wagwoord te herstel (prototipe herstel plaaslik)</string>
+    <string name="reset_sent">Wagwoordherstelskakel gestuur</string>
+
+    <!-- Common -->
+    <string name="error">Fout</string>
+    <string name="ok">OK</string>
+    <string name="cancel">Kanselleer</string>
+    <string name="save">Stoor</string>
+    <string name="retry">Probeer weer</string>
+    <string name="loading">Laai…</string>
+    <string name="no_connection">Geen internetverbinding nie</string>
+
+    <!-- Home -->
+    <string name="discover_events">Ontdek Gebeurtenisse</string>
+    <string name="search_placeholder">Soek gebeurtenisse…</string>
+    <string name="all_categories">Alles</string>
+    <string name="cat_music">Musiek</string>
+    <string name="cat_sports">Sport</string>
+    <string name="cat_food">Kos</string>
+    <string name="cat_community">Gemeenskap</string>
+    <string name="cat_arts">Kuns</string>
+    <string name="cat_business">Besigheid</string>
+    <string name="map_view">Kaart</string>
+    <string name="list_view">Lys</string>
+    <string name="no_events">Geen gebeurtenisse gevind nie</string>
+    <string name="filter">Filtreer</string>
+    <string name="sort_by">Sorteer op</string>
+    <string name="sort_date">Datum</string>
+    <string name="sort_distance">Afstand</string>
+    <string name="sort_name">Naam</string>
+    <string name="clear_filters">Vee filters uit</string>
+    <string name="loading_events">Laai gebeurtenisse…</string>
+    <string name="offline_banner">Jy is vanlyn — wys gestoorde gebeurtenisse</string>
+    <string name="events_nearby">Gebeurtenisse naby jou</string>
+
+    <!-- Event detail -->
+    <string name="about_event">Oor hierdie gebeurtenis</string>
+    <string name="date_time">Datum &amp; tyd</string>
+    <string name="venue">Lokaal</string>
+    <string name="organizer">Organiseerder</string>
+    <string name="attendees">Bywoners</string>
+    <string name="attend">Woon by</string>
+    <string name="attend_maybe">Miskien</string>
+    <string name="declined">Gedagte</string>
+    <string name="attending">Woon by</string>
+    <string name="share">Deel</string>
+    <string name="directions">Kry Rigtings</string>
+    <string name="weather_at_venue">Weer by lokaal</string>
+    <string name="weather_unavailable">Weervoorspelling nie beskikbaar nie</string>
+    <string name="distance_away">weg</string>
+    <string name="added_to_favorites">By gunstelinge gevoeg</string>
+    <string name="removed_from_favorites">Uit gunstelinge verwyder</string>
+    <string name="reminder_scheduled">Herinnering geskeduleer 1 uur voor die tyd</string>
+    <string name="rsvp_updated">RSVP opgedateer</string>
+
+    <!-- Search -->
+    <string name="search_title">Soek</string>
+    <string name="recent_searches">Onlangse soektogte</string>
+    <string name="popular_events">Gewild tans</string>
+    <string name="no_results">Geen resultate vir hierdie soektog nie</string>
+    <string name="clear_history">Vee geskiedenis uit</string>
+
+    <!-- Create event -->
+    <string name="create_event_title">Skep Gebeurtenis</string>
+    <string name="step_x_of_y">Stap %1$d van %2$d</string>
+    <string name="event_title">Gebeurtenistitel</string>
+    <string name="event_description">Beskrywing</string>
+    <string name="category_label">Kategorie</string>
+    <string name="date_label">Datum</string>
+    <string name="time_label">Tyd</string>
+    <string name="duration_hours">Duur (ure)</string>
+    <string name="venue_name">Lokaalnaam</string>
+    <string name="address">Adres</string>
+    <string name="latitude">Breedtegraad</string>
+    <string name="longitude">Lengtegraad</string>
+    <string name="privacy">Privaatheid</string>
+    <string name="public_event">Openbaar</string>
+    <string name="private_event">Privaat</string>
+    <string name="publish">Publiseer</string>
+    <string name="back">Terug</string>
+    <string name="next">Volgende</string>
+    <string name="create_success">Gebeurtenis suksesvol geskep</string>
+    <string name="create_failed">Kon nie gebeurtenis skep nie</string>
+    <string name="title_required">Titel is verpligtend</string>
+    <string name="description_required">Beskrywing is verpligtend</string>
+    <string name="invalid_coordinates">Voer geldige koördinate in (breedte -90..90, lengte -180..180)</string>
+    <string name="date_in_past">Datum kan nie in die verlede wees nie</string>
+    <string name="review_publish">Kyk oor &amp; publiseer</string>
+
+    <!-- Favorites -->
+    <string name="favorites_title">Gunstelinge</string>
+    <string name="favorites_empty">Nog geen gunstelinge nie. Tik die hart op enige gebeurtenis om dit vanlyn te stoor.</string>
+
+    <!-- Profile -->
+    <string name="profile_title">Profiel</string>
+    <string name="my_events">My Gebeurtenisse</string>
+    <string name="attending_tab">Woon by</string>
+    <string name="events_created">Gebeurtenisse geskep</string>
+    <string name="events_attended">Gebeurtenisse bygewoon</string>
+    <string name="favorites_count">Gunstelinge</string>
+    <string name="edit_profile">Wysig Profiel</string>
+    <string name="logout">Teken uit</string>
+    <string name="logout_confirm">Is jy seker jy wil uitteken?</string>
+
+    <!-- Settings -->
+    <string name="settings_title">Instellings</string>
+    <string name="account_settings">Rekening</string>
+    <string name="change_password">Verander wagwoord</string>
+    <string name="biometric_login_toggle">Biometriese aanmelding</string>
+    <string name="biometric_login_desc">Ontsluit met vingerafdruk of gesig</string>
+    <string name="preferences">Voorkeure</string>
+    <string name="language">Taal / Language</string>
+    <string name="english">English</string>
+    <string name="afrikaans">Afrikaans</string>
+    <string name="notifications">Kennisgewings</string>
+    <string name="reminder_notifications">Gebeurtenisherinnerings</string>
+    <string name="new_events_notifications">Nuwe gebeurteniswaarskuwings</string>
+    <string name="data_management">Data</string>
+    <string name="clear_cache">Vee plaaslike kas uit</string>
+    <string name="cache_cleared">Kas uitgevee</string>
+    <string name="about">Oor</string>
+    <string name="app_version">Weergawe %1$s</string>
+    <string name="privacy_policy">Privaatheidsbeleid</string>
+    <string name="terms_of_service">Diensbepalings</string>
+
+    <!-- Notifications -->
+    <string name="reminder_channel_name">Gebeurtenisherinnerings</string>
+    <string name="reminder_notification_title">Gebeurtenis begin binnekort</string>
+    <string name="reminder_notification_body">%1$s begin oor 1 uur by %2$s</string>
+
+    <!-- Misc -->
+    <string name="event_image">Gebeurtenisbeeld</string>
+
+    <!-- Wizard aliases -->
+    <string name="step_pattern">Stap %1$d van %2$d</string>
+    <string name="preview">Voorskou</string>
+    <string name="title">Titel</string>
+    <string name="description">Beskrywing</string>
+    <string name="category">Kategorie</string>
+    <string name="coordinates_hint">Wenk: laat die koördinate leeg om die gebeurtenis in jou huidige stad te plaas.</string>
+    <string name="tap_to_pick_date">Tik om \'n datum &amp; tyd te kies</string>
+    <string name="event_published">Gebeurtenis gepubliseer</string>
+    <string name="publish_failed">Kon nie die gebeurtenis publiseer nie</string>
+    <string name="done">Klaar</string>
+    <string name="venue_required">Lokaalnaam is verpligtend</string>
+
+    <!-- Favourites aliases -->
+    <string name="no_favorites">Nog geen gunstelinge nie. Tik die hart op enige gebeurtenis om dit vanlyn te stoor.</string>
+
+    <!-- Profile aliases -->
+    <string name="settings">Instellings</string>
+    <string name="created">Geskep</string>
+    <string name="favorites">Gunstelinge</string>
+    <string name="logged_out">Uitgeteken</string>
+    <string name="save_changes">Stoor veranderinge</string>
+    <string name="profile_updated">Profiel opgedateer</string>
+    <string name="save_failed">Kon nie jou veranderinge stoor nie</string>
+
+    <!-- Settings aliases -->
+    <string name="biometric_login">Biometriese aanmelding</string>
+    <string name="biometric_available">Ontsluit met vingerafdruk of gesig</string>
+    <string name="biometric_unavailable">Geen biometriese hardeware op hierdie toestel nie</string>
+    <string name="event_reminders">Gebeurtenisherinnerings</string>
+    <string name="event_reminders_hint">Laat my een uur voor \'n gebeurtenis wat ek bywoon weet</string>
+    <string name="new_events_alerts">Nuwe gebeurteniswaarskuwings</string>
+    <string name="settings_about">%1$s-prototipe — gebou met gratis API\'s (Ticketmaster, Open-Meteo, OpenStreetMap).</string>
+</resources>
