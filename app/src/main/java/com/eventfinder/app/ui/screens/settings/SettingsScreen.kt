@@ -1,0 +1,190 @@
+package com.eventfinder.app.ui.screens.settings
+
+import android.app.Activity
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.ArrowBack
+import androidx.compose.material.icons.outlined.Fingerprint
+import androidx.compose.material.icons.outlined.Language
+import androidx.compose.material.icons.outlined.Notifications
+import androidx.compose.material.icons.outlined.NotificationsActive
+import androidx.compose.material3.Card
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.eventfinder.app.R
+import com.eventfinder.app.di.AppContainer
+import com.eventfinder.app.domain.model.SupportedLanguage
+import com.eventfinder.app.security.BiometricAuth
+
+/**
+ * Screen 9 (Settings): language, biometric login and notification preferences.
+ * Changing the language persists it and recreates the activity so the new
+ * locale is applied everywhere (FR-08).
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun SettingsScreen(
+    container: AppContainer,
+    onBack: () -> Unit
+) {
+    val viewModel: SettingsViewModel = viewModel(factory = SettingsViewModel.factory(container))
+    val state by viewModel.uiState.collectAsState()
+    val context = LocalContext.current
+    val biometricSupported = BiometricAuth.isAvailable(context)
+
+    // Recreate once when the persisted locale changes so the UI redraws.
+    val languageAtStart = remember { state.language }
+    LaunchedEffect(state.language) {
+        if (state.language != languageAtStart) {
+            (context as? Activity)?.recreate()
+        }
+    }
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text(stringResource(R.string.settings)) },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.Outlined.ArrowBack, contentDescription = stringResource(R.string.back))
+                    }
+                }
+            )
+        }
+    ) { padding ->
+        Column(
+            Modifier.fillMaxSize().padding(padding).padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Card(Modifier.fillMaxWidth()) {
+                Column {
+                    LanguageSelector(state.language, viewModel::setLanguage)
+                    HorizontalDivider()
+                    ListItem(
+                        headlineContent = { Text(stringResource(R.string.biometric_login)) },
+                        supportingContent = {
+                            Text(
+                                if (biometricSupported) stringResource(R.string.biometric_available)
+                                else stringResource(R.string.biometric_unavailable)
+                            )
+                        },
+                        leadingContent = { Icon(Icons.Outlined.Fingerprint, contentDescription = null) },
+                        trailingContent = {
+                            Switch(
+                                checked = state.biometricEnabled,
+                                enabled = biometricSupported,
+                                onCheckedChange = viewModel::setBiometric
+                            )
+                        }
+                    )
+                    HorizontalDivider()
+                    ListItem(
+                        headlineContent = { Text(stringResource(R.string.event_reminders)) },
+                        supportingContent = { Text(stringResource(R.string.event_reminders_hint)) },
+                        leadingContent = { Icon(Icons.Outlined.NotificationsActive, contentDescription = null) },
+                        trailingContent = {
+                            Switch(
+                                checked = state.remindersEnabled,
+                                onCheckedChange = viewModel::setReminders
+                            )
+                        }
+                    )
+                    HorizontalDivider()
+                    ListItem(
+                        headlineContent = { Text(stringResource(R.string.new_events_alerts)) },
+                        leadingContent = { Icon(Icons.Outlined.Notifications, contentDescription = null) },
+                        trailingContent = {
+                            Switch(
+                                checked = state.newEventsAlerts,
+                                onCheckedChange = viewModel::setNewEventsAlerts
+                            )
+                        }
+                    )
+                }
+            }
+
+            Text(
+                stringResource(R.string.settings_about, "EventFinder"),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun LanguageSelector(
+    selected: SupportedLanguage,
+    onSelect: (SupportedLanguage) -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+
+    ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }) {
+        Row(
+            modifier = Modifier.menuAnchor()
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+        ) {
+            Icon(Icons.Outlined.Language, contentDescription = null)
+            Spacer(Modifier.size(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text(stringResource(R.string.language), style = MaterialTheme.typography.bodyLarge)
+                Text(
+                    selected.displayName,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded)
+        }
+        ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            DropdownMenuItem(
+                text = { Text(SupportedLanguage.ENGLISH.displayName) },
+                onClick = {
+                    onSelect(SupportedLanguage.ENGLISH)
+                    expanded = false
+                }
+            )
+            DropdownMenuItem(
+                text = { Text(SupportedLanguage.AFRIKAANS.displayName) },
+                onClick = {
+                    onSelect(SupportedLanguage.AFRIKAANS)
+                    expanded = false
+                }
+            )
+        }
+    }
+}
