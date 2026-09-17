@@ -26,14 +26,18 @@ import androidx.compose.material.icons.outlined.Favorite
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.outlined.Group
 import androidx.compose.material.icons.outlined.LocationOn
+import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.Navigation
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.Star
 import androidx.compose.material.icons.outlined.WbSunny
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -43,11 +47,14 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -75,7 +82,8 @@ import com.eventfinder.app.utils.DateTimeUtils
 fun EventDetailScreen(
     container: AppContainer,
     eventId: String,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    onEditEvent: (String) -> Unit = {}
 ) {
     val context = LocalContext.current
     val viewModel: EventDetailViewModel = viewModel(
@@ -83,6 +91,9 @@ fun EventDetailScreen(
     )
     val state by viewModel.uiState.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
+
+    var showOwnerMenu by remember { mutableStateOf(false) }
+    var showDeleteDialog by remember { mutableStateOf(false) }
 
     BackHandler { onBack() }
 
@@ -134,22 +145,80 @@ fun EventDetailScreen(
                             ) {
                                 Icon(Icons.Outlined.ArrowBack, contentDescription = stringResource(R.string.back))
                             }
-                            IconButton(
-                                onClick = { viewModel.toggleFavorite() },
+                            Row(
                                 modifier = Modifier
                                     .align(Alignment.TopEnd)
-                                    .padding(8.dp)
-                                    .clip(RoundedCornerShape(50))
-                                    .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.9f))
+                                    .padding(8.dp),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                Icon(
-                                    if (event.isFavorite) Icons.Outlined.Favorite
-                                    else Icons.Outlined.FavoriteBorder,
-                                    contentDescription = null,
-                                    tint = if (event.isFavorite) MaterialTheme.colorScheme.error
-                                    else MaterialTheme.colorScheme.onSurface
-                                )
+                                IconButton(
+                                    onClick = { viewModel.toggleFavorite() },
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(50))
+                                        .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.9f))
+                                ) {
+                                    Icon(
+                                        if (event.isFavorite) Icons.Outlined.Favorite
+                                        else Icons.Outlined.FavoriteBorder,
+                                        contentDescription = null,
+                                        tint = if (event.isFavorite) MaterialTheme.colorScheme.error
+                                        else MaterialTheme.colorScheme.onSurface
+                                    )
+                                }
+                                if (event.isCreatedByUser) {
+                                    Box {
+                                        IconButton(
+                                            onClick = { showOwnerMenu = true },
+                                            modifier = Modifier
+                                                .clip(RoundedCornerShape(50))
+                                                .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.9f))
+                                        ) {
+                                            Icon(
+                                                Icons.Outlined.MoreVert,
+                                                contentDescription = stringResource(R.string.event_options)
+                                            )
+                                        }
+                                        DropdownMenu(
+                                            expanded = showOwnerMenu,
+                                            onDismissRequest = { showOwnerMenu = false }
+                                        ) {
+                                            DropdownMenuItem(
+                                                text = { Text(stringResource(R.string.edit_event)) },
+                                                onClick = {
+                                                    showOwnerMenu = false
+                                                    onEditEvent(event.id)
+                                                }
+                                            )
+                                            DropdownMenuItem(
+                                                text = { Text(stringResource(R.string.delete_event)) },
+                                                onClick = {
+                                                    showOwnerMenu = false
+                                                    showDeleteDialog = true
+                                                }
+                                            )
+                                        }
+                                    }
+                                }
                             }
+                        }
+
+                        if (showDeleteDialog) {
+                            AlertDialog(
+                                onDismissRequest = { showDeleteDialog = false },
+                                title = { Text(stringResource(R.string.delete_event)) },
+                                text = { Text(stringResource(R.string.delete_event_confirm)) },
+                                confirmButton = {
+                                    TextButton(onClick = {
+                                        showDeleteDialog = false
+                                        viewModel.deleteEvent(onDeleted = onBack)
+                                    }) { Text(stringResource(R.string.delete)) }
+                                },
+                                dismissButton = {
+                                    TextButton(onClick = { showDeleteDialog = false }) {
+                                        Text(stringResource(R.string.cancel))
+                                    }
+                                }
+                            )
                         }
 
                         Column(Modifier.padding(16.dp)) {

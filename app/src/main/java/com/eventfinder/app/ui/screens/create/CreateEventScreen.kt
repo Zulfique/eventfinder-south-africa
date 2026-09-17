@@ -68,9 +68,11 @@ import java.util.Calendar
 @Composable
 fun CreateEventScreen(
     container: AppContainer,
-    onClose: () -> Unit
+    onClose: () -> Unit,
+    eventId: String? = null
 ) {
-    val viewModel: CreateEventViewModel = viewModel(factory = CreateEventViewModel.factory(container))
+    val viewModel: CreateEventViewModel =
+        viewModel(factory = CreateEventViewModel.factory(container, eventId))
     val state by viewModel.uiState.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
     val context = androidx.compose.ui.platform.LocalContext.current
@@ -82,6 +84,10 @@ fun CreateEventScreen(
         viewModel.messages.collect { msg ->
             msg.resolve(context)?.let { snackbarHostState.showSnackbar(it) }
         }
+    }
+
+    LaunchedEffect(Unit) {
+        viewModel.completed.collect { onClose() }
     }
 
     if (showDatePicker) {
@@ -130,7 +136,14 @@ fun CreateEventScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(stringResource(R.string.create_event_title)) },
+                title = {
+                    Text(
+                        stringResource(
+                            if (viewModel.isEditMode) R.string.edit_event_title
+                            else R.string.create_event_title
+                        )
+                    )
+                },
                 navigationIcon = {
                     TextButton(onClick = onClose) { Text(stringResource(R.string.cancel)) }
                 }
@@ -168,7 +181,12 @@ fun CreateEventScreen(
                         } else {
                             Icon(Icons.Outlined.Check, contentDescription = null)
                             Spacer(Modifier.width(6.dp))
-                            Text(stringResource(R.string.publish))
+                            Text(
+                                stringResource(
+                                    if (viewModel.isEditMode) R.string.save_changes
+                                    else R.string.publish
+                                )
+                            )
                         }
                     }
                 }

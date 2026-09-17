@@ -56,8 +56,11 @@ object AppDestinations {
     const val SETTINGS = "settings"
     const val EDIT_PROFILE = "editProfile"
     const val EVENT_DETAIL = "event/{eventId}"
+    const val EDIT_EVENT = "editEvent/{eventId}"
 
     fun eventDetail(eventId: String) = "event/$eventId"
+
+    fun editEvent(eventId: String) = "editEvent/$eventId"
 }
 
 /**
@@ -126,7 +129,19 @@ fun EventFinderNavHost(
             EventDetailScreen(
                 container = container,
                 eventId = entry.arguments?.getString("eventId").orEmpty(),
-                onBack = { navController.popBackStack() }
+                onBack = { navController.popBackStack() },
+                onEditEvent = { navController.navigate(AppDestinations.editEvent(it)) }
+            )
+        }
+
+        composable(
+            route = AppDestinations.EDIT_EVENT,
+            arguments = listOf(navArgument("eventId") { type = NavType.StringType })
+        ) { entry ->
+            CreateEventScreen(
+                container = container,
+                onClose = { navController.popBackStack() },
+                eventId = entry.arguments?.getString("eventId")
             )
         }
 

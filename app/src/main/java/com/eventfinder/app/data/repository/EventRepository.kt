@@ -39,7 +39,8 @@ data class NewEventDraft(
     val address: String,
     val latitude: Double,
     val longitude: Double,
-    val isPublic: Boolean
+    val isPublic: Boolean,
+    val imageUrl: String? = null
 )
 
 /**
@@ -70,6 +71,12 @@ interface EventRepository {
     suspend fun setRsvp(eventId: String, status: RsvpStatus)
 
     suspend fun createEvent(draft: NewEventDraft): Result<String>
+
+    /** Updates a community event the user created (FR-06). */
+    suspend fun updateEvent(eventId: String, draft: NewEventDraft): Result<Unit>
+
+    /** Deletes a community event the user created (FR-06). */
+    suspend fun deleteEvent(eventId: String): Result<Unit>
 
     suspend fun getEvent(eventId: String): Event?
 
@@ -193,6 +200,48 @@ class EventRepositoryImpl(
         enqueuePending("event", id, "create", gson.toJson(entity))
         AppLogger.i(tag, "Community event created locally: $id")
         return Result.success(id)
+    }
+
+    override suspend fun updateEvent(eventId: String, draft: NewEventDraft): Result<Unit> {
+        val existing = eventDao.findById(eventId)
+            ?: return Result.failure(IllegalArgumentException("event_missing"))
+        if (!existing.isCreatedByUser) {
+            AppLogger.w(tag, "Update rejected - not a user-created event: $eventId")
+            return Result.failure(IllegalArgumentException("not_owner"))
+        }
+        val updated = existing.copy(
+            title = draft.title.trim(),
+            description = draft.description.trim(),
+            category = draft.category.labelKey,
+            startDate = draft.startDate,
+            endDate = draft.endDate,
+            venueName = draft.venueName.trim(),
+            address = draft.address.trim(),
+            latitude = draft.latitude,
+            longitude = draft.longitude,
+            imageUrl = draft.imageUrl ?: existing.imageUrl,
+            isPublic = draft.isPublic,
+            isSynced = false
+        )
+        eventDao.upsert(updated)
+        enqueuePending("event", eventId, "update", gson.toJson(updated))
+        AppLogger.i(tag, "Community event updated locally: $eventId")
+        return Result.success(Unit)
+    }
+
+    override suspend fun deleteEvent(eventId: String): Result<Unit> {
+        val existing = eventDao.findById(eventId)
+            ?: return Result.failure(IllegalArgumentException("event_missing"))
+        if (!existing.isCreatedByUser) {
+            AppLogger.w(tag, "Delete rejected - not a user-created event: $eventId")
+            return Result.failure(IllegalArgumentException("not_owner"))
+        }
+        eventDao.deleteById(eventId)
+        favoriteDao.delete(eventId)
+        rsvpDao.delete(eventId)
+        enqueuePending("event", eventId, "delete", gson.toJson(eventId))
+        AppLogger.i(tag, "Community event deleted locally: $eventId")
+        return Result.success(Unit)
     }
 
     override suspend fun getEvent(eventId: String): Event? =

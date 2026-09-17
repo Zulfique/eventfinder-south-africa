@@ -66,6 +66,9 @@ interface EventDao {
 
     @Query("DELETE FROM events WHERE isCreatedByUser = 1")
     suspend fun deleteCreatedByUser()
+
+    @Query("DELETE FROM events WHERE id = :id")
+    suspend fun deleteById(id: String)
 }
 
 /** Data access for favourites (offline-first, see FR-03). */

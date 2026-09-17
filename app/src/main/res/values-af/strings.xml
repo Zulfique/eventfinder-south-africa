@@ -134,6 +134,16 @@
     <string name="invalid_coordinates">Voer geldige koördinate in (breedte -90..90, lengte -180..180)</string>
     <string name="date_in_past">Datum kan nie in die verlede wees nie</string>
     <string name="review_publish">Kyk oor &amp; publiseer</string>
+    <string name="edit_event_title">Wysig gebeurtenis</string>
+    <string name="edit_event">Wysig gebeurtenis</string>
+    <string name="delete_event">Verwyder gebeurtenis</string>
+    <string name="delete_event_confirm">Verwyder hierdie gebeurtenis? Hierdie aksie kan nie ongedaan gemaak word nie.</string>
+    <string name="event_options">Gebeurtenisopsies</string>
+    <string name="event_updated">Gebeurtenis opgedateer</string>
+    <string name="update_failed">Kon nie die gebeurtenis opdateer nie</string>
+    <string name="event_deleted">Gebeurtenis verwyder</string>
+    <string name="delete_failed">Kon nie die gebeurtenis verwyder nie</string>
+    <string name="delete">Verwyder</string>
 
     <!-- Favorites -->
     <string name="favorites_title">Gunstelinge</string>

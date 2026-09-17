@@ -45,14 +45,50 @@ data class CreateEventUiState(
  * queued when offline).
  */
 class CreateEventViewModel(
-    private val eventRepository: EventRepository
+    private val eventRepository: EventRepository,
+    private val eventId: String? = null
 ) : ViewModel() {
+
+    /** True when the wizard is editing an existing user-created event. */
+    val isEditMode: Boolean = eventId != null
 
     private val _uiState = MutableStateFlow(CreateEventUiState())
     val uiState = _uiState.asStateFlow()
 
     private val _messages = MutableSharedFlow<UiMessage>()
     val messages = _messages.asSharedFlow()
+
+    /** Emitted after a successful edit so the host screen can navigate back. */
+    private val _completed = MutableSharedFlow<Unit>()
+    val completed = _completed.asSharedFlow()
+
+    init {
+        if (eventId != null) {
+            viewModelScope.launch { loadEvent(eventId) }
+        }
+    }
+
+    private suspend fun loadEvent(id: String) {
+        val event = eventRepository.getEvent(id)
+        if (event == null) {
+            AppLogger.w("CreateEventViewModel", "Edit requested for missing event: $id")
+            _messages.emit(UiMessage.Resource(R.string.update_failed))
+            return
+        }
+        _uiState.update {
+            it.copy(
+                title = event.title,
+                description = event.description,
+                category = event.category,
+                dateMillis = event.startDate,
+                venueName = event.venueName,
+                address = event.address,
+                latitude = event.latitude.toString(),
+                longitude = event.longitude.toString(),
+                isPublic = event.isPublic
+            )
+        }
+    }
 
     fun onTitleChange(v: String) = _uiState.update { it.copy(title = v) }
     fun onDescriptionChange(v: String) = _uiState.update { it.copy(description = v) }
@@ -113,27 +149,40 @@ class CreateEventViewModel(
             _uiState.update { it.copy(isSubmitting = true) }
             val lat = state.latitude.toDoubleOrNull() ?: defaultLat
             val lng = state.longitude.toDoubleOrNull() ?: defaultLng
-            val eventId = eventRepository.createEvent(
-                NewEventDraft(
-                    title = state.title.trim(),
-                    description = state.description.trim(),
-                    category = state.category,
-                    startDate = state.dateMillis,
-                    endDate = state.dateMillis + TimeUnit.HOURS.toMillis(2),
-                    venueName = state.venueName.trim(),
-                    address = state.address.trim().ifBlank { state.venueName.trim() },
-                    latitude = lat,
-                    longitude = lng,
-                    isPublic = state.isPublic
-                )
-            ).getOrNull()
-            _uiState.update { it.copy(isSubmitting = false) }
-            if (eventId != null) {
-                AppLogger.i("CreateEventViewModel", "Published event: $eventId")
-                _messages.emit(UiMessage.Resource(R.string.event_published))
-                reset()
+            val draft = NewEventDraft(
+                title = state.title.trim(),
+                description = state.description.trim(),
+                category = state.category,
+                startDate = state.dateMillis,
+                endDate = state.dateMillis + TimeUnit.HOURS.toMillis(2),
+                venueName = state.venueName.trim(),
+                address = state.address.trim().ifBlank { state.venueName.trim() },
+                latitude = lat,
+                longitude = lng,
+                isPublic = state.isPublic
+            )
+            val result: Result<*> = if (eventId != null) {
+                eventRepository.updateEvent(eventId, draft)
             } else {
-                _messages.emit(UiMessage.Resource(R.string.publish_failed))
+                eventRepository.createEvent(draft)
+            }
+            _uiState.update { it.copy(isSubmitting = false) }
+            if (result.isSuccess) {
+                if (eventId != null) {
+                    AppLogger.i("CreateEventViewModel", "Updated event: $eventId")
+                    _messages.emit(UiMessage.Resource(R.string.event_updated))
+                    _completed.emit(Unit)
+                } else {
+                    AppLogger.i("CreateEventViewModel", "Published event: ${result.getOrNull()}")
+                    _messages.emit(UiMessage.Resource(R.string.event_published))
+                    reset()
+                }
+            } else {
+                _messages.emit(
+                    UiMessage.Resource(
+                        if (eventId != null) R.string.update_failed else R.string.publish_failed
+                    )
+                )
             }
         }
     }
@@ -143,8 +192,11 @@ class CreateEventViewModel(
     }
 
     companion object {
-        fun factory(container: AppContainer): ViewModelProvider.Factory = viewModelFactory {
-            initializer { CreateEventViewModel(container.eventRepository) }
+        fun factory(
+            container: AppContainer,
+            eventId: String? = null
+        ): ViewModelProvider.Factory = viewModelFactory {
+            initializer { CreateEventViewModel(container.eventRepository, eventId) }
         }
     }
 }

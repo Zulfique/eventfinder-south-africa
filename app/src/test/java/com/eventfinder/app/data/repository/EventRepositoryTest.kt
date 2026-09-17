@@ -83,6 +83,11 @@ class EventRepositoryTest {
             rows.values.filter { it.isCreatedByUser }.map { it.id }.forEach { rows.remove(it) }
             emit()
         }
+
+        override suspend fun deleteById(id: String) {
+            rows.remove(id)
+            emit()
+        }
     }
 
     private class FakeFavoriteDao : FavoriteDao {
@@ -347,6 +352,88 @@ class EventRepositoryTest {
         assertFalse(stored.isSynced)
         assertEquals(1, pending.count())
     }
+
+    // -------------------------------------------------- update / delete event
+
+    @Test
+    fun `updateEvent edits a user owned event and queues an offline action`() = runTest {
+        val dao = FakeEventDao()
+        val pending = FakePendingSyncDao()
+        val repo = repository(eventDao = dao, pendingDao = pending)
+        val id = repo.createEvent(draft(title = "Original")).getOrThrow()
+        pending.rows.clear()
+
+        val result = repo.updateEvent(
+            id,
+            draft(title = "Updated", venue = "New Venue", public = false)
+        )
+
+        assertTrue(result.isSuccess)
+        val stored = repo.getEvent(id)!!
+        assertEquals("Updated", stored.title)
+        assertEquals("New Venue", stored.venueName)
+        assertFalse(stored.isPublic)
+        assertTrue(stored.isCreatedByUser)
+        assertEquals(1, pending.count())
+    }
+
+    @Test
+    fun `updateEvent refuses to edit an API-synced event`() = runTest {
+        val repo = repository()
+        repo.syncFromApi()
+        val syncedId = repo.observeAllEvents().first().first().id
+
+        val result = repo.updateEvent(syncedId, draft(title = "Hacked"))
+
+        assertTrue(result.isFailure)
+        assertEquals("Live Music Night", repo.getEvent(syncedId)!!.title)
+    }
+
+    @Test
+    fun `deleteEvent removes the event and its favourite and rsvp links`() = runTest {
+        val favorites = FakeFavoriteDao()
+        val rsvps = FakeRsvpDao()
+        val repo = repository(favoriteDao = favorites, rsvpDao = rsvps)
+        val id = repo.createEvent(draft(title = "To remove")).getOrThrow()
+        repo.toggleFavorite(id)
+        repo.setRsvp(id, RsvpStatus.ATTENDING)
+
+        val result = repo.deleteEvent(id)
+
+        assertTrue(result.isSuccess)
+        assertNull(repo.getEvent(id))
+        assertFalse(favorites.rows.containsKey(id))
+        assertFalse(rsvps.rows.containsKey(id))
+    }
+
+    @Test
+    fun `deleteEvent refuses to delete an API-synced event`() = runTest {
+        val repo = repository()
+        repo.syncFromApi()
+        val syncedId = repo.observeAllEvents().first().first().id
+
+        val result = repo.deleteEvent(syncedId)
+
+        assertTrue(result.isFailure)
+        assertNotNull(repo.getEvent(syncedId))
+    }
+
+    private fun draft(
+        title: String,
+        venue: String = "Venue",
+        public: Boolean = true
+    ) = NewEventDraft(
+        title = title,
+        description = "A community event",
+        category = EventCategory.COMMUNITY,
+        startDate = 10_000L,
+        endDate = 12_000L,
+        venueName = venue,
+        address = "Cape Town",
+        latitude = -33.9,
+        longitude = 18.4,
+        isPublic = public
+    )
 
     // -------------------------------------------------------- cache clearing
 

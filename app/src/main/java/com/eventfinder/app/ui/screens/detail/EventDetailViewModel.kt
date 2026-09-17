@@ -137,6 +137,20 @@ class EventDetailViewModel(
         }
     }
 
+    /** Deletes the event when the signed-in user is its organiser (FR-06). */
+    fun deleteEvent(onDeleted: () -> Unit) {
+        viewModelScope.launch {
+            val result = eventRepository.deleteEvent(eventId)
+            if (result.isSuccess) {
+                NotificationHelper.cancelEventReminders(appContext, eventId)
+                _messages.emit(UiMessage.Resource(R.string.event_deleted))
+                onDeleted()
+            } else {
+                _messages.emit(UiMessage.Resource(R.string.delete_failed))
+            }
+        }
+    }
+
     companion object {
         fun factory(
             container: AppContainer,
