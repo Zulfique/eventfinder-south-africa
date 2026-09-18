@@ -5,6 +5,7 @@ import com.eventfinder.app.data.remote.dto.OmForecastResponse
 import com.eventfinder.app.utils.AppLogger
 import com.eventfinder.app.utils.DateTimeUtils
 import java.io.IOException
+import retrofit2.HttpException
 
 /**
  * A forecast summarised for the event-detail weather card.
@@ -79,6 +80,13 @@ class WeatherRepositoryImpl(
             AppLogger.w(tag, "No hourly sample on event day for $eventId")
             Result.failure(IllegalStateException("no_hourly_data"))
         }
+    } catch (t: HttpException) {
+        if (t.code() == 400) {
+            AppLogger.w(tag, "No forecast for $eventId (outside Open-Meteo's forecast window)")
+        } else {
+            AppLogger.e(tag, "Weather lookup failed", t)
+        }
+        Result.failure(t)
     } catch (t: IOException) {
         AppLogger.e(tag, "Weather lookup failed (offline)", t)
         Result.failure(t)

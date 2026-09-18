@@ -105,7 +105,7 @@ class CreateEventViewModel(
     private val _uiState = MutableStateFlow(CreateEventUiState())
     val uiState = _uiState.asStateFlow()
 
-    private val _messages = MutableSharedFlow<UiMessage>()
+    private val _messages = MutableSharedFlow<UiMessage>(extraBufferCapacity = 1)
     val messages = _messages.asSharedFlow()
 
     /** Emitted after a successful edit so the host screen can navigate back. */

@@ -77,6 +77,10 @@ fun EditProfileScreen(
                 onValueChange = viewModel::onNameChange,
                 label = { Text(stringResource(R.string.full_name)) },
                 singleLine = true,
+                isError = state.nameError != null,
+                supportingText = {
+                    state.nameError?.let { Text(stringResource(it)) }
+                },
                 modifier = Modifier.fillMaxWidth()
             )
             OutlinedTextField(
@@ -84,6 +88,10 @@ fun EditProfileScreen(
                 onValueChange = viewModel::onEmailChange,
                 label = { Text(stringResource(R.string.email)) },
                 singleLine = true,
+                isError = state.emailError != null,
+                supportingText = {
+                    state.emailError?.let { Text(stringResource(it)) }
+                },
                 modifier = Modifier.fillMaxWidth()
             )
             Button(

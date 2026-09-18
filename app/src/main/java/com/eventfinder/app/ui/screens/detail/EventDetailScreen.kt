@@ -165,7 +165,10 @@ fun EventDetailScreen(
                                     Icon(
                                         if (event.isFavorite) Icons.Outlined.Favorite
                                         else Icons.Outlined.FavoriteBorder,
-                                        contentDescription = null,
+                                        contentDescription = stringResource(
+                                            if (event.isFavorite) R.string.favorite_remove
+                                            else R.string.favorite_add
+                                        ),
                                         tint = if (event.isFavorite) MaterialTheme.colorScheme.error
                                         else MaterialTheme.colorScheme.onSurface
                                     )

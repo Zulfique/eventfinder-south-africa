@@ -22,7 +22,9 @@ import kotlinx.coroutines.launch
 data class EditProfileUiState(
     val fullName: String = "",
     val email: String = "",
-    val saving: Boolean = false
+    val saving: Boolean = false,
+    val nameError: Int? = null,
+    val emailError: Int? = null
 )
 
 /**
@@ -49,19 +51,16 @@ class EditProfileViewModel(
         }
     }
 
-    fun onNameChange(v: String) = _uiState.update { it.copy(fullName = v) }
-    fun onEmailChange(v: String) = _uiState.update { it.copy(email = v) }
+    fun onNameChange(v: String) = _uiState.update { it.copy(fullName = v, nameError = null) }
+    fun onEmailChange(v: String) = _uiState.update { it.copy(email = v, emailError = null) }
 
-    /** Returns true when validation passes. */
+    /** Returns true when validation passes; surfaces errors inline in the form. */
     fun validate(): Boolean {
         val state = _uiState.value
-        val error = when {
-            state.fullName.isBlank() -> R.string.name_required
-            !EmailValidator.isValid(state.email) -> R.string.invalid_email
-            else -> null
-        }
-        if (error != null) _messages.tryEmit(UiMessage.Resource(error))
-        return error == null
+        val nameError = if (state.fullName.isBlank()) R.string.name_required else null
+        val emailError = if (!EmailValidator.isValid(state.email)) R.string.invalid_email else null
+        _uiState.update { it.copy(nameError = nameError, emailError = emailError) }
+        return nameError == null && emailError == null
     }
 
     fun save(onSaved: () -> Unit) {
