@@ -5,6 +5,7 @@ import androidx.room.Delete
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Transaction
 import kotlinx.coroutines.flow.Flow
 
 /** Data access for registered users. */
@@ -75,6 +76,23 @@ interface EventDao {
 
     @Query("DELETE FROM events WHERE id = :id")
     suspend fun deleteById(id: String)
+
+    @Query("DELETE FROM events WHERE organizerId = :userId AND isCreatedByUser = 1")
+    suspend fun deleteCreatedByUserId(userId: String)
+
+    @Query("""
+        SELECT e.* FROM events e
+        INNER JOIN rsvps r ON r.eventId = e.id
+        WHERE r.status = 'attending' AND e.startDate > :now
+        ORDER BY e.startDate ASC
+    """)
+    suspend fun getUpcomingAttendingEvents(now: Long): List<EventEntity>
+
+    @Transaction
+    suspend fun replaceSyncedEvents(events: List<EventEntity>) {
+        deleteSynced()
+        upsertAll(events)
+    }
 }
 
 /** Data access for favourites (offline-first, see FR-03). */
@@ -93,8 +111,11 @@ interface FavoriteDao {
     @Query("SELECT COUNT(*) FROM favorites")
     suspend fun count(): Int
 
-    @Query("SELECT 1 FROM favorites WHERE eventId = :eventId LIMIT 1")
-    suspend fun exists(eventId: String): Boolean?
+    @Query("SELECT EXISTS(SELECT 1 FROM favorites WHERE eventId = :eventId)")
+    suspend fun exists(eventId: String): Boolean
+
+    @Query("DELETE FROM favorites WHERE eventId IN (SELECT id FROM events WHERE organizerId = :userId)")
+    suspend fun deleteForUserEvents(userId: String)
 }
 
 /** Data access for RSVPs (FR-02/FR-06). */
@@ -115,6 +136,9 @@ interface RsvpDao {
 
     @Query("SELECT COUNT(*) FROM rsvps WHERE status = 'attending'")
     suspend fun attendingCount(): Int
+
+    @Query("DELETE FROM rsvps WHERE eventId IN (SELECT id FROM events WHERE organizerId = :userId)")
+    suspend fun deleteForUserEvents(userId: String)
 }
 
 /** Data access for the offline action queue (FR-09). */
@@ -135,4 +159,27 @@ interface PendingSyncDao {
 
     @Query("SELECT COUNT(*) FROM pending_sync")
     suspend fun count(): Int
+
+    @Query("DELETE FROM pending_sync WHERE entityId IN (SELECT id FROM events WHERE organizerId = :userId)")
+    suspend fun deleteForUserEvents(userId: String)
+}
+
+/** Transactional account deletion that cleans up all user data. */
+@Dao
+interface AccountDao {
+    @Transaction
+    suspend fun deleteAccountData(
+        pendingSyncDao: PendingSyncDao,
+        favoriteDao: FavoriteDao,
+        rsvpDao: RsvpDao,
+        eventDao: EventDao,
+        userDao: UserDao,
+        userId: String
+    ) {
+        pendingSyncDao.deleteForUserEvents(userId)
+        favoriteDao.deleteForUserEvents(userId)
+        rsvpDao.deleteForUserEvents(userId)
+        eventDao.deleteCreatedByUserId(userId)
+        userDao.deleteById(userId)
+    }
 }

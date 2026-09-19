@@ -11,6 +11,7 @@ import com.eventfinder.app.data.local.RsvpEntity
 import com.eventfinder.app.data.local.toDomain
 import com.eventfinder.app.data.remote.TicketmasterApi
 import com.eventfinder.app.data.remote.TicketmasterMapper
+import com.eventfinder.app.data.store.SessionProvider
 import com.eventfinder.app.domain.model.Event
 import com.eventfinder.app.domain.model.EventAlertDetector
 import com.eventfinder.app.domain.model.EventCategory
@@ -105,13 +106,23 @@ class EventRepositoryImpl(
     private val rsvpDao: RsvpDao,
     private val pendingSyncDao: PendingSyncDao,
     private val ticketmasterApi: TicketmasterApi,
-    private val apiKey: String
+    private val apiKey: String,
+    private val preferences: SessionProvider
 ) : EventRepository {
 
     private val mapper = TicketmasterMapper()
     private val gson = Gson()
 
     private val tag = "EventRepository"
+
+    private suspend fun requireCurrentUserId(): Result<String> {
+        val userId = preferences.sessionUserId.first()
+        return if (userId.isNullOrBlank()) {
+            Result.failure(IllegalStateException("not_logged_in"))
+        } else {
+            Result.success(userId)
+        }
+    }
 
     override fun observeAllEvents(): Flow<List<Event>> =
         eventDao.observeAll().map { rows -> rows.map { it.toDomain() } }
@@ -156,9 +167,8 @@ class EventRepositoryImpl(
 
             val alerts = EventAlertDetector.detect(previous, mapped, favoriteIds)
 
-            // Replace the synced catalogue but preserve user-created events.
-            eventDao.deleteSynced()
-            eventDao.upsertAll(mapped.map { it.toEntity(isSynced = true, isCreatedByUser = false) })
+            // Replace the synced catalogue atomically to prevent half-updated state.
+            eventDao.replaceSyncedEvents(mapped.map { it.toEntity(isSynced = true, isCreatedByUser = false) })
             AppLogger.i(tag, "Sync complete - ${mapped.size} live events stored")
             if (!alerts.isEmpty) {
                 AppLogger.i(
@@ -177,13 +187,13 @@ class EventRepositoryImpl(
     }
 
     override suspend fun toggleFavorite(eventId: String): Boolean {
-        val already = favoriteDao.exists(eventId) != null
+        val already = favoriteDao.exists(eventId)
         if (already) {
             favoriteDao.delete(eventId)
             eventDao.setFavorite(eventId, false)
             AppLogger.i(tag, "Removed favourite: $eventId")
         } else {
-            favoriteDao.insert(FavoriteEntity(eventId = eventId, createdAt = System.currentTimeMillis(), isSynced = true))
+            favoriteDao.insert(FavoriteEntity(eventId = eventId, createdAt = System.currentTimeMillis(), isSynced = false))
             eventDao.setFavorite(eventId, true)
             AppLogger.i(tag, "Added favourite: $eventId")
         }
@@ -192,13 +202,15 @@ class EventRepositoryImpl(
     }
 
     override suspend fun setRsvp(eventId: String, status: RsvpStatus) {
-        rsvpDao.upsert(RsvpEntity(eventId = eventId, status = status.storage, createdAt = System.currentTimeMillis(), isSynced = true))
+        rsvpDao.upsert(RsvpEntity(eventId = eventId, status = status.storage, createdAt = System.currentTimeMillis(), isSynced = false))
         enqueuePending("rsvp", eventId, "update", gson.toJson(status.storage))
         AppLogger.i(tag, "RSVP updated for $eventId -> ${status.storage}")
     }
 
     override suspend fun createEvent(draft: NewEventDraft): Result<String> {
-        // Server-issued ids are GUIDs per the Part 1 design (§5.3); used locally too.
+        val userId = preferences.sessionUserId.first()
+            ?: return Result.failure(IllegalStateException("not_logged_in"))
+
         val id = UUID.randomUUID().toString()
         val entity = EventEntity(
             id = id,
@@ -213,7 +225,7 @@ class EventRepositoryImpl(
             longitude = draft.longitude,
             imageUrl = draft.imageUrl,
             isPublic = draft.isPublic,
-            organizerId = "local-user",
+            organizerId = userId,
             organizerName = "You",
             attendeeCount = 0,
             isFavorite = false,
@@ -227,11 +239,17 @@ class EventRepositoryImpl(
     }
 
     override suspend fun updateEvent(eventId: String, draft: NewEventDraft): Result<Unit> {
+        val userId = requireCurrentUserId().getOrElse { return Result.failure(it) }
+
         val existing = eventDao.findById(eventId)
             ?: return Result.failure(IllegalArgumentException("event_missing"))
         if (!existing.isCreatedByUser) {
             AppLogger.w(tag, "Update rejected - not a user-created event: $eventId")
-            return Result.failure(IllegalArgumentException("not_owner"))
+            return Result.failure(IllegalArgumentException("not_user_event"))
+        }
+        if (existing.organizerId != userId) {
+            AppLogger.w(tag, "Update rejected - user $userId does not own event $eventId")
+            return Result.failure(SecurityException("not_owner"))
         }
         val updated = existing.copy(
             title = draft.title.trim(),
@@ -254,11 +272,17 @@ class EventRepositoryImpl(
     }
 
     override suspend fun deleteEvent(eventId: String): Result<Unit> {
+        val userId = requireCurrentUserId().getOrElse { return Result.failure(it) }
+
         val existing = eventDao.findById(eventId)
             ?: return Result.failure(IllegalArgumentException("event_missing"))
         if (!existing.isCreatedByUser) {
             AppLogger.w(tag, "Delete rejected - not a user-created event: $eventId")
-            return Result.failure(IllegalArgumentException("not_owner"))
+            return Result.failure(IllegalArgumentException("not_user_event"))
+        }
+        if (existing.organizerId != userId) {
+            AppLogger.w(tag, "Delete rejected - user $userId does not own event $eventId")
+            return Result.failure(SecurityException("not_owner"))
         }
         eventDao.deleteById(eventId)
         favoriteDao.delete(eventId)
@@ -282,13 +306,12 @@ class EventRepositoryImpl(
         if (apiKey.isBlank()) return SyncResult.NoApiKey
         val pending = pendingSyncDao.all()
         if (pending.isEmpty()) return SyncResult.Synced
-        // Prototype: mock API acknowledgement. Real replay is added in the final POE
-        // against the ASP.NET Core backend endpoints defined in Part 1 §5.2.
-        pending.forEach { action ->
-            AppLogger.i(tag, "Flushing pending ${action.entityType} '${action.action}' (${action.entityId})")
-            pendingSyncDao.delete(action.id)
-        }
-        return SyncResult.Synced
+        AppLogger.w(
+            tag,
+            "Pending actions exist, but server replay is not implemented. " +
+                "Keeping ${pending.size} action(s) queued."
+        )
+        return SyncResult.Failed
     }
 
     private suspend fun enqueuePending(type: String, entityId: String, action: String, payload: String) {

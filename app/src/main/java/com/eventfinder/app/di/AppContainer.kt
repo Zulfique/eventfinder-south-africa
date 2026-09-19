@@ -34,7 +34,14 @@ class AppContainer(context: Context) {
     val preferences: UserPreferences by lazy { UserPreferences(appContext) }
 
     val authRepository: AuthRepository by lazy {
-        AuthRepositoryImpl(database.userDao(), preferences)
+        AuthRepositoryImpl(
+            userDao = database.userDao(),
+            preferences = preferences,
+            eventDao = database.eventDao(),
+            favoriteDao = database.favoriteDao(),
+            rsvpDao = database.rsvpDao(),
+            pendingSyncDao = database.pendingSyncDao()
+        )
     }
 
     val eventRepository: EventRepository by lazy {
@@ -44,7 +51,8 @@ class AppContainer(context: Context) {
             rsvpDao = database.rsvpDao(),
             pendingSyncDao = database.pendingSyncDao(),
             ticketmasterApi = ApiClient.ticketmasterApi(appContext.cacheDir),
-            apiKey = BuildConfig.TICKETMASTER_API_KEY
+            apiKey = BuildConfig.TICKETMASTER_API_KEY,
+            preferences = preferences
         )
     }
 

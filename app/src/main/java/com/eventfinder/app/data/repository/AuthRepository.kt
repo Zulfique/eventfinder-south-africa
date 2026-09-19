@@ -1,9 +1,13 @@
 package com.eventfinder.app.data.repository
 
+import com.eventfinder.app.data.local.EventDao
+import com.eventfinder.app.data.local.FavoriteDao
+import com.eventfinder.app.data.local.PendingSyncDao
+import com.eventfinder.app.data.local.RsvpDao
 import com.eventfinder.app.data.local.UserDao
 import com.eventfinder.app.data.local.UserEntity
 import com.eventfinder.app.data.local.toDomain
-import com.eventfinder.app.data.store.UserPreferences
+import com.eventfinder.app.data.store.SessionProvider
 import com.eventfinder.app.domain.model.User
 import com.eventfinder.app.utils.AppLogger
 import com.eventfinder.app.utils.EmailValidator
@@ -36,9 +40,10 @@ interface AuthRepository {
     suspend fun setBiometricEnabled(enabled: Boolean)
 
     /**
-     * Resets a forgotten password. The prototype runs entirely on-device, so no
-     * email is sent: the call validates that [email] belongs to a local account
-     * and stores a fresh PBKDF2 hash for [newPassword].
+     * Password reset is intentionally unavailable in the local-only prototype.
+     *
+     * A real password reset must be performed by a trusted backend that verifies
+     * ownership of the email address using a one-time token.
      */
     suspend fun resetPassword(email: String, newPassword: String): Result<Unit>
 
@@ -48,13 +53,17 @@ interface AuthRepository {
     /** Permanently removes the signed-in user's account and clears the session. */
     suspend fun deleteAccount(): Result<Unit>
 
-    fun isLoggedIn(): Boolean
+    suspend fun isLoggedIn(): Boolean
 }
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class AuthRepositoryImpl(
     private val userDao: UserDao,
-    private val preferences: UserPreferences
+    private val preferences: SessionProvider,
+    private val eventDao: EventDao,
+    private val favoriteDao: FavoriteDao,
+    private val rsvpDao: RsvpDao,
+    private val pendingSyncDao: PendingSyncDao
 ) : AuthRepository {
 
     @OptIn(ExperimentalCoroutinesApi::class)
@@ -108,17 +117,16 @@ class AuthRepositoryImpl(
     }
 
     override suspend fun biometricLogin(): Result<User> {
-        // Prototype: the device typically holds one local user. When biometrics
-        // are enabled for them, a successful prompt signs that user straight in.
-        val candidate = userDao.observeAll().first().firstOrNull { it.biometricEnabled }
-        return if (candidate != null) {
-            preferences.setSessionUserId(candidate.id)
-            AppLogger.i("AuthRepository", "Biometric login for ${candidate.email}")
-            Result.success(candidate.toDomain())
-        } else {
-            AppLogger.w("AuthRepository", "Biometric login requested but no biometric-enabled user found")
-            Result.failure(IllegalStateException("no_biometric_user"))
+        val userId = preferences.biometricUserId.first()
+            ?: return Result.failure(IllegalStateException("no_biometric_user"))
+        val user = userDao.findById(userId)
+            ?: return Result.failure(IllegalStateException("biometric_user_missing"))
+        if (!user.biometricEnabled) {
+            return Result.failure(IllegalStateException("biometric_disabled"))
         }
+        preferences.setSessionUserId(user.id)
+        AppLogger.i("AuthRepository", "Biometric login for ${user.email}")
+        return Result.success(user.toDomain())
     }
 
     override suspend fun logout() {
@@ -131,46 +139,40 @@ class AuthRepositoryImpl(
         if (fullName.isBlank()) return Result.failure(IllegalArgumentException("name_required"))
         if (!EmailValidator.isValid(email)) return Result.failure(IllegalArgumentException("invalid_email"))
 
+        val normalizedEmail = email.trim().lowercase()
+        val existing = userDao.findByEmail(normalizedEmail)
+        if (existing != null && existing.id != current.id) {
+            return Result.failure(IllegalArgumentException("email_in_use"))
+        }
+
         val updated = current.copy(
             fullName = fullName.trim(),
-            email = email.trim().lowercase()
+            email = normalizedEmail
         )
-        val existing = userDao.findById(current.id) ?: return Result.failure(IllegalStateException("user_missing"))
-        userDao.upsert(existing.copy(fullName = updated.fullName, email = updated.email))
+        val entity = userDao.findById(current.id) ?: return Result.failure(IllegalStateException("user_missing"))
+        userDao.upsert(entity.copy(fullName = updated.fullName, email = updated.email))
         AppLogger.i("AuthRepository", "Profile updated for ${updated.id}")
         return Result.success(updated)
     }
 
     override suspend fun setBiometricEnabled(enabled: Boolean) {
+        val user = currentUser.first() ?: return
         preferences.setBiometricEnabled(enabled)
-        // Keep the user row in-sync for future API payloads.
-        currentUser.first()?.let { user ->
-            userDao.findById(user.id)?.let {
-                userDao.upsert(it.copy(biometricEnabled = enabled))
-            }
+        if (enabled) {
+            preferences.setBiometricUserId(user.id)
+        } else {
+            preferences.setBiometricUserId(null)
+        }
+        userDao.findById(user.id)?.let {
+            userDao.upsert(it.copy(biometricEnabled = enabled))
         }
         AppLogger.i("AuthRepository", "Biometric preference updated: $enabled")
     }
 
     override suspend fun resetPassword(email: String, newPassword: String): Result<Unit> {
-        if (!EmailValidator.isValid(email)) {
-            return Result.failure(IllegalArgumentException("invalid_email"))
-        }
-        val normalizedEmail = email.trim().lowercase()
-        val user = userDao.findByEmail(normalizedEmail)
-        if (user == null) {
-            AppLogger.w("AuthRepository", "Password reset requested for unknown email: $normalizedEmail")
-            return Result.failure(IllegalArgumentException("unknown_email"))
-        }
-        if (PasswordValidator.validate(newPassword) is ValidationResult.Invalid) {
-            return Result.failure(IllegalArgumentException("weak_password"))
-        }
-        if (PasswordHasher.verify(newPassword, user.passwordHash)) {
-            return Result.failure(IllegalArgumentException("same_password"))
-        }
-        userDao.upsert(user.copy(passwordHash = PasswordHasher.hash(newPassword)))
-        AppLogger.i("AuthRepository", "Local password reset completed for ${user.email}")
-        return Result.success(Unit)
+        return Result.failure(
+            UnsupportedOperationException("password_reset_requires_authenticated_backend")
+        )
     }
 
     override suspend fun changePassword(currentPassword: String, newPassword: String): Result<Unit> {
@@ -196,11 +198,18 @@ class AuthRepositoryImpl(
 
     override suspend fun deleteAccount(): Result<Unit> {
         val current = currentUser.first() ?: return Result.failure(IllegalStateException("no_session"))
+
+        // Clean up all related data in correct order.
+        pendingSyncDao.deleteForUserEvents(current.id)
+        favoriteDao.deleteForUserEvents(current.id)
+        rsvpDao.deleteForUserEvents(current.id)
+        eventDao.deleteCreatedByUserId(current.id)
         userDao.deleteById(current.id)
         preferences.clearAll()
         AppLogger.i("AuthRepository", "Account deleted for ${current.email}")
         return Result.success(Unit)
     }
 
-    override fun isLoggedIn(): Boolean = preferences.isLoggedIn()
+    override suspend fun isLoggedIn(): Boolean =
+        preferences.sessionUserId.first() != null
 }
