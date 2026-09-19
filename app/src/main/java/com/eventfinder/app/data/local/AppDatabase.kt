@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.room.Transaction
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.eventfinder.app.domain.model.Event
@@ -18,6 +19,8 @@ interface DatabaseTransactionHelper {
     suspend fun setFavorite(userId: String, eventId: String, favorite: Boolean)
     /** Atomically deletes all user data during account deletion. */
     suspend fun deleteAccountData(userId: String)
+    /** Atomically deletes an event, its favourite/RSVP links, and queues a sync action. */
+    suspend fun deleteEventAtomically(eventId: String, userId: String, pendingPayload: String)
 }
 
 /**
@@ -87,12 +90,30 @@ abstract class AppDatabase : RoomDatabase(), DatabaseTransactionHelper {
         }
     }
 
+    @Transaction
     override suspend fun deleteAccountData(userId: String) {
         pendingSyncDao().deleteAllForUser(userId)
         favoriteDao().deleteAllForUser(userId)
         rsvpDao().deleteAllForUser(userId)
         eventDao().deleteCreatedByUserId(userId)
         userDao().deleteById(userId)
+    }
+
+    @Transaction
+    override suspend fun deleteEventAtomically(eventId: String, userId: String, pendingPayload: String) {
+        eventDao().deleteById(eventId)
+        favoriteDao().delete(userId, eventId)
+        rsvpDao().delete(userId, eventId)
+        pendingSyncDao().insert(
+            PendingSyncEntity(
+                entityType = "event",
+                entityId = eventId,
+                action = "delete",
+                payload = pendingPayload,
+                userId = userId,
+                createdAt = System.currentTimeMillis()
+            )
+        )
     }
 
     companion object {
