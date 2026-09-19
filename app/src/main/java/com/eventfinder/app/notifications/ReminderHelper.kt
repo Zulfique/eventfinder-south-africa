@@ -22,7 +22,7 @@ object ReminderHelper {
         val events = eventDao.getUpcomingAttendingEventsForUser(userId, System.currentTimeMillis())
         var scheduled = 0
         for (entity in events) {
-            scheduled += NotificationHelper.scheduleEventReminders(context, entity.toDomain())
+            scheduled += NotificationHelper.scheduleEventReminders(context, entity.toDomain(), userId)
         }
         AppLogger.i(TAG, "Restored $scheduled reminder(s) for ${events.size} event(s) (user: $userId)")
     }

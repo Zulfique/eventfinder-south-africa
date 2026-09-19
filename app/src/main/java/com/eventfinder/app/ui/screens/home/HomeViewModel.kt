@@ -215,8 +215,9 @@ class HomeViewModel(
                 RsvpStatus.ATTENDING -> {
                     val event = eventRepository.getEvent(eventId)
                     val remindersEnabled = preferences.remindersEnabled.first()
-                    if (event != null && remindersEnabled) {
-                        val scheduled = NotificationHelper.scheduleEventReminders(appContext, event)
+                    val userId = preferences.sessionUserId.first()
+                    if (event != null && remindersEnabled && !userId.isNullOrBlank()) {
+                        val scheduled = NotificationHelper.scheduleEventReminders(appContext, event, userId)
                         _messages.emit(
                             if (scheduled > 0) UiMessage.Resource(R.string.reminder_scheduled)
                             else UiMessage.Resource(R.string.rsvp_updated)

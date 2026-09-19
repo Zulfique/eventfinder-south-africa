@@ -151,7 +151,7 @@ object NotificationHelper {
      * of notifications actually scheduled (0 when both trigger times have passed).
      * Checks exact-alarm permission before using setExactAndAllowWhileIdle.
      */
-    fun scheduleEventReminders(context: Context, event: Event): Int {
+    fun scheduleEventReminders(context: Context, event: Event, userId: String): Int {
         val leads = ReminderSchedule.leadsToSchedule(event.startDate)
         if (leads.isEmpty()) {
             AppLogger.w(TAG, "Event ${event.id} starts within the hour - no reminders scheduled")
@@ -160,7 +160,7 @@ object NotificationHelper {
         val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
         leads.forEach { lead ->
             val triggerAt = ReminderSchedule.triggerAt(event.startDate, lead)
-            val pendingIntent = reminderIntent(context, event, lead)
+            val pendingIntent = reminderIntent(context, event, lead, userId)
             if (canScheduleExact(context)) {
                 alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, pendingIntent)
             } else {
@@ -191,7 +191,7 @@ object NotificationHelper {
         AppLogger.i(TAG, "Cancelled $cancelled reminder(s) for $eventId")
     }
 
-    private fun reminderIntent(context: Context, event: Event, lead: ReminderLead): PendingIntent =
+    private fun reminderIntent(context: Context, event: Event, lead: ReminderLead, userId: String): PendingIntent =
         PendingIntent.getBroadcast(
             context,
             requestCode(event.id, lead),
@@ -200,6 +200,7 @@ object NotificationHelper {
                 putExtra(ReminderReceiver.EXTRA_VENUE, event.venueName)
                 putExtra(ReminderReceiver.EXTRA_EVENT_ID, event.id)
                 putExtra(ReminderReceiver.EXTRA_LEAD, lead.name)
+                putExtra(ReminderReceiver.EXTRA_USER_ID, userId)
             },
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
@@ -231,6 +232,7 @@ class ReminderReceiver : android.content.BroadcastReceiver() {
         const val EXTRA_VENUE = "extra_event_venue"
         const val EXTRA_EVENT_ID = "extra_event_id"
         const val EXTRA_LEAD = "extra_event_lead"
+        const val EXTRA_USER_ID = "extra_user_id"
     }
 
     override fun onReceive(context: Context, intent: Intent) {
@@ -246,6 +248,15 @@ class ReminderReceiver : android.content.BroadcastReceiver() {
         }
         if (!remindersEnabled) {
             AppLogger.w("ReminderReceiver", "Reminders disabled for current user - skipping notification")
+            return
+        }
+
+        val alarmUserId = intent.getStringExtra(EXTRA_USER_ID)
+        val currentUserId = runBlocking {
+            preferences.sessionUserId.first()
+        }
+        if (!alarmUserId.isNullOrBlank() && alarmUserId != currentUserId) {
+            AppLogger.w("ReminderReceiver", "Alarm user ($alarmUserId) != current session ($currentUserId) - skipping")
             return
         }
 
