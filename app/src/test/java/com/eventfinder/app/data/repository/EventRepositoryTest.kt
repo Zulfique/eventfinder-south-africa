@@ -185,8 +185,6 @@ class EventRepositoryTest {
         override suspend fun allForUser(userId: String): List<PendingSyncEntity> =
             rows.filter { it.userId == userId }
 
-        override suspend fun all(): List<PendingSyncEntity> = rows.toList()
-
         override suspend fun delete(id: Long) {
             rows.removeAll { it.id == id }
         }
@@ -198,8 +196,6 @@ class EventRepositoryTest {
 
         override suspend fun countForUser(userId: String): Int =
             rows.count { it.userId == userId }
-
-        override suspend fun count(): Int = rows.size
 
         override suspend fun deleteAllForUser(userId: String) {
             rows.removeAll { it.userId == userId }
@@ -265,6 +261,22 @@ class EventRepositoryTest {
             favoriteDao.deleteAllForUser(userId)
             rsvpDao.deleteAllForUser(userId)
             eventDao.deleteCreatedByUserId(userId)
+        }
+
+        override suspend fun deleteEventAtomically(eventId: String, userId: String, pendingPayload: String) {
+            eventDao.deleteById(eventId)
+            favoriteDao.delete(userId, eventId)
+            rsvpDao.delete(userId, eventId)
+            pendingSyncDao.insert(
+                PendingSyncEntity(
+                    entityType = "event",
+                    entityId = eventId,
+                    action = "delete",
+                    payload = pendingPayload,
+                    userId = userId,
+                    createdAt = System.currentTimeMillis()
+                )
+            )
         }
     }
 
@@ -480,7 +492,7 @@ class EventRepositoryTest {
         assertFalse(removed)
         assertTrue(repo.observeFavoriteIds().first().isEmpty())
 
-        assertEquals(2, pending.count())
+        assertEquals(2, pending.rows.size)
     }
 
     // ---------------------------------------------------------------- RSVP
@@ -555,7 +567,7 @@ class EventRepositoryTest {
         assertEquals("user-1", stored.organizerId)
         assertTrue(stored.isCreatedByUser)
         assertFalse(stored.isSynced)
-        assertEquals(1, pending.count())
+        assertEquals(1, pending.rows.size)
     }
 
     // -------------------------------------------------- update / delete event
@@ -580,7 +592,7 @@ class EventRepositoryTest {
         assertEquals("New Venue", stored.venueName)
         assertFalse(stored.isPublic)
         assertTrue(stored.isCreatedByUser)
-        assertEquals(1, pending.count())
+        assertEquals(1, pending.rows.size)
     }
 
     @Test
@@ -669,7 +681,7 @@ class EventRepositoryTest {
         repo.clearLocalCache()
 
         assertEquals(SampleEventsProvider.johannesburgAndCapeTown().size, dao.count())
-        assertEquals(1, pending.count())
+        assertEquals(1, pending.rows.size)
     }
 
     @Test
@@ -725,7 +737,7 @@ class EventRepositoryTest {
         repo.createEvent(draft(title = "User A event 2"))
         repo.toggleFavorite(eventA)
         repo.setRsvp(eventA, RsvpStatus.ATTENDING)
-        assertEquals(4, pending.count())
+        assertEquals(4, pending.rows.size)
 
         // User B creates an event
         prefs.setTestUserId("user-b")
