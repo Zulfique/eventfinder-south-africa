@@ -141,7 +141,13 @@ class EventRepositoryImpl(
         }
 
     override fun observeFavoriteEvents(): Flow<List<Event>> =
-        eventDao.observeFavorites().map { rows -> rows.map { it.toDomain() } }
+        preferences.sessionUserId.flatMapLatest { userId ->
+            if (userId.isNullOrBlank()) {
+                kotlinx.coroutines.flow.flowOf(emptyList())
+            } else {
+                eventDao.observeFavoriteEventsForUser(userId).map { rows -> rows.map { it.toDomain() } }
+            }
+        }
 
     override fun observeRsvpStatuses(): Flow<Map<String, RsvpStatus>> =
         preferences.sessionUserId.flatMapLatest { userId ->
@@ -172,7 +178,12 @@ class EventRepositoryImpl(
         }
         return try {
             val previous = eventDao.getSynced().map { it.toDomain() }
-            val favoriteIds = favoriteDao.observeAll().first().map { it.eventId }.toSet()
+            val userId = preferences.sessionUserId.first()
+            val favoriteIds = if (userId != null) {
+                favoriteDao.observeAllForUser(userId).first().map { it.eventId }.toSet()
+            } else {
+                emptySet()
+            }
 
             val response = ticketmasterApi.getEvents(apiKey = apiKey, size = 100)
             val mapped = mapper.mapPage(response)

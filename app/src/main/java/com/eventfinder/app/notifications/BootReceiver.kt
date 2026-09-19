@@ -8,11 +8,16 @@ import com.eventfinder.app.data.local.toDomain
 import com.eventfinder.app.utils.AppLogger
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 /**
  * Restores event reminders after a device reboot. AlarmManager alarms do not
  * survive reboots; this receiver queries attending events and reschedules them.
+ *
+ * Reminder restoration is per-account: only reminders for the currently
+ * signed-in user are restored. If no user is signed in, no reminders are
+ * scheduled (they will be restored on next login).
  */
 class BootReceiver : BroadcastReceiver() {
 
@@ -24,7 +29,15 @@ class BootReceiver : BroadcastReceiver() {
             try {
                 val container = AppContainer(context)
                 val database = container.database
-                val attendingEvents = database.eventDao().getUpcomingAttendingEvents(
+                val userId = container.preferences.sessionUserId.first()
+
+                if (userId == null) {
+                    AppLogger.i("BootReceiver", "No active session - reminders will be restored on login")
+                    return@launch
+                }
+
+                val attendingEvents = database.eventDao().getUpcomingAttendingEventsForUser(
+                    userId,
                     System.currentTimeMillis()
                 )
                 var scheduled = 0
@@ -34,7 +47,7 @@ class BootReceiver : BroadcastReceiver() {
                 }
                 AppLogger.i(
                     "BootReceiver",
-                    "Boot completed - rescheduled $scheduled reminder(s) for ${attendingEvents.size} event(s)"
+                    "Boot completed - rescheduled $scheduled reminder(s) for ${attendingEvents.size} event(s) (user: $userId)"
                 )
             } catch (t: Exception) {
                 AppLogger.e("BootReceiver", "Failed to reschedule reminders on boot", t)

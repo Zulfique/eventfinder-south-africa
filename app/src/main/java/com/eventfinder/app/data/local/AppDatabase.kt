@@ -4,6 +4,8 @@ import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import com.eventfinder.app.domain.model.Event
 import com.eventfinder.app.domain.model.User
 
@@ -12,10 +14,37 @@ import com.eventfinder.app.domain.model.User
  * interface so tests can provide fakes without Room dependencies.
  */
 interface DatabaseTransactionHelper {
-    /** Atomically inserts/removes a favourite and updates the event flag. */
+    /** Atomically inserts/removes a favourite. */
     suspend fun setFavorite(userId: String, eventId: String, favorite: Boolean)
     /** Atomically deletes all user data during account deletion. */
     suspend fun deleteAccountData(userId: String)
+}
+
+/**
+ * Room database migration from v1 (single-user) to v2 (multi-user).
+ *
+ * Adds userId columns to favorites, rsvps, and pending_sync tables.
+ * Changes favorites and rsvps primary keys from (eventId) to (userId, eventId).
+ * Existing rows get userId = 'legacy' since they cannot be attributed to a
+ * specific account after the upgrade.
+ */
+private val MIGRATION_1_2 = object : Migration(1, 2) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        // favorites: recreate with composite PK
+        db.execSQL("CREATE TABLE IF NOT EXISTS favorites_new (userId TEXT NOT NULL, eventId TEXT NOT NULL, createdAt INTEGER NOT NULL, isSynced INTEGER NOT NULL, PRIMARY KEY(userId, eventId))")
+        db.execSQL("INSERT INTO favorites_new (userId, eventId, createdAt, isSynced) SELECT 'legacy', eventId, createdAt, isSynced FROM favorites")
+        db.execSQL("DROP TABLE favorites")
+        db.execSQL("ALTER TABLE favorites_new RENAME TO favorites")
+
+        // rsvps: recreate with composite PK
+        db.execSQL("CREATE TABLE IF NOT EXISTS rsvps_new (userId TEXT NOT NULL, eventId TEXT NOT NULL, status TEXT NOT NULL, createdAt INTEGER NOT NULL, isSynced INTEGER NOT NULL, PRIMARY KEY(userId, eventId))")
+        db.execSQL("INSERT INTO rsvps_new (userId, eventId, status, createdAt, isSynced) SELECT 'legacy', eventId, status, createdAt, isSynced FROM rsvps")
+        db.execSQL("DROP TABLE rsvps")
+        db.execSQL("ALTER TABLE rsvps_new RENAME TO rsvps")
+
+        // pending_sync: add userId column
+        db.execSQL("ALTER TABLE pending_sync ADD COLUMN userId TEXT NOT NULL DEFAULT ''")
+    }
 }
 
 /**
@@ -53,7 +82,6 @@ abstract class AppDatabase : RoomDatabase(), DatabaseTransactionHelper {
         } else {
             favoriteDao().delete(userId, eventId)
         }
-        eventDao().setFavorite(eventId, favorite)
     }
 
     override suspend fun deleteAccountData(userId: String) {
@@ -74,7 +102,7 @@ abstract class AppDatabase : RoomDatabase(), DatabaseTransactionHelper {
                 AppDatabase::class.java,
                 DB_NAME
             )
-                .fallbackToDestructiveMigration()
+                .addMigrations(MIGRATION_1_2)
                 .build()
     }
 }

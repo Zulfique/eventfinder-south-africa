@@ -56,6 +56,14 @@ interface EventDao {
     @Query("SELECT * FROM events WHERE isFavorite = 1 ORDER BY startDate ASC")
     fun observeFavorites(): Flow<List<EventEntity>>
 
+    @Query("""
+        SELECT e.* FROM events e
+        INNER JOIN favorites f ON f.eventId = e.id
+        WHERE f.userId = :userId
+        ORDER BY e.startDate ASC
+    """)
+    fun observeFavoriteEventsForUser(userId: String): Flow<List<EventEntity>>
+
     @Query("UPDATE events SET isFavorite = :isFavorite WHERE id = :eventId")
     suspend fun setFavorite(eventId: String, isFavorite: Boolean)
 
@@ -87,6 +95,14 @@ interface EventDao {
         ORDER BY e.startDate ASC
     """)
     suspend fun getUpcomingAttendingEvents(now: Long): List<EventEntity>
+
+    @Query("""
+        SELECT e.* FROM events e
+        INNER JOIN rsvps r ON r.eventId = e.id
+        WHERE r.status = 'attending' AND r.userId = :userId AND e.startDate > :now
+        ORDER BY e.startDate ASC
+    """)
+    suspend fun getUpcomingAttendingEventsForUser(userId: String, now: Long): List<EventEntity>
 
     @Transaction
     suspend fun replaceSyncedEvents(events: List<EventEntity>) {
