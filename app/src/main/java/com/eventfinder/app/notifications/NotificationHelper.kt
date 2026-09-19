@@ -147,7 +147,7 @@ object NotificationHelper {
     /**
      * Schedules the 24-hour and 1-hour reminders for [event]. Returns the number
      * of notifications actually scheduled (0 when both trigger times have passed).
-     * Uses exact alarms when permitted, otherwise falls back to inexact timing.
+     * Checks exact-alarm permission before using setExactAndAllowWhileIdle.
      */
     fun scheduleEventReminders(context: Context, event: Event): Int {
         val leads = ReminderSchedule.leadsToSchedule(event.startDate)
@@ -159,11 +159,10 @@ object NotificationHelper {
         leads.forEach { lead ->
             val triggerAt = ReminderSchedule.triggerAt(event.startDate, lead)
             val pendingIntent = reminderIntent(context, event, lead)
-            try {
+            if (canScheduleExact(context)) {
                 alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, pendingIntent)
-            } catch (_: SecurityException) {
-                // SCHEDULE_EXACT_ALARM not granted: fall back to an inexact alarm.
-                alarmManager.set(AlarmManager.RTC_WAKEUP, triggerAt, pendingIntent)
+            } else {
+                alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, pendingIntent)
             }
             AppLogger.i(TAG, "Reminder (${lead.name}) scheduled for '${event.title}' at $triggerAt")
         }
@@ -203,12 +202,20 @@ object NotificationHelper {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-    private fun requestCode(eventId: String, lead: ReminderLead): Int =
-        REQUEST_CODE_BASE + eventId.hashCode() * 2 + lead.ordinal
+    private fun canScheduleExact(context: Context): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return true
+        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        return alarmManager.canScheduleExactAlarms()
+    }
+
+    private fun requestCode(eventId: String, lead: ReminderLead): Int {
+        val hash = eventId.fold(17) { result, char -> 31 * result + char.code }
+        val positiveHash = hash and Int.MAX_VALUE
+        return REQUEST_CODE_BASE + ((positiveHash % 1_000_000) * 2) + lead.ordinal
+    }
 
     /** Stable notification id so re-scheduling the same reminder replaces the previous one. */
-    fun notificationId(eventId: String, lead: ReminderLead): Int =
-        REQUEST_CODE_BASE + eventId.hashCode() * 2 + lead.ordinal
+    fun notificationId(eventId: String, lead: ReminderLead): Int = requestCode(eventId, lead)
 }
 
 /**
