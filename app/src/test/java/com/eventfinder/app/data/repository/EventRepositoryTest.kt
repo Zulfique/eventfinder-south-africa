@@ -19,6 +19,7 @@ import com.eventfinder.app.domain.model.EventCategory
 import com.eventfinder.app.domain.model.RsvpStatus
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.test.runTest
@@ -40,7 +41,7 @@ class EventRepositoryTest {
 
     // --------------------------------------------------------------- fakes
 
-    private class FakeEventDao : EventDao {
+    private class FakeEventDao(private val favoriteDao: FakeFavoriteDao? = null) : EventDao {
         val rows = linkedMapOf<String, EventEntity>()
         private val flow = MutableStateFlow<List<EventEntity>>(emptyList())
 
@@ -64,6 +65,12 @@ class EventRepositoryTest {
 
         override fun observeFavorites(): Flow<List<EventEntity>> =
             flow.map { list -> list.filter { it.isFavorite } }
+
+        override fun observeFavoriteEventsForUser(userId: String): Flow<List<EventEntity>> =
+            flow.combine(favoriteDao?.observeAllForUser(userId) ?: flow) { events, favorites ->
+                val favIds = favorites.map { it.eventId }.toSet()
+                events.filter { it.id in favIds }
+            }
 
         override suspend fun setFavorite(eventId: String, isFavorite: Boolean) {
             rows[eventId]?.let { rows[eventId] = it.copy(isFavorite = isFavorite) }
@@ -99,6 +106,11 @@ class EventRepositoryTest {
         }
 
         override suspend fun getUpcomingAttendingEvents(now: Long): List<EventEntity> =
+            rows.values.filter { event ->
+                event.startDate > now
+            }
+
+        override suspend fun getUpcomingAttendingEventsForUser(userId: String, now: Long): List<EventEntity> =
             rows.values.filter { event ->
                 event.startDate > now
             }
@@ -256,7 +268,6 @@ class EventRepositoryTest {
             } else {
                 favoriteDao.delete(userId, eventId)
             }
-            eventDao.setFavorite(eventId, favorite)
         }
 
         override suspend fun deleteAccountData(userId: String) {
@@ -280,8 +291,8 @@ class EventRepositoryTest {
     )
 
     private fun repository(
-        eventDao: FakeEventDao = FakeEventDao(),
         favoriteDao: FakeFavoriteDao = FakeFavoriteDao(),
+        eventDao: FakeEventDao = FakeEventDao(favoriteDao),
         rsvpDao: FakeRsvpDao = FakeRsvpDao(),
         pendingDao: FakePendingSyncDao = FakePendingSyncDao(),
         api: TicketmasterApi = FakeTicketmasterApi(liveResponse()),
@@ -383,8 +394,8 @@ class EventRepositoryTest {
 
     @Test
     fun `sync reports newly added events and updated favourites`() = runTest {
-        val dao = FakeEventDao()
         val favorites = FakeFavoriteDao()
+        val dao = FakeEventDao(favorites)
         dao.upsert(
             knownSyncedEvent(
                 id = "tm-OLD",
@@ -464,8 +475,7 @@ class EventRepositoryTest {
     fun `toggleFavorite adds then removes a favourite and queues offline actions`() = runTest {
         val favorites = FakeFavoriteDao()
         val pending = FakePendingSyncDao()
-        val dao = FakeEventDao()
-        val (repo, _) = repository(eventDao = dao, favoriteDao = favorites, pendingDao = pending)
+        val (repo, _) = repository(favoriteDao = favorites, pendingDao = pending)
         repo.ensureSeeded()
         val target = repo.observeAllEvents().first().first().id
 
@@ -708,12 +718,12 @@ class EventRepositoryTest {
 
     @Test
     fun `deleteAccount via authRepository removes all user data but leaves other users intact`() = runTest {
-        val dao = FakeEventDao()
         val favorites = FakeFavoriteDao()
         val rsvps = FakeRsvpDao()
         val pending = FakePendingSyncDao()
+        val dao = FakeEventDao(favorites)
         val database = FakeDatabase(favorites, dao, rsvps, pending)
-        val (repo, prefs) = repository(eventDao = dao, favoriteDao = favorites, rsvpDao = rsvps, pendingDao = pending)
+        val (repo, prefs) = repository(favoriteDao = favorites, eventDao = dao, rsvpDao = rsvps, pendingDao = pending)
 
         // User A creates events, favourites, RSVPs, and has pending actions
         prefs.setTestUserId("user-a")

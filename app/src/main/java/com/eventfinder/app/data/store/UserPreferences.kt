@@ -152,7 +152,14 @@ class UserPreferences(private val context: Context) : SessionProvider {
         context.eventFinderDataStore.edit { it.remove(Keys.RECENT_SEARCHES_JSON) }
     }
 
-    /** Synchronous language read used when the Activity recreates for a locale change. */
+    /**
+     * Synchronous language read used when the Activity recreates for a locale change.
+     *
+     * Uses runBlocking intentionally: attachBaseContext() requires a synchronous
+     * value and runs before any coroutine scope is available. This is the only
+     * call-site where the blocking version is used; all other code should prefer
+     * the suspend [currentLanguage] function.
+     */
     fun currentLanguageBlocking(): String =
         runCatching {
             kotlinx.coroutines.runBlocking {
