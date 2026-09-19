@@ -46,7 +46,6 @@ data class EventEntity(
     val organizerId: String,
     val organizerName: String,
     val attendeeCount: Int,
-    val isFavorite: Boolean,
     val isCreatedByUser: Boolean,
     val isSynced: Boolean
 )
