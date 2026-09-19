@@ -91,6 +91,18 @@ class EventRepositoryTest {
             rows.remove(id)
             emit()
         }
+
+        override suspend fun deleteCreatedByUserId(userId: String) {
+            rows.values.filter { it.isCreatedByUser && it.organizerId == userId }.map { it.id }.forEach { rows.remove(it) }
+            emit()
+        }
+
+        override suspend fun getUpcomingAttendingEvents(now: Long): List<EventEntity> = emptyList()
+
+        override suspend fun replaceSyncedEvents(events: List<EventEntity>) {
+            deleteSynced()
+            upsertAll(events)
+        }
     }
 
     private class FakeFavoriteDao : FavoriteDao {
@@ -115,7 +127,12 @@ class EventRepositoryTest {
 
         override suspend fun count(): Int = rows.size
 
-        override suspend fun exists(eventId: String): Boolean? = rows.containsKey(eventId).takeIf { it }
+        override suspend fun exists(eventId: String): Boolean = rows.containsKey(eventId)
+
+        override suspend fun deleteForUserEvents(userId: String) {
+            rows.values.removeAll { true }
+            emit()
+        }
     }
 
     private class FakeRsvpDao : RsvpDao {
@@ -141,6 +158,11 @@ class EventRepositoryTest {
         override suspend fun statusFor(eventId: String): String? = rows[eventId]?.status
 
         override suspend fun attendingCount(): Int = rows.values.count { it.status == "attending" }
+
+        override suspend fun deleteForUserEvents(userId: String) {
+            rows.values.removeAll { true }
+            emit()
+        }
     }
 
     private class FakePendingSyncDao : PendingSyncDao {
@@ -163,6 +185,10 @@ class EventRepositoryTest {
         }
 
         override suspend fun count(): Int = rows.size
+
+        override suspend fun deleteForUserEvents(userId: String) {
+            rows.removeAll { true }
+        }
     }
 
     private class FakeTicketmasterApi(private val response: TmEventsResponse) : TicketmasterApi {
@@ -187,6 +213,19 @@ class EventRepositoryTest {
         ): TmEventsResponse = response
     }
 
+    /**
+     * Minimal in-memory stand-in for [UserPreferences] that lets tests set a
+     * session user without Android DataStore dependencies.
+     */
+    private class TestPreferences : com.eventfinder.app.data.store.SessionProvider {
+        private val _sessionId = MutableStateFlow<String?>(null)
+        override val sessionUserId: Flow<String?> get() = _sessionId
+
+        suspend fun setTestUserId(id: String?) { _sessionId.value = id }
+        override suspend fun isLoggedIn(): Boolean = _sessionId.value != null
+        override suspend fun clearAll() { _sessionId.value = null }
+    }
+
     private fun liveResponse(id: String = "Z1") = TmEventsResponse(
         embedded = TmEmbedded(
             events = listOf(
@@ -205,15 +244,20 @@ class EventRepositoryTest {
         rsvpDao: FakeRsvpDao = FakeRsvpDao(),
         pendingDao: FakePendingSyncDao = FakePendingSyncDao(),
         api: TicketmasterApi = FakeTicketmasterApi(liveResponse()),
-        apiKey: String = "test-key"
-    ) = EventRepositoryImpl(eventDao, favoriteDao, rsvpDao, pendingDao, api, apiKey)
+        apiKey: String = "test-key",
+        preferences: TestPreferences = TestPreferences()
+    ): Pair<EventRepositoryImpl, TestPreferences> =
+        Pair(
+            EventRepositoryImpl(eventDao, favoriteDao, rsvpDao, pendingDao, api, apiKey, preferences),
+            preferences
+        )
 
     // ---------------------------------------------------------- ensureSeeded
 
     @Test
     fun `ensureSeeded populates the cache when it is empty`() = runTest {
         val dao = FakeEventDao()
-        val repo = repository(eventDao = dao)
+        val (repo, _) = repository(eventDao = dao)
 
         repo.ensureSeeded()
 
@@ -224,7 +268,7 @@ class EventRepositoryTest {
     @Test
     fun `ensureSeeded is idempotent`() = runTest {
         val dao = FakeEventDao()
-        val repo = repository(eventDao = dao)
+        val (repo, _) = repository(eventDao = dao)
 
         repo.ensureSeeded()
         val afterFirst = dao.count()
@@ -237,7 +281,7 @@ class EventRepositoryTest {
 
     @Test
     fun `sync without an API key reports NoApiKey in demo mode`() = runTest {
-        val repo = repository(apiKey = "")
+        val (repo, _) = repository(apiKey = "")
 
         assertEquals(SyncResult.NoApiKey, repo.syncFromApi().result)
     }
@@ -245,7 +289,7 @@ class EventRepositoryTest {
     @Test
     fun `sync maps and stores live events`() = runTest {
         val dao = FakeEventDao()
-        val repo = repository(eventDao = dao)
+        val (repo, _) = repository(eventDao = dao)
 
         val result = repo.syncFromApi()
 
@@ -259,7 +303,7 @@ class EventRepositoryTest {
     @Test
     fun `sync replaces the synced catalogue but keeps user created events`() = runTest {
         val dao = FakeEventDao()
-        val repo = repository(eventDao = dao)
+        val (repo, _) = repository(eventDao = dao)
         repo.ensureSeeded()
         repo.syncFromApi()
         val created = repo.createEvent(
@@ -317,7 +361,7 @@ class EventRepositoryTest {
                 )
             )
         )
-        val repo = repository(
+        val (repo, _) = repository(
             eventDao = dao,
             favoriteDao = favorites,
             api = FakeTicketmasterApi(response)
@@ -332,7 +376,7 @@ class EventRepositoryTest {
 
     @Test
     fun `first sync of a fresh install never alerts about the whole catalogue`() = runTest {
-        val repo = repository()
+        val (repo, _) = repository()
 
         val outcome = repo.syncFromApi()
 
@@ -371,7 +415,7 @@ class EventRepositoryTest {
         val favorites = FakeFavoriteDao()
         val pending = FakePendingSyncDao()
         val dao = FakeEventDao()
-        val repo = repository(eventDao = dao, favoriteDao = favorites, pendingDao = pending)
+        val (repo, _) = repository(eventDao = dao, favoriteDao = favorites, pendingDao = pending)
         repo.ensureSeeded()
         val target = repo.observeAllEvents().first().first().id
 
@@ -392,7 +436,7 @@ class EventRepositoryTest {
     @Test
     fun `setRsvp stores the status and exposes it through the flow`() = runTest {
         val dao = FakeEventDao()
-        val repo = repository(eventDao = dao)
+        val (repo, _) = repository(eventDao = dao)
         repo.ensureSeeded()
         val target = repo.observeAllEvents().first().first().id
 
@@ -408,7 +452,32 @@ class EventRepositoryTest {
     fun `createEvent persists a user owned event`() = runTest {
         val dao = FakeEventDao()
         val pending = FakePendingSyncDao()
-        val repo = repository(eventDao = dao, pendingDao = pending)
+        val (repo, _) = repository(eventDao = dao, pendingDao = pending)
+
+        val result = repo.createEvent(
+            NewEventDraft(
+                title = "  Community Market  ",
+                description = "Fresh produce",
+                category = EventCategory.FOOD,
+                startDate = 5_000L,
+                endDate = 9_000L,
+                venueName = " Church Square ",
+                address = "Pretoria CBD",
+                latitude = -25.7461,
+                longitude = 28.1881,
+                isPublic = true
+            )
+        )
+
+        assertTrue(result.isFailure)
+    }
+
+    @Test
+    fun `createEvent succeeds when logged in`() = runTest {
+        val dao = FakeEventDao()
+        val pending = FakePendingSyncDao()
+        val (repo, prefs) = repository(eventDao = dao, pendingDao = pending)
+        prefs.setTestUserId("user-1")
 
         val result = repo.createEvent(
             NewEventDraft(
@@ -430,6 +499,7 @@ class EventRepositoryTest {
         assertNotNull(stored)
         assertEquals("Community Market", stored!!.title)
         assertEquals("Church Square", stored.venueName)
+        assertEquals("user-1", stored.organizerId)
         assertTrue(stored.isCreatedByUser)
         assertFalse(stored.isSynced)
         assertEquals(1, pending.count())
@@ -441,7 +511,8 @@ class EventRepositoryTest {
     fun `updateEvent edits a user owned event and queues an offline action`() = runTest {
         val dao = FakeEventDao()
         val pending = FakePendingSyncDao()
-        val repo = repository(eventDao = dao, pendingDao = pending)
+        val (repo, prefs) = repository(eventDao = dao, pendingDao = pending)
+        prefs.setTestUserId("user-1")
         val id = repo.createEvent(draft(title = "Original")).getOrThrow()
         pending.rows.clear()
 
@@ -461,7 +532,7 @@ class EventRepositoryTest {
 
     @Test
     fun `updateEvent refuses to edit an API-synced event`() = runTest {
-        val repo = repository()
+        val (repo, _) = repository()
         repo.syncFromApi()
         val syncedId = repo.observeAllEvents().first().first().id
 
@@ -472,10 +543,24 @@ class EventRepositoryTest {
     }
 
     @Test
+    fun `updateEvent rejects a different user`() = runTest {
+        val (repo, prefs) = repository()
+        prefs.setTestUserId("user-a")
+        val id = repo.createEvent(draft(title = "User A event")).getOrThrow()
+
+        prefs.setTestUserId("user-b")
+        val result = repo.updateEvent(id, draft(title = "Hacked"))
+
+        assertTrue(result.isFailure)
+        assertEquals("not_owner", result.exceptionOrNull()?.message)
+    }
+
+    @Test
     fun `deleteEvent removes the event and its favourite and rsvp links`() = runTest {
         val favorites = FakeFavoriteDao()
         val rsvps = FakeRsvpDao()
-        val repo = repository(favoriteDao = favorites, rsvpDao = rsvps)
+        val (repo, prefs) = repository(favoriteDao = favorites, rsvpDao = rsvps)
+        prefs.setTestUserId("user-1")
         val id = repo.createEvent(draft(title = "To remove")).getOrThrow()
         repo.toggleFavorite(id)
         repo.setRsvp(id, RsvpStatus.ATTENDING)
@@ -490,7 +575,7 @@ class EventRepositoryTest {
 
     @Test
     fun `deleteEvent refuses to delete an API-synced event`() = runTest {
-        val repo = repository()
+        val (repo, _) = repository()
         repo.syncFromApi()
         val syncedId = repo.observeAllEvents().first().first().id
 
@@ -522,7 +607,8 @@ class EventRepositoryTest {
     @Test
     fun `clearLocalCache removes cached and user events then reseeds samples`() = runTest {
         val dao = FakeEventDao()
-        val repo = repository(eventDao = dao)
+        val (repo, prefs) = repository(eventDao = dao)
+        prefs.setTestUserId("user-1")
         repo.ensureSeeded()
         repo.createEvent(
             NewEventDraft(
@@ -549,6 +635,7 @@ class EventRepositoryTest {
 
     @Test
     fun `getEvent returns null for an unknown id`() = runTest {
-        assertNull(repository().getEvent("missing"))
+        val (repo, _) = repository()
+        assertNull(repo.getEvent("missing"))
     }
 }
