@@ -256,6 +256,34 @@ class EventRepositoryTest {
             }
         }
 
+        override suspend fun setFavoriteAtomically(userId: String, eventId: String, favorite: Boolean, pendingAction: String, pendingPayload: String) {
+            setFavorite(userId, eventId, favorite)
+            pendingSyncDao.insert(
+                PendingSyncEntity(entityType = "favorite", entityId = eventId, action = pendingAction, payload = pendingPayload, userId = userId, createdAt = System.currentTimeMillis())
+            )
+        }
+
+        override suspend fun setRsvpAtomically(userId: String, eventId: String, status: String, pendingPayload: String) {
+            rsvpDao.upsert(RsvpEntity(userId = userId, eventId = eventId, status = status, createdAt = System.currentTimeMillis(), isSynced = false))
+            pendingSyncDao.insert(
+                PendingSyncEntity(entityType = "rsvp", entityId = eventId, action = "update", payload = pendingPayload, userId = userId, createdAt = System.currentTimeMillis())
+            )
+        }
+
+        override suspend fun createEventAtomically(event: EventEntity, userId: String, pendingPayload: String) {
+            eventDao.upsert(event)
+            pendingSyncDao.insert(
+                PendingSyncEntity(entityType = "event", entityId = event.id, action = "create", payload = pendingPayload, userId = userId, createdAt = System.currentTimeMillis())
+            )
+        }
+
+        override suspend fun updateEventAtomically(event: EventEntity, userId: String, pendingPayload: String) {
+            eventDao.upsert(event)
+            pendingSyncDao.insert(
+                PendingSyncEntity(entityType = "event", entityId = event.id, action = "update", payload = pendingPayload, userId = userId, createdAt = System.currentTimeMillis())
+            )
+        }
+
         override suspend fun deleteAccountData(userId: String) {
             pendingSyncDao.deleteAllForUser(userId)
             favoriteDao.deleteAllForUser(userId)
@@ -469,7 +497,6 @@ class EventRepositoryTest {
         organizerId = "org",
         organizerName = "Organizer",
         attendeeCount = 0,
-        isFavorite = false,
         isCreatedByUser = false,
         isSynced = true
     )
@@ -814,7 +841,6 @@ class EventRepositoryTest {
                 organizerId = "org",
                 organizerName = "Organizer",
                 attendeeCount = 0,
-                isFavorite = false,
                 isCreatedByUser = false,
                 isSynced = true
             )
@@ -836,7 +862,6 @@ class EventRepositoryTest {
                 organizerId = "org",
                 organizerName = "Organizer",
                 attendeeCount = 0,
-                isFavorite = false,
                 isCreatedByUser = false,
                 isSynced = true
             )
