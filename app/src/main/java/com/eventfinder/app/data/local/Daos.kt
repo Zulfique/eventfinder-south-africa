@@ -85,14 +85,6 @@ interface EventDao {
     @Query("""
         SELECT e.* FROM events e
         INNER JOIN rsvps r ON r.eventId = e.id
-        WHERE r.status = 'attending' AND e.startDate > :now
-        ORDER BY e.startDate ASC
-    """)
-    suspend fun getUpcomingAttendingEvents(now: Long): List<EventEntity>
-
-    @Query("""
-        SELECT e.* FROM events e
-        INNER JOIN rsvps r ON r.eventId = e.id
         WHERE r.status = 'attending' AND r.userId = :userId AND e.startDate > :now
         ORDER BY e.startDate ASC
     """)
@@ -118,9 +110,6 @@ interface FavoriteDao {
     @Query("SELECT * FROM favorites WHERE userId = :userId")
     fun observeAllForUser(userId: String): Flow<List<FavoriteEntity>>
 
-    @Query("SELECT * FROM favorites")
-    fun observeAll(): Flow<List<FavoriteEntity>>
-
     @Query("SELECT COUNT(*) FROM favorites")
     suspend fun count(): Int
 
@@ -143,9 +132,6 @@ interface RsvpDao {
 
     @Query("SELECT * FROM rsvps WHERE userId = :userId")
     fun observeAllForUser(userId: String): Flow<List<RsvpEntity>>
-
-    @Query("SELECT * FROM rsvps")
-    fun observeAll(): Flow<List<RsvpEntity>>
 
     @Query("SELECT status FROM rsvps WHERE userId = :userId AND eventId = :eventId LIMIT 1")
     suspend fun statusFor(userId: String, eventId: String): String?

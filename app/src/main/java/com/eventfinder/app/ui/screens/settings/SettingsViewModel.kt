@@ -48,7 +48,7 @@ class SettingsViewModel(
 
     val uiState = kotlinx.coroutines.flow.combine(
         preferences.language.map { SupportedLanguage.fromCode(it) },
-        preferences.biometricEnabled,
+        authRepository.currentUser.map { it?.biometricEnabled ?: false },
         preferences.remindersEnabled,
         preferences.newEventAlertsEnabled
     ) { lang, bio, rem, alerts ->

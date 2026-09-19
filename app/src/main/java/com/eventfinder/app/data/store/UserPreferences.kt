@@ -100,25 +100,6 @@ class UserPreferences(private val context: Context) : SessionProvider {
         }
     }
 
-    // ---- User-scoped biometric enabled toggle ----
-
-    val biometricEnabled: Flow<Boolean> = sessionUserId.flatMapLatest { userId ->
-        if (userId.isNullOrBlank()) {
-            flowOf(false)
-        } else {
-            context.eventFinderDataStore.data
-                .map { prefs -> prefs[userBoolKey("biometric_enabled", userId)] ?: false }
-        }
-    }
-
-    override suspend fun setBiometricEnabled(enabled: Boolean) {
-        val userId = sessionUserId.first() ?: return
-        context.eventFinderDataStore.edit {
-            it[userBoolKey("biometric_enabled", userId)] = enabled
-        }
-        AppLogger.i("UserPreferences", "Biometric enabled=$enabled for user $userId")
-    }
-
     // ---- User-scoped notification preferences ----
 
     val remindersEnabled: Flow<Boolean> = sessionUserId.flatMapLatest { userId ->
@@ -244,23 +225,22 @@ class UserPreferences(private val context: Context) : SessionProvider {
     /**
      * Removes all DataStore preferences scoped to [userId] without affecting
      * other accounts' settings. Also clears the session and biometric
-     * association if they belong to this user.
+     * association if they belong to this user — all in a single atomic
+     * DataStore edit to prevent partial state.
      */
     override suspend fun clearUserPreferences(userId: String) {
+        val currentSession = sessionUserId.first()
+        val biometricUser = biometricUserId.first()
         context.eventFinderDataStore.edit { prefs ->
             prefs.asMap().keys
                 .filter { it.name.startsWith("user_${userId}_") }
                 .forEach { prefs.remove(it) }
-        }
-        // Clear session if this user is the active session
-        val currentSession = sessionUserId.first()
-        if (currentSession == userId) {
-            setSessionUserId(null)
-        }
-        // Clear biometric association if it belongs to this user
-        val biometricUser = biometricUserId.first()
-        if (biometricUser == userId) {
-            setBiometricUserId(null)
+            if (currentSession == userId) {
+                prefs.remove(Keys.SESSION_USER_ID)
+            }
+            if (biometricUser == userId) {
+                prefs.remove(Keys.BIOMETRIC_USER_ID)
+            }
         }
         AppLogger.i("UserPreferences", "Preferences cleared for user $userId")
     }

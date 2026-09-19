@@ -166,7 +166,6 @@ class AuthRepositoryImpl(
 
     override suspend fun setBiometricEnabled(enabled: Boolean) {
         val user = currentUser.first() ?: return
-        preferences.setBiometricEnabled(enabled)
         if (enabled) {
             preferences.setBiometricUserId(user.id)
         } else {

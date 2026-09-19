@@ -99,11 +99,6 @@ class EventRepositoryTest {
             emit()
         }
 
-        override suspend fun getUpcomingAttendingEvents(now: Long): List<EventEntity> =
-            rows.values.filter { event ->
-                event.startDate > now
-            }
-
         override suspend fun getUpcomingAttendingEventsForUser(userId: String, now: Long): List<EventEntity> =
             rows.values.filter { event ->
                 event.startDate > now
@@ -136,8 +131,6 @@ class EventRepositoryTest {
         override fun observeAllForUser(userId: String): Flow<List<FavoriteEntity>> =
             flow.map { list -> list.filter { it.userId == userId } }
 
-        override fun observeAll(): Flow<List<FavoriteEntity>> = flow
-
         override suspend fun count(): Int = rows.size
 
         override suspend fun exists(userId: String, eventId: String): Boolean =
@@ -169,8 +162,6 @@ class EventRepositoryTest {
 
         override fun observeAllForUser(userId: String): Flow<List<RsvpEntity>> =
             flow.map { list -> list.filter { it.userId == userId } }
-
-        override fun observeAll(): Flow<List<RsvpEntity>> = flow
 
         override suspend fun statusFor(userId: String, eventId: String): String? =
             rows["$userId:$eventId"]?.status
@@ -250,7 +241,6 @@ class EventRepositoryTest {
         override suspend fun isLoggedIn(): Boolean = _sessionId.value != null
         override suspend fun setSessionUserId(userId: String?) { _sessionId.value = userId }
         override suspend fun setLanguage(lang: String) { /* no-op in tests */ }
-        override suspend fun setBiometricEnabled(enabled: Boolean) { /* no-op in tests */ }
         override suspend fun setBiometricUserId(userId: String?) { /* no-op in tests */ }
         override suspend fun clearUserPreferences(userId: String) { /* no-op in tests */ }
         override suspend fun clearAll() { _sessionId.value = null }
@@ -780,7 +770,7 @@ class EventRepositoryTest {
         ).getOrThrow()
         repo.setRsvp(futureEvent, RsvpStatus.ATTENDING)
 
-        val result = dao.getUpcomingAttendingEvents(System.currentTimeMillis())
+        val result = dao.getUpcomingAttendingEventsForUser("user-1", System.currentTimeMillis())
 
         assertEquals(1, result.size)
         assertEquals(futureEvent, result[0].id)
@@ -840,7 +830,7 @@ class EventRepositoryTest {
             )
         )
 
-        val upcoming = dao.getUpcomingAttendingEvents(System.currentTimeMillis())
+        val upcoming = dao.getUpcomingAttendingEventsForUser("user-1", System.currentTimeMillis())
 
         assertEquals(1, upcoming.size)
         assertEquals("tm-future", upcoming[0].id)

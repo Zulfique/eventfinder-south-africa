@@ -16,7 +16,6 @@ interface SessionProvider {
     suspend fun isLoggedIn(): Boolean
     suspend fun setSessionUserId(userId: String?)
     suspend fun setLanguage(lang: String)
-    suspend fun setBiometricEnabled(enabled: Boolean)
     suspend fun setBiometricUserId(userId: String?)
     suspend fun clearUserPreferences(userId: String)
     suspend fun clearAll()
