@@ -163,23 +163,3 @@ interface PendingSyncDao {
     @Query("DELETE FROM pending_sync WHERE entityId IN (SELECT id FROM events WHERE organizerId = :userId)")
     suspend fun deleteForUserEvents(userId: String)
 }
-
-/** Transactional account deletion that cleans up all user data. */
-@Dao
-interface AccountDao {
-    @Transaction
-    suspend fun deleteAccountData(
-        pendingSyncDao: PendingSyncDao,
-        favoriteDao: FavoriteDao,
-        rsvpDao: RsvpDao,
-        eventDao: EventDao,
-        userDao: UserDao,
-        userId: String
-    ) {
-        pendingSyncDao.deleteForUserEvents(userId)
-        favoriteDao.deleteForUserEvents(userId)
-        rsvpDao.deleteForUserEvents(userId)
-        eventDao.deleteCreatedByUserId(userId)
-        userDao.deleteById(userId)
-    }
-}

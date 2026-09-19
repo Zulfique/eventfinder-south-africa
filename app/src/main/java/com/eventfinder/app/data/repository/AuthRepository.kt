@@ -1,9 +1,6 @@
 package com.eventfinder.app.data.repository
 
-import com.eventfinder.app.data.local.EventDao
-import com.eventfinder.app.data.local.FavoriteDao
-import com.eventfinder.app.data.local.PendingSyncDao
-import com.eventfinder.app.data.local.RsvpDao
+import com.eventfinder.app.data.local.DatabaseTransactionHelper
 import com.eventfinder.app.data.local.UserDao
 import com.eventfinder.app.data.local.UserEntity
 import com.eventfinder.app.data.local.toDomain
@@ -58,12 +55,9 @@ interface AuthRepository {
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class AuthRepositoryImpl(
+    private val database: DatabaseTransactionHelper,
     private val userDao: UserDao,
-    private val preferences: SessionProvider,
-    private val eventDao: EventDao,
-    private val favoriteDao: FavoriteDao,
-    private val rsvpDao: RsvpDao,
-    private val pendingSyncDao: PendingSyncDao
+    private val preferences: SessionProvider
 ) : AuthRepository {
 
     @OptIn(ExperimentalCoroutinesApi::class)
@@ -199,13 +193,9 @@ class AuthRepositoryImpl(
     override suspend fun deleteAccount(): Result<Unit> {
         val current = currentUser.first() ?: return Result.failure(IllegalStateException("no_session"))
 
-        // Clean up all related data in correct order.
-        pendingSyncDao.deleteForUserEvents(current.id)
-        favoriteDao.deleteForUserEvents(current.id)
-        rsvpDao.deleteForUserEvents(current.id)
-        eventDao.deleteCreatedByUserId(current.id)
-        userDao.deleteById(current.id)
+        database.deleteAccountData(current.id)
         preferences.clearAll()
+
         AppLogger.i("AuthRepository", "Account deleted for ${current.email}")
         return Result.success(Unit)
     }

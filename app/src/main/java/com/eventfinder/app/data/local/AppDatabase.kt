@@ -8,6 +8,17 @@ import com.eventfinder.app.domain.model.Event
 import com.eventfinder.app.domain.model.User
 
 /**
+ * Transactional operations that the repository needs. Extracted into an
+ * interface so tests can provide fakes without Room dependencies.
+ */
+interface DatabaseTransactionHelper {
+    /** Atomically inserts/removes a favourite and updates the event flag. */
+    suspend fun setFavorite(eventId: String, favorite: Boolean)
+    /** Atomically deletes all user data during account deletion. */
+    suspend fun deleteAccountData(userId: String)
+}
+
+/**
  * Local persistence layer (Room) implementing the offline-first strategy from
  * FR-09 of the design document (§7.1 Local Database Models).
  *
@@ -26,13 +37,32 @@ import com.eventfinder.app.domain.model.User
     version = 1,
     exportSchema = false
 )
-abstract class AppDatabase : RoomDatabase() {
+abstract class AppDatabase : RoomDatabase(), DatabaseTransactionHelper {
 
     abstract fun userDao(): UserDao
     abstract fun eventDao(): EventDao
     abstract fun favoriteDao(): FavoriteDao
     abstract fun rsvpDao(): RsvpDao
     abstract fun pendingSyncDao(): PendingSyncDao
+
+    override suspend fun setFavorite(eventId: String, favorite: Boolean) {
+        if (favorite) {
+            favoriteDao().insert(
+                FavoriteEntity(eventId = eventId, createdAt = System.currentTimeMillis(), isSynced = false)
+            )
+        } else {
+            favoriteDao().delete(eventId)
+        }
+        eventDao().setFavorite(eventId, favorite)
+    }
+
+    override suspend fun deleteAccountData(userId: String) {
+        pendingSyncDao().deleteForUserEvents(userId)
+        favoriteDao().deleteForUserEvents(userId)
+        rsvpDao().deleteForUserEvents(userId)
+        eventDao().deleteCreatedByUserId(userId)
+        userDao().deleteById(userId)
+    }
 
     companion object {
         private const val DB_NAME = "eventfinder.db"

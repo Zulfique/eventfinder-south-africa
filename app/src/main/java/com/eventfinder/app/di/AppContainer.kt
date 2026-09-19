@@ -35,17 +35,15 @@ class AppContainer(context: Context) {
 
     val authRepository: AuthRepository by lazy {
         AuthRepositoryImpl(
+            database = database,
             userDao = database.userDao(),
-            preferences = preferences,
-            eventDao = database.eventDao(),
-            favoriteDao = database.favoriteDao(),
-            rsvpDao = database.rsvpDao(),
-            pendingSyncDao = database.pendingSyncDao()
+            preferences = preferences
         )
     }
 
     val eventRepository: EventRepository by lazy {
         EventRepositoryImpl(
+            database = database,
             eventDao = database.eventDao(),
             favoriteDao = database.favoriteDao(),
             rsvpDao = database.rsvpDao(),

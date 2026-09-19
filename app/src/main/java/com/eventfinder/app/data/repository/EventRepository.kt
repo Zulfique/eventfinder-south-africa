@@ -1,5 +1,6 @@
 package com.eventfinder.app.data.repository
 
+import com.eventfinder.app.data.local.DatabaseTransactionHelper
 import com.eventfinder.app.data.local.EventDao
 import com.eventfinder.app.data.local.EventEntity
 import com.eventfinder.app.data.local.FavoriteDao
@@ -101,6 +102,7 @@ interface EventRepository {
 }
 
 class EventRepositoryImpl(
+    private val database: DatabaseTransactionHelper,
     private val eventDao: EventDao,
     private val favoriteDao: FavoriteDao,
     private val rsvpDao: RsvpDao,
@@ -188,17 +190,13 @@ class EventRepositoryImpl(
 
     override suspend fun toggleFavorite(eventId: String): Boolean {
         val already = favoriteDao.exists(eventId)
-        if (already) {
-            favoriteDao.delete(eventId)
-            eventDao.setFavorite(eventId, false)
-            AppLogger.i(tag, "Removed favourite: $eventId")
-        } else {
-            favoriteDao.insert(FavoriteEntity(eventId = eventId, createdAt = System.currentTimeMillis(), isSynced = false))
-            eventDao.setFavorite(eventId, true)
-            AppLogger.i(tag, "Added favourite: $eventId")
-        }
-        enqueuePending("favorite", eventId, if (already) "delete" else "create", gson.toJson(eventId))
-        return !already
+        val newValue = !already
+
+        database.setFavorite(eventId = eventId, favorite = newValue)
+
+        enqueuePending("favorite", eventId, if (newValue) "create" else "delete", gson.toJson(eventId))
+        AppLogger.i(tag, "${if (newValue) "Added" else "Removed"} favourite: $eventId")
+        return newValue
     }
 
     override suspend fun setRsvp(eventId: String, status: RsvpStatus) {
@@ -296,10 +294,13 @@ class EventRepositoryImpl(
         eventDao.findById(eventId)?.toDomain()
 
     override suspend fun clearLocalCache() {
+        if (pendingSyncDao.count() > 0) {
+            AppLogger.w(tag, "Skipping cache clear because pending changes exist")
+            return
+        }
         eventDao.deleteSynced()
-        eventDao.deleteCreatedByUser()
         ensureSeeded()
-        AppLogger.i(tag, "Local event cache cleared and reseeded")
+        AppLogger.i(tag, "Remote cache cleared and sample events restored")
     }
 
     override suspend fun flushPendingActions(): SyncResult {
