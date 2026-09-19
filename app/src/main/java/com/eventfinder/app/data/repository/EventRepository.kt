@@ -17,6 +17,7 @@ import com.eventfinder.app.domain.model.Event
 import com.eventfinder.app.domain.model.EventAlertDetector
 import com.eventfinder.app.domain.model.EventCategory
 import com.eventfinder.app.domain.model.RsvpStatus
+import com.eventfinder.app.notifications.NotificationHelper
 import com.eventfinder.app.utils.AppLogger
 import com.google.gson.Gson
 import kotlinx.coroutines.flow.Flow
@@ -111,7 +112,8 @@ class EventRepositoryImpl(
     private val pendingSyncDao: PendingSyncDao,
     private val ticketmasterApi: TicketmasterApi,
     private val apiKey: String,
-    private val preferences: SessionProvider
+    private val preferences: SessionProvider,
+    private val context: android.content.Context? = null
 ) : EventRepository {
 
     private val mapper = TicketmasterMapper()
@@ -310,10 +312,8 @@ class EventRepositoryImpl(
             AppLogger.w(tag, "Delete rejected - user $userId does not own event $eventId")
             return Result.failure(SecurityException("not_owner"))
         }
-        eventDao.deleteById(eventId)
-        favoriteDao.delete(userId, eventId)
-        rsvpDao.delete(userId, eventId)
-        enqueuePending(userId, "event", eventId, "delete", gson.toJson(eventId))
+        context?.let { NotificationHelper.cancelEventReminders(it, eventId) }
+        database.deleteEventAtomically(eventId, userId, gson.toJson(eventId))
         AppLogger.i(tag, "Community event deleted locally: $eventId")
         return Result.success(Unit)
     }

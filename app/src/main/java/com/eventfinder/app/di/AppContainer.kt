@@ -52,7 +52,8 @@ class AppContainer(context: Context) {
             pendingSyncDao = database.pendingSyncDao(),
             ticketmasterApi = ApiClient.ticketmasterApi(appContext.cacheDir),
             apiKey = BuildConfig.TICKETMASTER_API_KEY,
-            preferences = preferences
+            preferences = preferences,
+            context = appContext
         )
     }
 
