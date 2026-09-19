@@ -78,10 +78,13 @@ fun EventFinderNavHost(
     val navController = rememberNavController()
 
     val pendingEventId = deepLinkEventId?.collectAsState()?.value
-    LaunchedEffect(pendingEventId) {
+    LaunchedEffect(pendingEventId, navController.currentBackStackEntry) {
         val eventId = pendingEventId ?: return@LaunchedEffect
-        navController.navigate(AppDestinations.eventDetail(eventId))
-        deepLinkEventId.value = null
+        val currentRoute = navController.currentBackStackEntry?.destination?.route
+        if (currentRoute == AppDestinations.MAIN) {
+            navController.navigate(AppDestinations.eventDetail(eventId))
+            deepLinkEventId.value = null
+        }
     }
 
     NavHost(navController = navController, startDestination = AppDestinations.SPLASH) {

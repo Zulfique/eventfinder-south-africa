@@ -81,10 +81,16 @@ class WeatherRepositoryImpl(
             Result.failure(IllegalStateException("no_hourly_data"))
         }
     } catch (t: HttpException) {
-        if (t.code() == 400) {
-            AppLogger.w(tag, "No forecast for $eventId (outside Open-Meteo's forecast window)")
-        } else {
-            AppLogger.e(tag, "Weather lookup failed", t)
+        when {
+            t.code() == 400 -> {
+                AppLogger.w(tag, "Open-Meteo rejected forecast request for $eventId")
+            }
+            t.code() in 500..599 -> {
+                AppLogger.e(tag, "Open-Meteo server error for $eventId", t)
+            }
+            else -> {
+                AppLogger.e(tag, "Open-Meteo HTTP ${t.code()} for $eventId", t)
+            }
         }
         Result.failure(t)
     } catch (t: IOException) {

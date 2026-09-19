@@ -48,6 +48,16 @@ jobs:
           TICKETMASTER_API_KEY: ${{ secrets.TICKETMASTER_API_KEY }}
         run: ./gradlew testDebugUnitTest --stacktrace
 
+      - name: Run lint
+        env:
+          TICKETMASTER_API_KEY: ${{ secrets.TICKETMASTER_API_KEY }}
+        run: ./gradlew lintDebug --stacktrace
+
+      - name: Run verification
+        env:
+          TICKETMASTER_API_KEY: ${{ secrets.TICKETMASTER_API_KEY }}
+        run: ./gradlew check --stacktrace
+
       - name: Assemble debug APK
         env:
           TICKETMASTER_API_KEY: ${{ secrets.TICKETMASTER_API_KEY }}
