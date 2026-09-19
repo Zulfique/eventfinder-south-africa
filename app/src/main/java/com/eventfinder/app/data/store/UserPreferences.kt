@@ -7,8 +7,11 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.eventfinder.app.utils.AppLogger
 import com.google.gson.Gson
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 
 // Top-level delegate so a single DataStore instance backs all preferences.
@@ -26,29 +29,44 @@ private data class RecentSearch(
  * Typed access to the DataStore preferences file. Wraps every key so the app's
  * preference names are defined in exactly one place.
  *
+ * Account-specific settings (reminders, alerts, radius, recent searches) are
+ * stored with user-scoped keys to prevent leakage between accounts on the
+ * same device. Global keys are used for session, language, and biometric
+ * state which must be accessible before login.
+ *
  * References:
  *  - Android Developers, "DataStore":
  *    https://developer.android.com/topic/libraries/architecture/datastore
  */
+@OptIn(ExperimentalCoroutinesApi::class)
 class UserPreferences(private val context: Context) : SessionProvider {
 
     private val gson = Gson()
 
     private object Keys {
+        // Global keys
         val SESSION_USER_ID = stringPreferencesKey("session_user_id")
         val BIOMETRIC_USER_ID = stringPreferencesKey("biometric_user_id")
         val LANGUAGE = stringPreferencesKey("language")
         val BIOMETRIC_ENABLED = booleanPreferencesKey("biometric_enabled")
-        val REMINDERS_ENABLED = booleanPreferencesKey("reminders_enabled")
-        val NEW_EVENT_ALERTS_ENABLED = booleanPreferencesKey("new_event_alerts_enabled")
-        val DEFAULT_RADIUS_KM = stringPreferencesKey("default_radius_km")
-        val RECENT_SEARCHES_JSON = stringPreferencesKey("recent_searches_json")
     }
 
-    suspend fun isLoggedIn(): Boolean =
+    // ---- Helpers for user-scoped keys ----
+
+    /** Builds a string preference key scoped to a specific user. */
+    private fun userStringKey(name: String, userId: String) =
+        stringPreferencesKey("user_${userId}_$name")
+
+    /** Builds a boolean preference key scoped to a specific user. */
+    private fun userBoolKey(name: String, userId: String) =
+        booleanPreferencesKey("user_${userId}_$name")
+
+    // ---- Session (global) ----
+
+    override suspend fun isLoggedIn(): Boolean =
         context.eventFinderDataStore.data.first()[Keys.SESSION_USER_ID] != null
 
-    suspend fun setSessionUserId(userId: String?) {
+    override suspend fun setSessionUserId(userId: String?) {
         context.eventFinderDataStore.edit { prefs ->
             if (userId == null) prefs.remove(Keys.SESSION_USER_ID)
             else prefs[Keys.SESSION_USER_ID] = userId
@@ -57,10 +75,11 @@ class UserPreferences(private val context: Context) : SessionProvider {
     }
 
     /** Emits the id of the signed-in user (null when logged out). */
-    val sessionUserId: Flow<String?> = context.eventFinderDataStore.data
+    override val sessionUserId: Flow<String?> = context.eventFinderDataStore.data
         .map { it[Keys.SESSION_USER_ID] }
 
-    // ---- Language (English / Afrikaans, FR-08) ----
+    // ---- Language (global — needed before login for the login screen) ----
+
     val language: Flow<String> = context.eventFinderDataStore.data
         .map { it[Keys.LANGUAGE] ?: "en" }
 
@@ -69,69 +88,106 @@ class UserPreferences(private val context: Context) : SessionProvider {
         AppLogger.i("UserPreferences", "Language preference saved: $lang")
     }
 
-    // ---- Biometric auth (FR-01) ----
+    // ---- Biometric auth (global — needed for biometric prompt before session) ----
+
     val biometricEnabled: Flow<Boolean> = context.eventFinderDataStore.data
         .map { it[Keys.BIOMETRIC_ENABLED] ?: false }
 
-    suspend fun setBiometricEnabled(enabled: Boolean) {
+    override suspend fun setBiometricEnabled(enabled: Boolean) {
         context.eventFinderDataStore.edit { it[Keys.BIOMETRIC_ENABLED] = enabled }
         AppLogger.i("UserPreferences", "Biometric enabled=$enabled")
     }
 
-    /** Tied to the last user who enabled biometrics so the prompt opens the correct account. */
-    val biometricUserId: Flow<String?> = context.eventFinderDataStore.data
+    override val biometricUserId: Flow<String?> = context.eventFinderDataStore.data
         .map { it[Keys.BIOMETRIC_USER_ID] }
 
-    suspend fun setBiometricUserId(userId: String?) {
+    override suspend fun setBiometricUserId(userId: String?) {
         context.eventFinderDataStore.edit {
             if (userId == null) it.remove(Keys.BIOMETRIC_USER_ID)
             else it[Keys.BIOMETRIC_USER_ID] = userId
         }
     }
 
-    // ---- Notification preferences (FR-04) ----
-    val remindersEnabled: Flow<Boolean> = context.eventFinderDataStore.data
-        .map { it[Keys.REMINDERS_ENABLED] ?: true }
+    // ---- User-scoped notification preferences ----
+
+    val remindersEnabled: Flow<Boolean> = sessionUserId.flatMapLatest { userId ->
+        if (userId.isNullOrBlank()) {
+            flowOf(true)
+        } else {
+            context.eventFinderDataStore.data
+                .map { prefs -> prefs[userBoolKey("reminders_enabled", userId)] ?: true }
+        }
+    }
 
     suspend fun setRemindersEnabled(enabled: Boolean) {
-        context.eventFinderDataStore.edit { it[Keys.REMINDERS_ENABLED] = enabled }
+        val userId = sessionUserId.first() ?: return
+        context.eventFinderDataStore.edit {
+            it[userBoolKey("reminders_enabled", userId)] = enabled
+        }
     }
 
-    val newEventAlertsEnabled: Flow<Boolean> = context.eventFinderDataStore.data
-        .map { it[Keys.NEW_EVENT_ALERTS_ENABLED] ?: true }
+    val newEventAlertsEnabled: Flow<Boolean> = sessionUserId.flatMapLatest { userId ->
+        if (userId.isNullOrBlank()) {
+            flowOf(true)
+        } else {
+            context.eventFinderDataStore.data
+                .map { prefs -> prefs[userBoolKey("new_event_alerts_enabled", userId)] ?: true }
+        }
+    }
 
     suspend fun setNewEventAlertsEnabled(enabled: Boolean) {
-        context.eventFinderDataStore.edit { it[Keys.NEW_EVENT_ALERTS_ENABLED] = enabled }
+        val userId = sessionUserId.first() ?: return
+        context.eventFinderDataStore.edit {
+            it[userBoolKey("new_event_alerts_enabled", userId)] = enabled
+        }
     }
 
-    // ---- Location radius default ----
-    val defaultRadiusKm: Flow<Int> = context.eventFinderDataStore.data
-        .map { it[Keys.DEFAULT_RADIUS_KM]?.toIntOrNull() ?: 50 }
+    // ---- User-scoped location radius default ----
+
+    val defaultRadiusKm: Flow<Int> = sessionUserId.flatMapLatest { userId ->
+        if (userId.isNullOrBlank()) {
+            flowOf(50)
+        } else {
+            context.eventFinderDataStore.data
+                .map { prefs -> prefs[userStringKey("default_radius_km", userId)]?.toIntOrNull() ?: 50 }
+        }
+    }
 
     suspend fun setDefaultRadiusKm(km: Int) {
-        context.eventFinderDataStore.edit { it[Keys.DEFAULT_RADIUS_KM] = km.toString() }
+        val userId = sessionUserId.first() ?: return
+        context.eventFinderDataStore.edit {
+            it[userStringKey("default_radius_km", userId)] = km.toString()
+        }
     }
 
-    // ---- Recent searches (Screen 7) ----
-    val recentSearches: Flow<List<String>> = context.eventFinderDataStore.data
-        .map { prefs ->
-            prefs[Keys.RECENT_SEARCHES_JSON]
-                ?.let { json ->
-                    runCatching {
-                        gson.fromJson(json, Array<RecentSearch>::class.java)
-                            .sortedByDescending { it.timestamp }
-                            .take(8)
-                            .map { it.term }
-                    }.getOrNull()
-                }
-                .orEmpty()
+    // ---- User-scoped recent searches (Screen 7) ----
+
+    val recentSearches: Flow<List<String>> = sessionUserId.flatMapLatest { userId ->
+        if (userId.isNullOrBlank()) {
+            flowOf(emptyList())
+        } else {
+            context.eventFinderDataStore.data.map { prefs ->
+                prefs[userStringKey("recent_searches_json", userId)]
+                    ?.let { json ->
+                        runCatching {
+                            gson.fromJson(json, Array<RecentSearch>::class.java)
+                                .sortedByDescending { it.timestamp }
+                                .take(8)
+                                .map { it.term }
+                        }.getOrNull()
+                    }
+                    .orEmpty()
+            }
         }
+    }
 
     suspend fun addRecentSearch(term: String) {
         val trimmed = term.trim()
         if (trimmed.isEmpty()) return
+        val userId = sessionUserId.first() ?: return
         context.eventFinderDataStore.edit { prefs ->
-            val current = prefs[Keys.RECENT_SEARCHES_JSON]
+            val key = userStringKey("recent_searches_json", userId)
+            val current = prefs[key]
                 ?.let { json ->
                     runCatching {
                         gson.fromJson(json, Array<RecentSearch>::class.java).toMutableList()
@@ -143,13 +199,16 @@ class UserPreferences(private val context: Context) : SessionProvider {
             current.add(RecentSearch(term = trimmed, timestamp = System.currentTimeMillis()))
 
             val latest = current.sortedByDescending { it.timestamp }.take(8)
-            prefs[Keys.RECENT_SEARCHES_JSON] = gson.toJson(latest)
+            prefs[key] = gson.toJson(latest)
         }
         AppLogger.i("UserPreferences", "Recent search recorded: $trimmed")
     }
 
     suspend fun clearRecentSearches() {
-        context.eventFinderDataStore.edit { it.remove(Keys.RECENT_SEARCHES_JSON) }
+        val userId = sessionUserId.first() ?: return
+        context.eventFinderDataStore.edit {
+            it.remove(userStringKey("recent_searches_json", userId))
+        }
     }
 
     /**
@@ -171,8 +230,11 @@ class UserPreferences(private val context: Context) : SessionProvider {
     suspend fun currentLanguage(): String =
         context.eventFinderDataStore.data.first()[Keys.LANGUAGE] ?: "en"
 
-    /** Wipes every stored preference, including the session (account deletion). */
-    suspend fun clearAll() {
+    /**
+     * Wipes every stored preference, including the session and all user-scoped
+     * settings (account deletion).
+     */
+    override suspend fun clearAll() {
         context.eventFinderDataStore.edit { it.clear() }
         AppLogger.i("UserPreferences", "All preferences cleared")
     }

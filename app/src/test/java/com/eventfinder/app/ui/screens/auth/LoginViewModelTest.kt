@@ -69,7 +69,7 @@ class LoginViewModelTest {
             error("not used")
 
         override suspend fun deleteAccount(): Result<Unit> = error("not used")
-        override fun isLoggedIn(): Boolean = false
+        override suspend fun isLoggedIn(): Boolean = false
     }
 
     @Test

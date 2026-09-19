@@ -53,9 +53,6 @@ interface EventDao {
     @Query("SELECT * FROM events WHERE id = :id LIMIT 1")
     suspend fun findById(id: String): EventEntity?
 
-    @Query("SELECT * FROM events WHERE isFavorite = 1 ORDER BY startDate ASC")
-    fun observeFavorites(): Flow<List<EventEntity>>
-
     @Query("""
         SELECT e.* FROM events e
         INNER JOIN favorites f ON f.eventId = e.id
@@ -63,9 +60,6 @@ interface EventDao {
         ORDER BY e.startDate ASC
     """)
     fun observeFavoriteEventsForUser(userId: String): Flow<List<EventEntity>>
-
-    @Query("UPDATE events SET isFavorite = :isFavorite WHERE id = :eventId")
-    suspend fun setFavorite(eventId: String, isFavorite: Boolean)
 
     @Query("SELECT * FROM events WHERE id IN (:ids)")
     suspend fun findByIds(ids: List<String>): List<EventEntity>

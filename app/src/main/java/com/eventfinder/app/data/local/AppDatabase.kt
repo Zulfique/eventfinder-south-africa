@@ -25,8 +25,11 @@ interface DatabaseTransactionHelper {
  *
  * Adds userId columns to favorites, rsvps, and pending_sync tables.
  * Changes favorites and rsvps primary keys from (eventId) to (userId, eventId).
- * Existing rows get userId = 'legacy' since they cannot be attributed to a
- * specific account after the upgrade.
+ *
+ * Legacy rows: v1 did not store account ownership, so existing relationship
+ * records (favorites, RSVPs) are retained under a 'legacy' owner. These rows
+ * are effectively orphaned — no logged-in user can query them — but they are
+ * preserved to avoid data loss during the schema upgrade.
  */
 private val MIGRATION_1_2 = object : Migration(1, 2) {
     override fun migrate(db: SupportSQLiteDatabase) {

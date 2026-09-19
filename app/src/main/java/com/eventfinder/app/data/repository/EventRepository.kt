@@ -375,7 +375,7 @@ class EventRepositoryImpl(
             organizerId = organizerId,
             organizerName = organizerName,
             attendeeCount = attendeeCount,
-            isFavorite = isFavorite,
+            isFavorite = false,
             isCreatedByUser = isCreatedByUser,
             isSynced = isSynced
         )
