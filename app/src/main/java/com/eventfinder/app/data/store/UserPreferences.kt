@@ -160,6 +160,10 @@ class UserPreferences(private val context: Context) : SessionProvider {
             }
         }.getOrDefault("en")
 
+    /** Suspending language read for use inside coroutines. */
+    suspend fun currentLanguage(): String =
+        context.eventFinderDataStore.data.first()[Keys.LANGUAGE] ?: "en"
+
     /** Wipes every stored preference, including the session (account deletion). */
     suspend fun clearAll() {
         context.eventFinderDataStore.edit { it.clear() }
