@@ -24,9 +24,6 @@ interface UserDao {
     @Query("SELECT * FROM users WHERE id = :id LIMIT 1")
     suspend fun findById(id: String): UserEntity?
 
-    @Query("SELECT * FROM users")
-    fun observeAll(): Flow<List<UserEntity>>
-
     @Query("SELECT COUNT(*) FROM users")
     suspend fun count(): Long
 
@@ -153,9 +150,6 @@ interface PendingSyncDao {
     @Query("SELECT * FROM pending_sync WHERE userId = :userId ORDER BY createdAt ASC")
     suspend fun allForUser(userId: String): List<PendingSyncEntity>
 
-    @Query("SELECT * FROM pending_sync ORDER BY createdAt ASC")
-    suspend fun all(): List<PendingSyncEntity>
-
     @Query("DELETE FROM pending_sync WHERE id = :id")
     suspend fun delete(id: Long)
 
@@ -164,9 +158,6 @@ interface PendingSyncDao {
 
     @Query("SELECT COUNT(*) FROM pending_sync WHERE userId = :userId")
     suspend fun countForUser(userId: String): Int
-
-    @Query("SELECT COUNT(*) FROM pending_sync")
-    suspend fun count(): Int
 
     @Query("DELETE FROM pending_sync WHERE userId = :userId")
     suspend fun deleteAllForUser(userId: String)
