@@ -207,6 +207,7 @@ class AuthRepositoryImpl(
     override suspend fun deleteAccount(): Result<Unit> {
         val current = currentUser.first() ?: return Result.failure(IllegalStateException("no_session"))
 
+        ReminderHelper.cancelReminders(context, eventDao, current.id)
         database.deleteAccountData(current.id)
         preferences.clearUserPreferences(current.id)
 
