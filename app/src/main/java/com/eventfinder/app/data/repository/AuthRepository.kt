@@ -99,6 +99,8 @@ class AuthRepositoryImpl(
         )
         userDao.upsert(user)
         preferences.setSessionUserId(user.id)
+        preferences.setLanguage(language)
+        ReminderHelper.restoreReminders(context, eventDao, user.id)
         AppLogger.i("AuthRepository", "New account created for ${user.email}")
         return Result.success(user.toDomain())
     }
@@ -111,6 +113,7 @@ class AuthRepositoryImpl(
             return Result.failure(IllegalArgumentException("login_invalid_credentials"))
         }
         preferences.setSessionUserId(user.id)
+        preferences.setLanguage(user.preferredLanguage)
         ReminderHelper.restoreReminders(context, eventDao, user.id)
         AppLogger.i("AuthRepository", "User signed in: ${user.email}")
         return Result.success(user.toDomain())
@@ -125,6 +128,7 @@ class AuthRepositoryImpl(
             return Result.failure(IllegalStateException("biometric_disabled"))
         }
         preferences.setSessionUserId(user.id)
+        preferences.setLanguage(user.preferredLanguage)
         ReminderHelper.restoreReminders(context, eventDao, user.id)
         AppLogger.i("AuthRepository", "Biometric login for ${user.email}")
         return Result.success(user.toDomain())
@@ -205,7 +209,7 @@ class AuthRepositoryImpl(
         val current = currentUser.first() ?: return Result.failure(IllegalStateException("no_session"))
 
         database.deleteAccountData(current.id)
-        preferences.clearAll()
+        preferences.clearUserPreferences(current.id)
 
         AppLogger.i("AuthRepository", "Account deleted for ${current.email}")
         return Result.success(Unit)

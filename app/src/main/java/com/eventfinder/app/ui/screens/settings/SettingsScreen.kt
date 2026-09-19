@@ -73,9 +73,9 @@ fun SettingsScreen(
     onBack: () -> Unit,
     onLoggedOut: () -> Unit = {}
 ) {
-    val viewModel: SettingsViewModel = viewModel(factory = SettingsViewModel.factory(container))
-    val state by viewModel.uiState.collectAsState()
     val context = LocalContext.current
+    val viewModel: SettingsViewModel = viewModel(factory = SettingsViewModel.factory(container, context))
+    val state by viewModel.uiState.collectAsState()
     val biometricSupported = BiometricAuth.isAvailable(context)
     val snackbarHostState = remember { SnackbarHostState() }
 

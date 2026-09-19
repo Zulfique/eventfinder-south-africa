@@ -1,20 +1,24 @@
 package com.eventfinder.app.ui.screens.settings
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import com.eventfinder.app.data.local.EventDao
 import com.eventfinder.app.data.repository.AuthRepository
 import com.eventfinder.app.data.repository.EventRepository
 import com.eventfinder.app.data.store.UserPreferences
 import com.eventfinder.app.di.AppContainer
 import com.eventfinder.app.R
 import com.eventfinder.app.domain.model.SupportedLanguage
+import com.eventfinder.app.notifications.ReminderHelper
 import com.eventfinder.app.ui.components.UiMessage
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -34,7 +38,9 @@ data class SettingsUiState(
 class SettingsViewModel(
     private val preferences: UserPreferences,
     private val authRepository: AuthRepository,
-    private val eventRepository: EventRepository
+    private val eventRepository: EventRepository,
+    private val context: Context,
+    private val eventDao: EventDao
 ) : ViewModel() {
 
     private val _messages = MutableSharedFlow<UiMessage>()
@@ -66,7 +72,17 @@ class SettingsViewModel(
     }
 
     fun setReminders(enabled: Boolean) {
-        viewModelScope.launch { preferences.setRemindersEnabled(enabled) }
+        viewModelScope.launch {
+            preferences.setRemindersEnabled(enabled)
+            val userId = preferences.sessionUserId.first()
+            if (userId != null) {
+                if (enabled) {
+                    ReminderHelper.restoreReminders(context, eventDao, userId)
+                } else {
+                    ReminderHelper.cancelReminders(context, eventDao, userId)
+                }
+            }
+        }
     }
 
     fun setNewEventsAlerts(enabled: Boolean) {
@@ -107,13 +123,12 @@ class SettingsViewModel(
         }
     }
 
-    /** Deletes the account, clears cached data and signs out (FR-01). */
+    /** Deletes the account and signs out (FR-01). Only removes the deleted user's preferences. */
     fun deleteAccount(onDeleted: () -> Unit) {
         viewModelScope.launch {
             val result = authRepository.deleteAccount()
             if (result.isSuccess) {
                 eventRepository.clearLocalCache()
-                preferences.clearAll()
                 _messages.emit(UiMessage.Resource(R.string.account_deleted))
                 onDeleted()
             } else {
@@ -123,12 +138,14 @@ class SettingsViewModel(
     }
 
     companion object {
-        fun factory(container: AppContainer): ViewModelProvider.Factory = viewModelFactory {
+        fun factory(container: AppContainer, appContext: Context): ViewModelProvider.Factory = viewModelFactory {
             initializer {
                 SettingsViewModel(
                     container.preferences,
                     container.authRepository,
-                    container.eventRepository
+                    container.eventRepository,
+                    appContext,
+                    container.database.eventDao()
                 )
             }
         }

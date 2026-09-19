@@ -1,6 +1,7 @@
 package com.eventfinder.app.data.store
 
 import android.content.Context
+import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
@@ -48,7 +49,6 @@ class UserPreferences(private val context: Context) : SessionProvider {
         val SESSION_USER_ID = stringPreferencesKey("session_user_id")
         val BIOMETRIC_USER_ID = stringPreferencesKey("biometric_user_id")
         val LANGUAGE = stringPreferencesKey("language")
-        val BIOMETRIC_ENABLED = booleanPreferencesKey("biometric_enabled")
     }
 
     // ---- Helpers for user-scoped keys ----
@@ -83,20 +83,12 @@ class UserPreferences(private val context: Context) : SessionProvider {
     val language: Flow<String> = context.eventFinderDataStore.data
         .map { it[Keys.LANGUAGE] ?: "en" }
 
-    suspend fun setLanguage(lang: String) {
+    override suspend fun setLanguage(lang: String) {
         context.eventFinderDataStore.edit { it[Keys.LANGUAGE] = lang }
         AppLogger.i("UserPreferences", "Language preference saved: $lang")
     }
 
-    // ---- Biometric auth (global — needed for biometric prompt before session) ----
-
-    val biometricEnabled: Flow<Boolean> = context.eventFinderDataStore.data
-        .map { it[Keys.BIOMETRIC_ENABLED] ?: false }
-
-    override suspend fun setBiometricEnabled(enabled: Boolean) {
-        context.eventFinderDataStore.edit { it[Keys.BIOMETRIC_ENABLED] = enabled }
-        AppLogger.i("UserPreferences", "Biometric enabled=$enabled")
-    }
+    // ---- Biometric auth (global device-level, needed before login for biometric prompt) ----
 
     override val biometricUserId: Flow<String?> = context.eventFinderDataStore.data
         .map { it[Keys.BIOMETRIC_USER_ID] }
@@ -106,6 +98,25 @@ class UserPreferences(private val context: Context) : SessionProvider {
             if (userId == null) it.remove(Keys.BIOMETRIC_USER_ID)
             else it[Keys.BIOMETRIC_USER_ID] = userId
         }
+    }
+
+    // ---- User-scoped biometric enabled toggle ----
+
+    val biometricEnabled: Flow<Boolean> = sessionUserId.flatMapLatest { userId ->
+        if (userId.isNullOrBlank()) {
+            flowOf(false)
+        } else {
+            context.eventFinderDataStore.data
+                .map { prefs -> prefs[userBoolKey("biometric_enabled", userId)] ?: false }
+        }
+    }
+
+    override suspend fun setBiometricEnabled(enabled: Boolean) {
+        val userId = sessionUserId.first() ?: return
+        context.eventFinderDataStore.edit {
+            it[userBoolKey("biometric_enabled", userId)] = enabled
+        }
+        AppLogger.i("UserPreferences", "Biometric enabled=$enabled for user $userId")
     }
 
     // ---- User-scoped notification preferences ----
@@ -231,8 +242,32 @@ class UserPreferences(private val context: Context) : SessionProvider {
         context.eventFinderDataStore.data.first()[Keys.LANGUAGE] ?: "en"
 
     /**
-     * Wipes every stored preference, including the session and all user-scoped
-     * settings (account deletion).
+     * Removes all DataStore preferences scoped to [userId] without affecting
+     * other accounts' settings. Also clears the session and biometric
+     * association if they belong to this user.
+     */
+    override suspend fun clearUserPreferences(userId: String) {
+        context.eventFinderDataStore.edit { prefs ->
+            prefs.asMap().keys
+                .filter { it.name.startsWith("user_${userId}_") }
+                .forEach { prefs.remove(it) }
+        }
+        // Clear session if this user is the active session
+        val currentSession = sessionUserId.first()
+        if (currentSession == userId) {
+            setSessionUserId(null)
+        }
+        // Clear biometric association if it belongs to this user
+        val biometricUser = biometricUserId.first()
+        if (biometricUser == userId) {
+            setBiometricUserId(null)
+        }
+        AppLogger.i("UserPreferences", "Preferences cleared for user $userId")
+    }
+
+    /**
+     * Wipes every stored preference, including the session, biometric state,
+     * and all user-scoped settings. Used only for full app reset.
      */
     override suspend fun clearAll() {
         context.eventFinderDataStore.edit { it.clear() }

@@ -249,8 +249,10 @@ class EventRepositoryTest {
         suspend fun setTestUserId(id: String?) { _sessionId.value = id }
         override suspend fun isLoggedIn(): Boolean = _sessionId.value != null
         override suspend fun setSessionUserId(userId: String?) { _sessionId.value = userId }
+        override suspend fun setLanguage(lang: String) { /* no-op in tests */ }
         override suspend fun setBiometricEnabled(enabled: Boolean) { /* no-op in tests */ }
         override suspend fun setBiometricUserId(userId: String?) { /* no-op in tests */ }
+        override suspend fun clearUserPreferences(userId: String) { /* no-op in tests */ }
         override suspend fun clearAll() { _sessionId.value = null }
     }
 
