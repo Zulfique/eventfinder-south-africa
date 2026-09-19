@@ -37,6 +37,8 @@ class AppContainer(context: Context) {
         AuthRepositoryImpl(
             database = database,
             userDao = database.userDao(),
+            eventDao = database.eventDao(),
+            context = appContext,
             preferences = preferences
         )
     }

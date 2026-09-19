@@ -4,7 +4,6 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import com.eventfinder.app.di.AppContainer
-import com.eventfinder.app.data.local.toDomain
 import com.eventfinder.app.utils.AppLogger
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -18,6 +17,9 @@ import kotlinx.coroutines.launch
  * Reminder restoration is per-account: only reminders for the currently
  * signed-in user are restored. If no user is signed in, no reminders are
  * scheduled (they will be restored on next login).
+ *
+ * Respects the user's remindersEnabled preference: if the user has disabled
+ * reminders, no alarms are scheduled on boot.
  */
 class BootReceiver : BroadcastReceiver() {
 
@@ -28,7 +30,6 @@ class BootReceiver : BroadcastReceiver() {
         CoroutineScope(Dispatchers.IO).launch {
             try {
                 val container = AppContainer(context)
-                val database = container.database
                 val userId = container.preferences.sessionUserId.first()
 
                 if (userId == null) {
@@ -36,19 +37,13 @@ class BootReceiver : BroadcastReceiver() {
                     return@launch
                 }
 
-                val attendingEvents = database.eventDao().getUpcomingAttendingEventsForUser(
-                    userId,
-                    System.currentTimeMillis()
-                )
-                var scheduled = 0
-                for (entity in attendingEvents) {
-                    val event = entity.toDomain()
-                    scheduled += NotificationHelper.scheduleEventReminders(context, event)
+                val remindersEnabled = container.preferences.remindersEnabled.first()
+                if (!remindersEnabled) {
+                    AppLogger.i("BootReceiver", "Reminders disabled for user $userId - skipping restoration")
+                    return@launch
                 }
-                AppLogger.i(
-                    "BootReceiver",
-                    "Boot completed - rescheduled $scheduled reminder(s) for ${attendingEvents.size} event(s) (user: $userId)"
-                )
+
+                ReminderHelper.restoreReminders(context, container.database.eventDao(), userId)
             } catch (t: Exception) {
                 AppLogger.e("BootReceiver", "Failed to reschedule reminders on boot", t)
             } finally {

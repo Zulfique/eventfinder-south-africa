@@ -1,11 +1,14 @@
 package com.eventfinder.app.data.repository
 
+import android.content.Context
 import com.eventfinder.app.data.local.DatabaseTransactionHelper
+import com.eventfinder.app.data.local.EventDao
 import com.eventfinder.app.data.local.UserDao
 import com.eventfinder.app.data.local.UserEntity
 import com.eventfinder.app.data.local.toDomain
 import com.eventfinder.app.data.store.SessionProvider
 import com.eventfinder.app.domain.model.User
+import com.eventfinder.app.notifications.ReminderHelper
 import com.eventfinder.app.utils.AppLogger
 import com.eventfinder.app.utils.EmailValidator
 import com.eventfinder.app.utils.PasswordHasher
@@ -57,6 +60,8 @@ interface AuthRepository {
 class AuthRepositoryImpl(
     private val database: DatabaseTransactionHelper,
     private val userDao: UserDao,
+    private val eventDao: EventDao,
+    private val context: Context,
     private val preferences: SessionProvider
 ) : AuthRepository {
 
@@ -106,6 +111,7 @@ class AuthRepositoryImpl(
             return Result.failure(IllegalArgumentException("login_invalid_credentials"))
         }
         preferences.setSessionUserId(user.id)
+        ReminderHelper.restoreReminders(context, eventDao, user.id)
         AppLogger.i("AuthRepository", "User signed in: ${user.email}")
         return Result.success(user.toDomain())
     }
@@ -119,11 +125,16 @@ class AuthRepositoryImpl(
             return Result.failure(IllegalStateException("biometric_disabled"))
         }
         preferences.setSessionUserId(user.id)
+        ReminderHelper.restoreReminders(context, eventDao, user.id)
         AppLogger.i("AuthRepository", "Biometric login for ${user.email}")
         return Result.success(user.toDomain())
     }
 
     override suspend fun logout() {
+        val userId = preferences.sessionUserId.first()
+        if (userId != null) {
+            ReminderHelper.cancelReminders(context, eventDao, userId)
+        }
         preferences.setSessionUserId(null)
         AppLogger.i("AuthRepository", "User logged out - session cleared")
     }
