@@ -16,6 +16,8 @@ import com.eventfinder.app.MainActivity
 import com.eventfinder.app.R
 import com.eventfinder.app.domain.model.Event
 import com.eventfinder.app.utils.AppLogger
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
 
 /**
  * Local reminder notifications (FR-04). Schedules two system notifications per
@@ -235,6 +237,15 @@ class ReminderReceiver : android.content.BroadcastReceiver() {
         NotificationHelper.createChannel(context)
         if (!NotificationHelper.hasNotificationPermission(context)) {
             AppLogger.w("ReminderReceiver", "Notification permission missing - skipping reminder")
+            return
+        }
+
+        val preferences = com.eventfinder.app.data.store.UserPreferences(context)
+        val remindersEnabled = runBlocking {
+            preferences.remindersEnabled.first()
+        }
+        if (!remindersEnabled) {
+            AppLogger.w("ReminderReceiver", "Reminders disabled for current user - skipping notification")
             return
         }
 
