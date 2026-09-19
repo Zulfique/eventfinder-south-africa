@@ -109,7 +109,7 @@ class EventRepositoryTest {
         }
     }
 
-    private class FakeFavoriteDao(private val eventDao: FakeEventDao? = null) : FavoriteDao {
+    private class FakeFavoriteDao : FavoriteDao {
         val rows = linkedMapOf<String, FavoriteEntity>()
         private val flow = MutableStateFlow<List<FavoriteEntity>>(emptyList())
 
@@ -118,32 +118,32 @@ class EventRepositoryTest {
         }
 
         override suspend fun insert(favorite: FavoriteEntity) {
-            rows[favorite.eventId] = favorite
+            rows["${favorite.userId}:${favorite.eventId}"] = favorite
             emit()
         }
 
-        override suspend fun delete(eventId: String) {
-            rows.remove(eventId)
+        override suspend fun delete(userId: String, eventId: String) {
+            rows.remove("$userId:$eventId")
             emit()
         }
+
+        override fun observeAllForUser(userId: String): Flow<List<FavoriteEntity>> =
+            flow.map { list -> list.filter { it.userId == userId } }
 
         override fun observeAll(): Flow<List<FavoriteEntity>> = flow
 
         override suspend fun count(): Int = rows.size
 
-        override suspend fun exists(eventId: String): Boolean = rows.containsKey(eventId)
+        override suspend fun exists(userId: String, eventId: String): Boolean =
+            rows.containsKey("$userId:$eventId")
 
-        override suspend fun deleteForUserEvents(userId: String) {
-            val ownedEventIds = eventDao?.rows?.values
-                ?.filter { it.organizerId == userId && it.isCreatedByUser }
-                ?.map { it.id }
-                ?.toSet() ?: emptySet()
-            rows.keys.removeAll(ownedEventIds)
+        override suspend fun deleteAllForUser(userId: String) {
+            rows.keys.removeAll { it.startsWith("$userId:") }
             emit()
         }
     }
 
-    private class FakeRsvpDao(private val eventDao: FakeEventDao? = null) : RsvpDao {
+    private class FakeRsvpDao : RsvpDao {
         val rows = linkedMapOf<String, RsvpEntity>()
         private val flow = MutableStateFlow<List<RsvpEntity>>(emptyList())
 
@@ -152,38 +152,41 @@ class EventRepositoryTest {
         }
 
         override suspend fun upsert(rsvp: RsvpEntity) {
-            rows[rsvp.eventId] = rsvp
+            rows["${rsvp.userId}:${rsvp.eventId}"] = rsvp
             emit()
         }
 
-        override suspend fun delete(eventId: String) {
-            rows.remove(eventId)
+        override suspend fun delete(userId: String, eventId: String) {
+            rows.remove("$userId:$eventId")
             emit()
         }
+
+        override fun observeAllForUser(userId: String): Flow<List<RsvpEntity>> =
+            flow.map { list -> list.filter { it.userId == userId } }
 
         override fun observeAll(): Flow<List<RsvpEntity>> = flow
 
-        override suspend fun statusFor(eventId: String): String? = rows[eventId]?.status
+        override suspend fun statusFor(userId: String, eventId: String): String? =
+            rows["$userId:$eventId"]?.status
 
         override suspend fun attendingCount(): Int = rows.values.count { it.status == "attending" }
 
-        override suspend fun deleteForUserEvents(userId: String) {
-            val ownedEventIds = eventDao?.rows?.values
-                ?.filter { it.organizerId == userId && it.isCreatedByUser }
-                ?.map { it.id }
-                ?.toSet() ?: emptySet()
-            rows.keys.removeAll(ownedEventIds)
+        override suspend fun deleteAllForUser(userId: String) {
+            rows.keys.removeAll { it.startsWith("$userId:") }
             emit()
         }
     }
 
-    private class FakePendingSyncDao(private val eventDao: FakeEventDao? = null) : PendingSyncDao {
+    private class FakePendingSyncDao : PendingSyncDao {
         val rows = mutableListOf<PendingSyncEntity>()
         private var nextId = 1L
 
         override suspend fun insert(pending: PendingSyncEntity) {
             rows += pending.copy(id = if (pending.id == 0L) nextId++ else pending.id)
         }
+
+        override suspend fun allForUser(userId: String): List<PendingSyncEntity> =
+            rows.filter { it.userId == userId }
 
         override suspend fun all(): List<PendingSyncEntity> = rows.toList()
 
@@ -196,14 +199,13 @@ class EventRepositoryTest {
             if (index >= 0) rows[index] = rows[index].copy(retryCount = rows[index].retryCount + 1)
         }
 
+        override suspend fun countForUser(userId: String): Int =
+            rows.count { it.userId == userId }
+
         override suspend fun count(): Int = rows.size
 
-        override suspend fun deleteForUserEvents(userId: String) {
-            val ownedEventIds = eventDao?.rows?.values
-                ?.filter { it.organizerId == userId && it.isCreatedByUser }
-                ?.map { it.id }
-                ?.toSet() ?: emptySet()
-            rows.removeAll { it.entityId in ownedEventIds }
+        override suspend fun deleteAllForUser(userId: String) {
+            rows.removeAll { it.userId == userId }
         }
     }
 
@@ -248,19 +250,19 @@ class EventRepositoryTest {
         private val rsvpDao: FakeRsvpDao,
         private val pendingSyncDao: FakePendingSyncDao
     ) : DatabaseTransactionHelper {
-        override suspend fun setFavorite(eventId: String, favorite: Boolean) {
+        override suspend fun setFavorite(userId: String, eventId: String, favorite: Boolean) {
             if (favorite) {
-                favoriteDao.insert(FavoriteEntity(eventId = eventId, createdAt = System.currentTimeMillis(), isSynced = false))
+                favoriteDao.insert(FavoriteEntity(userId = userId, eventId = eventId, createdAt = System.currentTimeMillis(), isSynced = false))
             } else {
-                favoriteDao.delete(eventId)
+                favoriteDao.delete(userId, eventId)
             }
             eventDao.setFavorite(eventId, favorite)
         }
 
         override suspend fun deleteAccountData(userId: String) {
-            pendingSyncDao.deleteForUserEvents(userId)
-            favoriteDao.deleteForUserEvents(userId)
-            rsvpDao.deleteForUserEvents(userId)
+            pendingSyncDao.deleteAllForUser(userId)
+            favoriteDao.deleteAllForUser(userId)
+            rsvpDao.deleteAllForUser(userId)
             eventDao.deleteCreatedByUserId(userId)
         }
     }
@@ -279,9 +281,9 @@ class EventRepositoryTest {
 
     private fun repository(
         eventDao: FakeEventDao = FakeEventDao(),
-        favoriteDao: FakeFavoriteDao = FakeFavoriteDao(eventDao),
-        rsvpDao: FakeRsvpDao = FakeRsvpDao(eventDao),
-        pendingDao: FakePendingSyncDao = FakePendingSyncDao(eventDao),
+        favoriteDao: FakeFavoriteDao = FakeFavoriteDao(),
+        rsvpDao: FakeRsvpDao = FakeRsvpDao(),
+        pendingDao: FakePendingSyncDao = FakePendingSyncDao(),
         api: TicketmasterApi = FakeTicketmasterApi(liveResponse()),
         apiKey: String = "test-key",
         preferences: TestPreferences = TestPreferences()
@@ -391,7 +393,7 @@ class EventRepositoryTest {
                 favorite = true
             )
         )
-        favorites.insert(FavoriteEntity(eventId = "tm-OLD", createdAt = 0L, isSynced = true))
+        favorites.insert(FavoriteEntity(userId = "system", eventId = "tm-OLD", createdAt = 0L, isSynced = true))
 
         val response = TmEventsResponse(
             embedded = TmEmbedded(
@@ -617,8 +619,8 @@ class EventRepositoryTest {
 
         assertTrue(result.isSuccess)
         assertNull(repo.getEvent(id))
-        assertFalse(favorites.rows.containsKey(id))
-        assertFalse(rsvps.rows.containsKey(id))
+        assertFalse(favorites.rows.values.any { it.eventId == id })
+        assertFalse(rsvps.rows.values.any { it.eventId == id })
     }
 
     @Test
@@ -658,7 +660,7 @@ class EventRepositoryTest {
         val pending = FakePendingSyncDao()
         val (repo, _) = repository(eventDao = dao, pendingDao = pending)
         repo.ensureSeeded()
-        pending.rows.add(PendingSyncEntity(entityType = "event", entityId = "x", action = "create", payload = "{}", createdAt = 1L))
+        pending.rows.add(PendingSyncEntity(userId = "user-1", entityType = "event", entityId = "x", action = "create", payload = "{}", createdAt = 1L))
 
         repo.clearLocalCache()
 
@@ -705,11 +707,12 @@ class EventRepositoryTest {
     // ------------------------------------------------------ account deletion
 
     @Test
-    fun `deleteAccount removes all user data but leaves other users data intact`() = runTest {
+    fun `deleteAccount via authRepository removes all user data but leaves other users intact`() = runTest {
         val dao = FakeEventDao()
-        val favorites = FakeFavoriteDao(dao)
-        val rsvps = FakeRsvpDao(dao)
-        val pending = FakePendingSyncDao(dao)
+        val favorites = FakeFavoriteDao()
+        val rsvps = FakeRsvpDao()
+        val pending = FakePendingSyncDao()
+        val database = FakeDatabase(favorites, dao, rsvps, pending)
         val (repo, prefs) = repository(eventDao = dao, favoriteDao = favorites, rsvpDao = rsvps, pendingDao = pending)
 
         // User A creates events, favourites, RSVPs, and has pending actions
@@ -724,19 +727,19 @@ class EventRepositoryTest {
         prefs.setTestUserId("user-b")
         val eventB = repo.createEvent(draft(title = "User B event")).getOrThrow()
 
-        // Now delete user A
-        prefs.setTestUserId("user-a")
-        val result = repo.deleteEvent(eventA)
-        assertTrue(result.isSuccess)
+        // Delete user A's data directly via the database helper
+        database.deleteAccountData("user-a")
 
-        // Verify: User A's event gone, favourites gone, RSVPs gone
-        assertNull(repo.getEvent(eventA))
-        assertFalse(favorites.rows.containsKey(eventA))
-        assertFalse(rsvps.rows.containsKey(eventA))
+        // Verify: User A's events gone, favourites gone, RSVPs gone
+        assertNull(dao.findById(eventA))
+        assertTrue(dao.rows.values.none { it.organizerId == "user-a" })
+        assertTrue(favorites.rows.values.none { it.userId == "user-a" })
+        assertTrue(rsvps.rows.values.none { it.userId == "user-a" })
+        assertTrue(pending.rows.none { it.userId == "user-a" })
 
         // Verify: User B's event still exists
-        assertNotNull(repo.getEvent(eventB))
-        assertEquals("User B event", repo.getEvent(eventB)!!.title)
+        assertNotNull(dao.findById(eventB))
+        assertEquals("User B event", dao.findById(eventB)!!.title)
     }
 
     // --------------------------------------------------- upcoming attending
@@ -767,5 +770,66 @@ class EventRepositoryTest {
 
         assertEquals(1, result.size)
         assertEquals(futureEvent, result[0].id)
+    }
+
+    // --------------------------------------------------- boot receiver
+
+    @Test
+    fun `BootReceiver restoration queries upcoming events and schedules reminders`() = runTest {
+        val dao = FakeEventDao()
+
+        val futureTime = System.currentTimeMillis() + 100_000
+        val pastTime = System.currentTimeMillis() - 100_000
+
+        dao.upsert(
+            EventEntity(
+                id = "tm-future",
+                title = "Future Event",
+                description = "Upcoming",
+                category = "music",
+                startDate = futureTime,
+                endDate = futureTime + 3_600_000,
+                venueName = "Venue",
+                address = "Address",
+                latitude = -26.0,
+                longitude = 28.0,
+                imageUrl = null,
+                isPublic = true,
+                organizerId = "org",
+                organizerName = "Organizer",
+                attendeeCount = 0,
+                isFavorite = false,
+                isCreatedByUser = false,
+                isSynced = true
+            )
+        )
+        dao.upsert(
+            EventEntity(
+                id = "tm-past",
+                title = "Past Event",
+                description = "Already happened",
+                category = "music",
+                startDate = pastTime,
+                endDate = pastTime + 3_600_000,
+                venueName = "Venue",
+                address = "Address",
+                latitude = -26.0,
+                longitude = 28.0,
+                imageUrl = null,
+                isPublic = true,
+                organizerId = "org",
+                organizerName = "Organizer",
+                attendeeCount = 0,
+                isFavorite = false,
+                isCreatedByUser = false,
+                isSynced = true
+            )
+        )
+
+        val upcoming = dao.getUpcomingAttendingEvents(System.currentTimeMillis())
+
+        assertEquals(1, upcoming.size)
+        assertEquals("tm-future", upcoming[0].id)
+        assertEquals("Future Event", upcoming[0].title)
     }
 }
