@@ -102,8 +102,11 @@ interface FavoriteDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(favorite: FavoriteEntity)
 
-    @Query("DELETE FROM favorites WHERE eventId = :eventId")
-    suspend fun delete(eventId: String)
+    @Query("DELETE FROM favorites WHERE userId = :userId AND eventId = :eventId")
+    suspend fun delete(userId: String, eventId: String)
+
+    @Query("SELECT * FROM favorites WHERE userId = :userId")
+    fun observeAllForUser(userId: String): Flow<List<FavoriteEntity>>
 
     @Query("SELECT * FROM favorites")
     fun observeAll(): Flow<List<FavoriteEntity>>
@@ -111,11 +114,11 @@ interface FavoriteDao {
     @Query("SELECT COUNT(*) FROM favorites")
     suspend fun count(): Int
 
-    @Query("SELECT EXISTS(SELECT 1 FROM favorites WHERE eventId = :eventId)")
-    suspend fun exists(eventId: String): Boolean
+    @Query("SELECT EXISTS(SELECT 1 FROM favorites WHERE userId = :userId AND eventId = :eventId)")
+    suspend fun exists(userId: String, eventId: String): Boolean
 
-    @Query("DELETE FROM favorites WHERE eventId IN (SELECT id FROM events WHERE organizerId = :userId)")
-    suspend fun deleteForUserEvents(userId: String)
+    @Query("DELETE FROM favorites WHERE userId = :userId")
+    suspend fun deleteAllForUser(userId: String)
 }
 
 /** Data access for RSVPs (FR-02/FR-06). */
@@ -125,20 +128,23 @@ interface RsvpDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(rsvp: RsvpEntity)
 
-    @Query("DELETE FROM rsvps WHERE eventId = :eventId")
-    suspend fun delete(eventId: String)
+    @Query("DELETE FROM rsvps WHERE userId = :userId AND eventId = :eventId")
+    suspend fun delete(userId: String, eventId: String)
+
+    @Query("SELECT * FROM rsvps WHERE userId = :userId")
+    fun observeAllForUser(userId: String): Flow<List<RsvpEntity>>
 
     @Query("SELECT * FROM rsvps")
     fun observeAll(): Flow<List<RsvpEntity>>
 
-    @Query("SELECT status FROM rsvps WHERE eventId = :eventId LIMIT 1")
-    suspend fun statusFor(eventId: String): String?
+    @Query("SELECT status FROM rsvps WHERE userId = :userId AND eventId = :eventId LIMIT 1")
+    suspend fun statusFor(userId: String, eventId: String): String?
 
     @Query("SELECT COUNT(*) FROM rsvps WHERE status = 'attending'")
     suspend fun attendingCount(): Int
 
-    @Query("DELETE FROM rsvps WHERE eventId IN (SELECT id FROM events WHERE organizerId = :userId)")
-    suspend fun deleteForUserEvents(userId: String)
+    @Query("DELETE FROM rsvps WHERE userId = :userId")
+    suspend fun deleteAllForUser(userId: String)
 }
 
 /** Data access for the offline action queue (FR-09). */
@@ -147,6 +153,9 @@ interface PendingSyncDao {
 
     @Insert
     suspend fun insert(pending: PendingSyncEntity)
+
+    @Query("SELECT * FROM pending_sync WHERE userId = :userId ORDER BY createdAt ASC")
+    suspend fun allForUser(userId: String): List<PendingSyncEntity>
 
     @Query("SELECT * FROM pending_sync ORDER BY createdAt ASC")
     suspend fun all(): List<PendingSyncEntity>
@@ -157,9 +166,12 @@ interface PendingSyncDao {
     @Query("UPDATE pending_sync SET retryCount = retryCount + 1 WHERE id = :id")
     suspend fun incrementRetry(id: Long)
 
+    @Query("SELECT COUNT(*) FROM pending_sync WHERE userId = :userId")
+    suspend fun countForUser(userId: String): Int
+
     @Query("SELECT COUNT(*) FROM pending_sync")
     suspend fun count(): Int
 
-    @Query("DELETE FROM pending_sync WHERE entityId IN (SELECT id FROM events WHERE organizerId = :userId)")
-    suspend fun deleteForUserEvents(userId: String)
+    @Query("DELETE FROM pending_sync WHERE userId = :userId")
+    suspend fun deleteAllForUser(userId: String)
 }

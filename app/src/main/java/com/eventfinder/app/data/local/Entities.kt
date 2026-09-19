@@ -52,17 +52,25 @@ data class EventEntity(
 )
 
 /** Room entity for a favourite link (schema §5.3 / §7.1). */
-@Entity(tableName = "favorites")
+@Entity(
+    tableName = "favorites",
+    primaryKeys = ["userId", "eventId"]
+)
 data class FavoriteEntity(
-    @PrimaryKey val eventId: String,
+    val userId: String,
+    val eventId: String,
     val createdAt: Long,
     val isSynced: Boolean
 )
 
 /** Room entity for an RSVP link (schema §5.3). */
-@Entity(tableName = "rsvps")
+@Entity(
+    tableName = "rsvps",
+    primaryKeys = ["userId", "eventId"]
+)
 data class RsvpEntity(
-    @PrimaryKey val eventId: String,
+    val userId: String,
+    val eventId: String,
     val status: String,
     val createdAt: Long,
     val isSynced: Boolean
@@ -79,6 +87,7 @@ data class PendingSyncEntity(
     val entityId: String,
     val action: String,
     val payload: String,
+    val userId: String,
     val createdAt: Long,
     val retryCount: Int = 0
 )

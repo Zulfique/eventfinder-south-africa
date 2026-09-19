@@ -21,6 +21,8 @@ import com.eventfinder.app.utils.AppLogger
 import com.google.gson.Gson
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import java.io.IOException
 import java.util.UUID
@@ -130,14 +132,26 @@ class EventRepositoryImpl(
         eventDao.observeAll().map { rows -> rows.map { it.toDomain() } }
 
     override fun observeFavoriteIds(): Flow<Set<String>> =
-        favoriteDao.observeAll().map { rows -> rows.map { it.eventId }.toSet() }
+        preferences.sessionUserId.flatMapLatest { userId ->
+            if (userId.isNullOrBlank()) {
+                kotlinx.coroutines.flow.flowOf(emptySet())
+            } else {
+                favoriteDao.observeAllForUser(userId).map { rows -> rows.map { it.eventId }.toSet() }
+            }
+        }
 
     override fun observeFavoriteEvents(): Flow<List<Event>> =
         eventDao.observeFavorites().map { rows -> rows.map { it.toDomain() } }
 
     override fun observeRsvpStatuses(): Flow<Map<String, RsvpStatus>> =
-        rsvpDao.observeAll().map { rows ->
-            rows.mapNotNull { row -> RsvpStatus.fromStorage(row.status)?.let { row.eventId to it } }.toMap()
+        preferences.sessionUserId.flatMapLatest { userId ->
+            if (userId.isNullOrBlank()) {
+                kotlinx.coroutines.flow.flowOf(emptyMap())
+            } else {
+                rsvpDao.observeAllForUser(userId).map { rows ->
+                    rows.mapNotNull { row -> RsvpStatus.fromStorage(row.status)?.let { row.eventId to it } }.toMap()
+                }
+            }
         }
 
     override suspend fun ensureSeeded() {
@@ -189,19 +203,22 @@ class EventRepositoryImpl(
     }
 
     override suspend fun toggleFavorite(eventId: String): Boolean {
-        val already = favoriteDao.exists(eventId)
+        val userId = preferences.sessionUserId.first()
+            ?: return run { AppLogger.w(tag, "Cannot toggle favourite - not logged in") }.let { false }
+        val already = favoriteDao.exists(userId, eventId)
         val newValue = !already
 
-        database.setFavorite(eventId = eventId, favorite = newValue)
+        database.setFavorite(userId = userId, eventId = eventId, favorite = newValue)
 
-        enqueuePending("favorite", eventId, if (newValue) "create" else "delete", gson.toJson(eventId))
+        enqueuePending(userId, "favorite", eventId, if (newValue) "create" else "delete", gson.toJson(eventId))
         AppLogger.i(tag, "${if (newValue) "Added" else "Removed"} favourite: $eventId")
         return newValue
     }
 
     override suspend fun setRsvp(eventId: String, status: RsvpStatus) {
-        rsvpDao.upsert(RsvpEntity(eventId = eventId, status = status.storage, createdAt = System.currentTimeMillis(), isSynced = false))
-        enqueuePending("rsvp", eventId, "update", gson.toJson(status.storage))
+        val userId = preferences.sessionUserId.first() ?: return
+        rsvpDao.upsert(RsvpEntity(userId = userId, eventId = eventId, status = status.storage, createdAt = System.currentTimeMillis(), isSynced = false))
+        enqueuePending(userId, "rsvp", eventId, "update", gson.toJson(status.storage))
         AppLogger.i(tag, "RSVP updated for $eventId -> ${status.storage}")
     }
 
@@ -231,7 +248,7 @@ class EventRepositoryImpl(
             isSynced = false
         )
         eventDao.upsert(entity)
-        enqueuePending("event", id, "create", gson.toJson(entity))
+        enqueuePending(userId, "event", id, "create", gson.toJson(entity))
         AppLogger.i(tag, "Community event created locally: $id")
         return Result.success(id)
     }
@@ -264,7 +281,7 @@ class EventRepositoryImpl(
             isSynced = false
         )
         eventDao.upsert(updated)
-        enqueuePending("event", eventId, "update", gson.toJson(updated))
+        enqueuePending(userId, "event", eventId, "update", gson.toJson(updated))
         AppLogger.i(tag, "Community event updated locally: $eventId")
         return Result.success(Unit)
     }
@@ -283,9 +300,9 @@ class EventRepositoryImpl(
             return Result.failure(SecurityException("not_owner"))
         }
         eventDao.deleteById(eventId)
-        favoriteDao.delete(eventId)
-        rsvpDao.delete(eventId)
-        enqueuePending("event", eventId, "delete", gson.toJson(eventId))
+        favoriteDao.delete(userId, eventId)
+        rsvpDao.delete(userId, eventId)
+        enqueuePending(userId, "event", eventId, "delete", gson.toJson(eventId))
         AppLogger.i(tag, "Community event deleted locally: $eventId")
         return Result.success(Unit)
     }
@@ -294,8 +311,9 @@ class EventRepositoryImpl(
         eventDao.findById(eventId)?.toDomain()
 
     override suspend fun clearLocalCache() {
-        if (pendingSyncDao.count() > 0) {
-            AppLogger.w(tag, "Skipping cache clear because pending changes exist")
+        val userId = preferences.sessionUserId.first()
+        if (userId != null && pendingSyncDao.countForUser(userId) > 0) {
+            AppLogger.w(tag, "Skipping cache clear because pending changes exist for user")
             return
         }
         eventDao.deleteSynced()
@@ -305,7 +323,8 @@ class EventRepositoryImpl(
 
     override suspend fun flushPendingActions(): SyncResult {
         if (apiKey.isBlank()) return SyncResult.NoApiKey
-        val pending = pendingSyncDao.all()
+        val userId = preferences.sessionUserId.first() ?: return SyncResult.NoApiKey
+        val pending = pendingSyncDao.allForUser(userId)
         if (pending.isEmpty()) return SyncResult.Synced
         AppLogger.w(
             tag,
@@ -315,13 +334,14 @@ class EventRepositoryImpl(
         return SyncResult.Failed
     }
 
-    private suspend fun enqueuePending(type: String, entityId: String, action: String, payload: String) {
+    private suspend fun enqueuePending(userId: String, type: String, entityId: String, action: String, payload: String) {
         pendingSyncDao.insert(
             PendingSyncEntity(
                 entityType = type,
                 entityId = entityId,
                 action = action,
                 payload = payload,
+                userId = userId,
                 createdAt = System.currentTimeMillis()
             )
         )

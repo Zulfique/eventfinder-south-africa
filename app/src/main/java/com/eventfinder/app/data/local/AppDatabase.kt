@@ -13,7 +13,7 @@ import com.eventfinder.app.domain.model.User
  */
 interface DatabaseTransactionHelper {
     /** Atomically inserts/removes a favourite and updates the event flag. */
-    suspend fun setFavorite(eventId: String, favorite: Boolean)
+    suspend fun setFavorite(userId: String, eventId: String, favorite: Boolean)
     /** Atomically deletes all user data during account deletion. */
     suspend fun deleteAccountData(userId: String)
 }
@@ -34,7 +34,7 @@ interface DatabaseTransactionHelper {
         RsvpEntity::class,
         PendingSyncEntity::class
     ],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase(), DatabaseTransactionHelper {
@@ -45,21 +45,21 @@ abstract class AppDatabase : RoomDatabase(), DatabaseTransactionHelper {
     abstract fun rsvpDao(): RsvpDao
     abstract fun pendingSyncDao(): PendingSyncDao
 
-    override suspend fun setFavorite(eventId: String, favorite: Boolean) {
+    override suspend fun setFavorite(userId: String, eventId: String, favorite: Boolean) {
         if (favorite) {
             favoriteDao().insert(
-                FavoriteEntity(eventId = eventId, createdAt = System.currentTimeMillis(), isSynced = false)
+                FavoriteEntity(userId = userId, eventId = eventId, createdAt = System.currentTimeMillis(), isSynced = false)
             )
         } else {
-            favoriteDao().delete(eventId)
+            favoriteDao().delete(userId, eventId)
         }
         eventDao().setFavorite(eventId, favorite)
     }
 
     override suspend fun deleteAccountData(userId: String) {
-        pendingSyncDao().deleteForUserEvents(userId)
-        favoriteDao().deleteForUserEvents(userId)
-        rsvpDao().deleteForUserEvents(userId)
+        pendingSyncDao().deleteAllForUser(userId)
+        favoriteDao().deleteAllForUser(userId)
+        rsvpDao().deleteAllForUser(userId)
         eventDao().deleteCreatedByUserId(userId)
         userDao().deleteById(userId)
     }
@@ -74,6 +74,7 @@ abstract class AppDatabase : RoomDatabase(), DatabaseTransactionHelper {
                 AppDatabase::class.java,
                 DB_NAME
             )
+                .fallbackToDestructiveMigration()
                 .build()
     }
 }

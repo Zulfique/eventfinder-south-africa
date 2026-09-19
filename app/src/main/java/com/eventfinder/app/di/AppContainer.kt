@@ -29,7 +29,7 @@ class AppContainer(context: Context) {
 
     private val appContext = context.applicationContext
 
-    private val database: AppDatabase by lazy { AppDatabase.build(appContext) }
+    internal val database: AppDatabase by lazy { AppDatabase.build(appContext) }
 
     val preferences: UserPreferences by lazy { UserPreferences(appContext) }
 
