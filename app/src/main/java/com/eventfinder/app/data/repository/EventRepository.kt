@@ -4,11 +4,8 @@ import com.eventfinder.app.data.local.DatabaseTransactionHelper
 import com.eventfinder.app.data.local.EventDao
 import com.eventfinder.app.data.local.EventEntity
 import com.eventfinder.app.data.local.FavoriteDao
-import com.eventfinder.app.data.local.FavoriteEntity
 import com.eventfinder.app.data.local.PendingSyncDao
-import com.eventfinder.app.data.local.PendingSyncEntity
 import com.eventfinder.app.data.local.RsvpDao
-import com.eventfinder.app.data.local.RsvpEntity
 import com.eventfinder.app.data.local.toDomain
 import com.eventfinder.app.data.remote.TicketmasterApi
 import com.eventfinder.app.data.remote.TicketmasterMapper
@@ -221,17 +218,25 @@ class EventRepositoryImpl(
         val already = favoriteDao.exists(userId, eventId)
         val newValue = !already
 
-        database.setFavorite(userId = userId, eventId = eventId, favorite = newValue)
-
-        enqueuePending(userId, "favorite", eventId, if (newValue) "create" else "delete", gson.toJson(eventId))
+        database.setFavoriteAtomically(
+            userId = userId,
+            eventId = eventId,
+            favorite = newValue,
+            pendingAction = if (newValue) "create" else "delete",
+            pendingPayload = gson.toJson(eventId)
+        )
         AppLogger.i(tag, "${if (newValue) "Added" else "Removed"} favourite: $eventId")
         return newValue
     }
 
     override suspend fun setRsvp(eventId: String, status: RsvpStatus) {
         val userId = preferences.sessionUserId.first() ?: return
-        rsvpDao.upsert(RsvpEntity(userId = userId, eventId = eventId, status = status.storage, createdAt = System.currentTimeMillis(), isSynced = false))
-        enqueuePending(userId, "rsvp", eventId, "update", gson.toJson(status.storage))
+        database.setRsvpAtomically(
+            userId = userId,
+            eventId = eventId,
+            status = status.storage,
+            pendingPayload = gson.toJson(status.storage)
+        )
         AppLogger.i(tag, "RSVP updated for $eventId -> ${status.storage}")
     }
 
@@ -256,12 +261,10 @@ class EventRepositoryImpl(
             organizerId = userId,
             organizerName = "You",
             attendeeCount = 0,
-            isFavorite = false,
             isCreatedByUser = true,
             isSynced = false
         )
-        eventDao.upsert(entity)
-        enqueuePending(userId, "event", id, "create", gson.toJson(entity))
+        database.createEventAtomically(entity, userId, gson.toJson(entity))
         AppLogger.i(tag, "Community event created locally: $id")
         return Result.success(id)
     }
@@ -293,8 +296,7 @@ class EventRepositoryImpl(
             isPublic = draft.isPublic,
             isSynced = false
         )
-        eventDao.upsert(updated)
-        enqueuePending(userId, "event", eventId, "update", gson.toJson(updated))
+        database.updateEventAtomically(updated, userId, gson.toJson(updated))
         AppLogger.i(tag, "Community event updated locally: $eventId")
         return Result.success(Unit)
     }
@@ -345,19 +347,6 @@ class EventRepositoryImpl(
         return SyncResult.Failed
     }
 
-    private suspend fun enqueuePending(userId: String, type: String, entityId: String, action: String, payload: String) {
-        pendingSyncDao.insert(
-            PendingSyncEntity(
-                entityType = type,
-                entityId = entityId,
-                action = action,
-                payload = payload,
-                userId = userId,
-                createdAt = System.currentTimeMillis()
-            )
-        )
-    }
-
     private fun Event.toEntity(isSynced: Boolean, isCreatedByUser: Boolean): EventEntity =
         EventEntity(
             id = id,
@@ -375,7 +364,6 @@ class EventRepositoryImpl(
             organizerId = organizerId,
             organizerName = organizerName,
             attendeeCount = attendeeCount,
-            isFavorite = false,
             isCreatedByUser = isCreatedByUser,
             isSynced = isSynced
         )

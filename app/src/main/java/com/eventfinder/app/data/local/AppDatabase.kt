@@ -17,10 +17,18 @@ import com.eventfinder.app.domain.model.User
 interface DatabaseTransactionHelper {
     /** Atomically inserts/removes a favourite. */
     suspend fun setFavorite(userId: String, eventId: String, favorite: Boolean)
-    /** Atomically deletes all user data during account deletion. */
-    suspend fun deleteAccountData(userId: String)
+    /** Atomically mutates a favourite and enqueues the sync action. */
+    suspend fun setFavoriteAtomically(userId: String, eventId: String, favorite: Boolean, pendingAction: String, pendingPayload: String)
+    /** Atomically mutates an RSVP and enqueues the sync action. */
+    suspend fun setRsvpAtomically(userId: String, eventId: String, status: String, pendingPayload: String)
+    /** Atomically creates an event and enqueues the sync action. */
+    suspend fun createEventAtomically(event: EventEntity, userId: String, pendingPayload: String)
+    /** Atomically updates an event and enqueues the sync action. */
+    suspend fun updateEventAtomically(event: EventEntity, userId: String, pendingPayload: String)
     /** Atomically deletes an event, its favourite/RSVP links, and queues a sync action. */
     suspend fun deleteEventAtomically(eventId: String, userId: String, pendingPayload: String)
+    /** Atomically deletes all user data during account deletion. */
+    suspend fun deleteAccountData(userId: String)
 }
 
 /**
@@ -54,6 +62,25 @@ private val MIGRATION_1_2 = object : Migration(1, 2) {
 }
 
 /**
+ * Room database migration from v2 to v3.
+ *
+ * Drops the dead `isFavorite` column from the events table.
+ * The favourite relationship is now exclusively represented by the
+ * `favorites` table (userId, eventId); the column was always set to false
+ * after the v1→v2 migration and was never authoritative.
+ */
+private val MIGRATION_2_3 = object : Migration(2, 3) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("CREATE TABLE IF NOT EXISTS events_new (id TEXT NOT NULL, title TEXT NOT NULL, description TEXT NOT NULL, category TEXT NOT NULL, startDate INTEGER NOT NULL, endDate INTEGER NOT NULL, venueName TEXT NOT NULL, address TEXT NOT NULL, latitude REAL NOT NULL, longitude REAL NOT NULL, imageUrl TEXT, isPublic INTEGER NOT NULL, organizerId TEXT NOT NULL, organizerName TEXT NOT NULL, attendeeCount INTEGER NOT NULL, isCreatedByUser INTEGER NOT NULL, isSynced INTEGER NOT NULL, PRIMARY KEY(id))")
+        db.execSQL("INSERT INTO events_new (id, title, description, category, startDate, endDate, venueName, address, latitude, longitude, imageUrl, isPublic, organizerId, organizerName, attendeeCount, isCreatedByUser, isSynced) SELECT id, title, description, category, startDate, endDate, venueName, address, latitude, longitude, imageUrl, isPublic, organizerId, organizerName, attendeeCount, isCreatedByUser, isSynced FROM events")
+        db.execSQL("DROP TABLE events")
+        db.execSQL("ALTER TABLE events_new RENAME TO events")
+        db.execSQL("CREATE INDEX IF NOT EXISTS index_events_category ON events(category)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS index_events_startDate ON events(startDate)")
+    }
+}
+
+/**
  * Local persistence layer (Room) implementing the offline-first strategy from
  * FR-09 of the design document (§7.1 Local Database Models).
  *
@@ -69,7 +96,7 @@ private val MIGRATION_1_2 = object : Migration(1, 2) {
         RsvpEntity::class,
         PendingSyncEntity::class
     ],
-    version = 2,
+    version = 3,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase(), DatabaseTransactionHelper {
@@ -88,6 +115,74 @@ abstract class AppDatabase : RoomDatabase(), DatabaseTransactionHelper {
         } else {
             favoriteDao().delete(userId, eventId)
         }
+    }
+
+    @Transaction
+    override suspend fun setFavoriteAtomically(userId: String, eventId: String, favorite: Boolean, pendingAction: String, pendingPayload: String) {
+        if (favorite) {
+            favoriteDao().insert(
+                FavoriteEntity(userId = userId, eventId = eventId, createdAt = System.currentTimeMillis(), isSynced = false)
+            )
+        } else {
+            favoriteDao().delete(userId, eventId)
+        }
+        pendingSyncDao().insert(
+            PendingSyncEntity(
+                entityType = "favorite",
+                entityId = eventId,
+                action = pendingAction,
+                payload = pendingPayload,
+                userId = userId,
+                createdAt = System.currentTimeMillis()
+            )
+        )
+    }
+
+    @Transaction
+    override suspend fun setRsvpAtomically(userId: String, eventId: String, status: String, pendingPayload: String) {
+        rsvpDao().upsert(
+            RsvpEntity(userId = userId, eventId = eventId, status = status, createdAt = System.currentTimeMillis(), isSynced = false)
+        )
+        pendingSyncDao().insert(
+            PendingSyncEntity(
+                entityType = "rsvp",
+                entityId = eventId,
+                action = "update",
+                payload = pendingPayload,
+                userId = userId,
+                createdAt = System.currentTimeMillis()
+            )
+        )
+    }
+
+    @Transaction
+    override suspend fun createEventAtomically(event: EventEntity, userId: String, pendingPayload: String) {
+        eventDao().upsert(event)
+        pendingSyncDao().insert(
+            PendingSyncEntity(
+                entityType = "event",
+                entityId = event.id,
+                action = "create",
+                payload = pendingPayload,
+                userId = userId,
+                createdAt = System.currentTimeMillis()
+            )
+        )
+    }
+
+    @Transaction
+    override suspend fun updateEventAtomically(event: EventEntity, userId: String, pendingPayload: String) {
+        eventDao().upsert(event)
+        pendingSyncDao().insert(
+            PendingSyncEntity(
+                entityType = "event",
+                entityId = event.id,
+                action = "update",
+                payload = pendingPayload,
+                userId = userId,
+                createdAt = System.currentTimeMillis()
+            )
+        )
     }
 
     @Transaction
@@ -126,7 +221,7 @@ abstract class AppDatabase : RoomDatabase(), DatabaseTransactionHelper {
                 AppDatabase::class.java,
                 DB_NAME
             )
-                .addMigrations(MIGRATION_1_2)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
                 .build()
     }
 }
@@ -160,7 +255,7 @@ fun EventEntity.toDomain(): Event = Event(
     organizerId = organizerId,
     organizerName = organizerName,
     attendeeCount = attendeeCount,
-    isFavorite = isFavorite,
+    isFavorite = false,
     isCreatedByUser = isCreatedByUser,
     isSynced = isSynced
 )
