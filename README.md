@@ -5,7 +5,7 @@
 ![Jetpack Compose](https://img.shields.io/badge/Jetpack%20Compose-BOM%202024.02-4285F4?logo=jetpackcompose&logoColor=white)
 ![minSdk](https://img.shields.io/badge/minSdk-26-brightgreen)
 ![targetSdk](https://img.shields.io/badge/targetSdk-34-brightgreen)
-![Tests](https://img.shields.io/badge/unit%20tests-103%20passing-success)
+![Tests](https://img.shields.io/badge/unit%20tests-115%20passing-success)
 
 A native **Android (Kotlin + Jetpack Compose)** app that helps people across South Africa
 discover, save and create local events — from Joburg jazz nights to Cape Town food markets
@@ -47,7 +47,7 @@ and runs on a physical device or emulator.
 | **Search** | Debounced keyword search with recent-search history and popular events. |
 | **Create event** | A 3-step wizard (details → date/time → location) with an optional photo picked from the system photo picker. |
 | **My events** | Organisers can edit or delete the events they created from the detail screen's overflow menu. |
-| **Favourites** | Save events offline; favourites survive app restarts and are stored in the local operation journal. |
+| **Favourites** | Save events offline; favourites survive app restarts and are stored in the local Room catalogue. |
 | **Profile** | Account header, activity stats (created / attending / favourites), My Events and Attending lists. |
 | **Edit profile** | Update display name and email with validation. |
 | **Settings** | Language switch (English / Afrikaans), biometric login toggle, event reminders, new-event alerts, plus account tools (change password, clear local cache, delete account). |
@@ -112,7 +112,7 @@ flowchart TB
     end
 
     subgraph Data["Data layer (repositories)"]
-        Repos["EventRepository · AuthRepository · WeatherRepository"]
+        Repos["EventRepository · AuthRepository · WeatherRepository · EventDiscoveryRepository"]
     end
 
     subgraph Sources["Data sources"]
@@ -181,6 +181,7 @@ EventFinder uses public services that do not require API keys or tokens:
 | **Open-Meteo** | Keyless | Weather forecasts |
 | **OpenStreetMap** | Keyless | Map data |
 | **Overpass API** | Keyless for normal OSM data queries | Nearby venues and event-related places |
+| **Ardent Africa** | Keyless (optional API key for higher limits) | Public event discovery |
 | **Android Location APIs** | Device permission | Current device location |
 | **Room / SQLite** | Local | Events, users, favourites and RSVPs |
 
@@ -210,6 +211,26 @@ the user.
 OpenStreetMap data is © OpenStreetMap contributors.
 
 OpenStreetMap requires appropriate attribution when using its data.
+
+### Public JSON event feeds
+
+EventFinder can discover real-world events from keyless public JSON feeds. The pipeline works as follows:
+
+1. Each `EventSource` implementation fetches events from its endpoint.
+2. `PublicJsonEventMapper` normalises different JSON schemas into a common `RemoteEvent` model.
+3. `EventDiscoveryRepository` validates each event (future-only, valid coordinates, non-blank title).
+4. Valid events are upserted into Room with `remote:` prefixed IDs to prevent collisions with user-created events.
+5. Events without valid coordinates are rejected since they cannot be plotted on the map.
+
+Currently configured sources:
+
+| Source | URL | Key required |
+| --- | --- | --- |
+| **Ardent Africa** | `https://api.ardent.africa/public/v1/events` | No |
+
+New sources can be added in `SouthAfricaEventSources.kt` without changing any other code.
+The `PublicJsonEventClient` handles `{ "events": [...] }`, `{ "data": [...] }`, `{ "results": [...] }`,
+and bare JSON array formats automatically.
 
 ## Localisation
 
@@ -286,7 +307,7 @@ adb install -r app\build\outputs\apk\debug\app-debug.apk
 
 ## Testing
 
-The project has **103 JVM unit tests** across 13 suites, all runnable from the command line with
+The project has **115 JVM unit tests** across 14 suites, all runnable from the command line with
 no emulator:
 
 ```bash
@@ -301,12 +322,13 @@ no emulator:
 | `EventFiltererTest` | Keyword / category / radius filtering (including address and description matching), three sort orders, distance attachment. |
 | `WeatherRepositoryTest` | WMO weather-code descriptions and Open-Meteo payload handling. |
 | `OpenStreetMapRepositoryTest` | Overpass venue query mapping and geographic bounding. |
-| `EventRepositoryTest` | Seeding, favourite/RSVP toggling, event creation, editing/deleting with ownership guard, cache clearing, journal flush — using in-memory DAO fakes. |
+| `EventRepositoryTest` | Seeding, favourite/RSVP toggling, event creation, editing/deleting with ownership guard, cache clearing — using in-memory DAO fakes. |
 | `SampleEventsProviderTest` | Demo catalogue integrity (unique ids, valid SA coordinates, sane dates). |
 | `CreateEventValidationTest` | Per-step wizard validation (required title/description, future date, venue, coordinate ranges) that drives the inline error messages. |
 | `EventAlertDetectorTest` | Pure new-event / favourite-changed diffing, including quiet first sync and past-event suppression. |
 | `DateTimeUtilsTest` | Relative date helpers (today/tomorrow, day & hour offsets) and stable date formatting. |
 | `LoginViewModelTest` | Password-reset flows (mismatch, success) with a fake repository. |
+| `EventDiscoveryRepositoryTest` | Event discovery pipeline: valid future events inserted, missing coordinates rejected, past events rejected, source failures handled gracefully, deduplication by stableId, multi-source merging. |
 
 HTML reports are written to `app/build/reports/tests/testDebugUnitTest/index.html`.
 
@@ -335,8 +357,9 @@ GitHub Actions runs on every push / PR to `main` (`.github/workflows/android-ci.
 1. Validate the Gradle wrapper
 2. Set up **JDK 17**
 3. `./gradlew testDebugUnitTest`
-4. `./gradlew assembleDebug`
-5. Upload the test report and the debug APK as build artifacts
+4. `./gradlew lintDebug`
+5. `./gradlew assembleDebug`
+6. Upload the test report and the debug APK as build artifacts
 
 CI never depends on a secret to compile — all external APIs are keyless.
 The pipeline runs unit tests, lint, and assembles a debug APK.
@@ -348,6 +371,7 @@ app/src/main/java/com/eventfinder/app/
 ├── data/
 │   ├── local/          Room entities, DAOs, database + entity↔domain mappers
 │   ├── remote/         Retrofit services, DTOs, API client (Open-Meteo + Overpass + public JSON)
+│   ├── remote/dto/     Public JSON event DTOs with multi-format field resolution
 │   ├── remote/model/   Provider-independent RemoteEvent model
 │   ├── repository/     Event / Auth / Weather / Discovery repositories + sample seed data
 │   ├── sources/        EventSource interface, PublicJsonEventSource, mapper, South Africa config
@@ -375,7 +399,7 @@ docs/screenshots/                        Real device screenshots
 | External library integration | Room, Retrofit/OkHttp, DataStore, Coil, osmdroid, AndroidX Biometric |
 | Native Android SDK integration | `AlarmManager` + `NotificationManager` reminders, `LocationManager`/location permissions, biometrics |
 | Offline-first / robustness | Room cache + local operation journal, graceful fallbacks, validation on every form |
-| Unit testing | 103 JVM tests + 6 Compose instrumented tests + GitHub Actions CI |
+| Unit testing | 115 JVM tests + 6 Compose instrumented tests + GitHub Actions CI |
 | Logging & comments | `AppLogger` used across data/UI layers; KDoc on every class |
 | Documentation | This README with Mermaid architecture diagrams |
 
@@ -391,7 +415,7 @@ features that need a shared server are intentionally out of scope:
 - **Push notifications** are replaced by on-device notifications (`AlarmManager` +
   `NotificationManager`); true push would need Firebase Cloud Messaging.
 - **Default city / radius** preferences exist in the data layer but have no settings UI yet.
-- **Public event feeds** — the architecture supports keyless public JSON event sources via `EventDiscoveryRepository`, but no sources are configured yet. When sources are added, events are deduplicated by `source:sourceId` and stored in Room alongside demo and user-created events.
+- **Public event feeds** — the architecture supports keyless public JSON event sources via `EventDiscoveryRepository`. Ardent Africa (`https://api.ardent.africa/public/v1/events`) is configured as a verified source. Events without valid coordinates are correctly rejected since they cannot be plotted on the map. Additional sources can be added to `SouthAfricaEventSources.kt`.
 - **isPublic** means "visible in this device's local catalogue only" — there is no cross-device sharing.
 
 ## Attribution & licences
