@@ -118,7 +118,7 @@ class RegisterViewModel(
                     AppLogger.w("RegisterViewModel", "Registration failed: ${throwable.message}")
                     _messages.emit(
                         if (throwable.message == "email_in_use") {
-                            UiMessage.Resource(R.string.invalid_email)
+                            UiMessage.Resource(R.string.email_in_use)
                         } else {
                             UiMessage.Resource(R.string.error)
                         }

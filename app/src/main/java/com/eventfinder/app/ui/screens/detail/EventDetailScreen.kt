@@ -382,8 +382,13 @@ private fun WeatherCard(state: EventDetailUiState) {
                         style = MaterialTheme.typography.titleMedium,
                         color = MaterialTheme.colorScheme.onPrimaryContainer
                     )
-                    else -> Text(
+                    state.weatherUnavailable -> Text(
                         stringResource(R.string.weather_unavailable),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                    else -> Text(
+                        stringResource(R.string.weather_loading),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onPrimaryContainer
                     )

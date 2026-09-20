@@ -28,6 +28,8 @@
 
     <!-- Validation -->
     <string name="invalid_email">Voer \'n geldige e-posadres in</string>
+    <string name="email_in_use">\'n Rekening bestaan reeds met daardie e-pos</string>
+    <string name="weather_loading">Laai voorspelling…</string>
     <string name="password_too_short">Ten minste 8 karakters</string>
     <string name="password_no_upper">Ten minste een hoofletter</string>
     <string name="password_no_digit">Ten minste een syfer</string>
@@ -45,7 +47,7 @@
     <string name="register_success">Rekening geskep</string>
     <string name="login_failed">Verkeerde e-pos of wagwoord</string>
     <string name="biometric_hint">Bevestig met jou vingerafdruk</string>
-    <string name="forgot_password_hint">Wagwoordherstel vereis \'n geverifieerde agtergrondrekening. Kontak ondersteuning of gebruik Wagwoord verander in Instellings as jy jou huidige wagwoord ken.</string>
+    <string name="forgot_password_hint">Voer jou e-pos en \'n nuwe wagwoord hieronder in. Jou wagwoord sal plaaslik opgedateer word.</string>
     <string name="reset_password_title">Herstel wagwoord</string>
     <string name="reset_password_action">Herstel wagwoord</string>
     <string name="reset_not_available">Wagwoordherstel is nie beskikbaar in hierdie prototipe nie. Gebruik Wagwoord verander in Instellings.</string>

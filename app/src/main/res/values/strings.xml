@@ -28,6 +28,8 @@
 
     <!-- Validation -->
     <string name="invalid_email">Enter a valid email address</string>
+    <string name="email_in_use">An account already exists with that email</string>
+    <string name="weather_loading">Loading forecast…</string>
     <string name="password_too_short">At least 8 characters</string>
     <string name="password_no_upper">At least one uppercase letter</string>
     <string name="password_no_digit">At least one number</string>
@@ -45,7 +47,7 @@
     <string name="register_success">Account created</string>
     <string name="login_failed">Invalid email or password</string>
     <string name="biometric_hint">Confirm with your fingerprint</string>
-    <string name="forgot_password_hint">Password reset requires a verified backend account. Please contact support or use Change Password in Settings if you know your current password.</string>
+    <string name="forgot_password_hint">Enter your email and a new password below. Your password will be updated locally.</string>
     <string name="reset_password_title">Reset password</string>
     <string name="reset_password_action">Reset password</string>
     <string name="reset_not_available">Password reset is not available in this prototype. Use Change Password in Settings instead.</string>

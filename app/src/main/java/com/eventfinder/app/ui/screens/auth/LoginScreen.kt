@@ -1,6 +1,5 @@
 package com.eventfinder.app.ui.screens.auth
 
-import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -163,8 +162,6 @@ fun LoginScreen(
             }
         )
     }
-
-    BackHandler { onCreateAccount() }
 
     Scaffold(
         topBar = { TopAppBar(title = { Text(stringResource(R.string.login_title)) }) },
