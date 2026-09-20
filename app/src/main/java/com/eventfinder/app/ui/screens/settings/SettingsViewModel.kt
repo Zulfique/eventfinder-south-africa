@@ -137,6 +137,10 @@ class SettingsViewModel(
         }
     }
 
+    fun savePendingRoute(route: String) {
+        viewModelScope.launch { preferences.setPendingNavigationRoute(route) }
+    }
+
     companion object {
         fun factory(container: AppContainer, appContext: Context): ViewModelProvider.Factory = viewModelFactory {
             initializer {

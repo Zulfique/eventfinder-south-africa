@@ -200,6 +200,30 @@ class CreateEventViewModel(
     fun publish() {
         val state = _uiState.value
         if (state.isSubmitting) return
+
+        val step1Error = when {
+            state.title.isBlank() -> ValidationError.TITLE_REQUIRED
+            state.description.length < MIN_DESCRIPTION_LENGTH -> ValidationError.DESCRIPTION_REQUIRED
+            else -> null
+        }
+        if (step1Error != null) {
+            _messages.tryEmit(UiMessage.Resource(step1Error.messageRes()))
+            return
+        }
+
+        val step2Error = when {
+            state.dateMillis == 0L -> ValidationError.DATE_REQUIRED
+            !DateTimeUtils.isInFuture(state.dateMillis) -> ValidationError.DATE_IN_PAST
+            state.venueName.isBlank() -> ValidationError.VENUE_REQUIRED
+            !isValidLatitude(state.latitude) || !isValidLongitude(state.longitude) ->
+                ValidationError.INVALID_COORDINATES
+            else -> null
+        }
+        if (step2Error != null) {
+            _messages.tryEmit(UiMessage.Resource(step2Error.messageRes()))
+            return
+        }
+
         viewModelScope.launch {
             _uiState.update { it.copy(isSubmitting = true) }
             val lat = state.latitude.toDoubleOrNull()

@@ -12,6 +12,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Search
@@ -31,7 +33,9 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.eventfinder.app.R
@@ -51,6 +55,7 @@ fun SearchScreen(
 ) {
     val viewModel: SearchViewModel = viewModel(factory = SearchViewModel.factory(container))
     val state by viewModel.uiState.collectAsState()
+    val focusManager = LocalFocusManager.current
 
     Scaffold(
         topBar = {
@@ -65,7 +70,10 @@ fun SearchScreen(
                 leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null) },
                 trailingIcon = {
                     if (state.query.isNotBlank()) {
-                        IconButton(onClick = { viewModel.onQueryChange("") }) {
+                        IconButton(onClick = {
+                            viewModel.onQueryChange("")
+                            focusManager.clearFocus()
+                        }) {
                             Icon(
                                 Icons.Outlined.Close,
                                 contentDescription = stringResource(R.string.clear_search)
@@ -74,6 +82,11 @@ fun SearchScreen(
                     }
                 },
                 singleLine = true,
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                keyboardActions = KeyboardActions(onSearch = {
+                    viewModel.commitSearch()
+                    focusManager.clearFocus()
+                }),
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)
             )
 
@@ -98,7 +111,10 @@ fun SearchScreen(
                     items(state.recentSearches) { term ->
                         InputChip(
                             selected = false,
-                            onClick = { viewModel.onQueryChange(term) },
+                            onClick = {
+                                viewModel.onQueryChange(term)
+                                viewModel.commitSearch()
+                            },
                             label = { Text(term) }
                         )
                     }

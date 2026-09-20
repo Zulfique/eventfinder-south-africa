@@ -87,6 +87,17 @@ fun EventFinderNavHost(
         }
     }
 
+    // After Activity recreation (e.g. language change), restore the pending route.
+    LaunchedEffect(Unit) {
+        val pendingRoute = container.preferences.consumePendingNavigationRoute()
+        if (pendingRoute != null) {
+            val currentRoute = navController.currentBackStackEntry?.destination?.route
+            if (currentRoute == AppDestinations.MAIN || currentRoute == AppDestinations.SPLASH) {
+                navController.navigate(pendingRoute)
+            }
+        }
+    }
+
     NavHost(navController = navController, startDestination = AppDestinations.SPLASH) {
 
         composable(AppDestinations.SPLASH) {

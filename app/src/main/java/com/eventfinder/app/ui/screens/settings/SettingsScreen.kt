@@ -82,9 +82,11 @@ fun SettingsScreen(
     var showDeleteAccount by remember { mutableStateOf(false) }
 
     // Recreate once when the persisted locale changes so the UI redraws.
+    // Save the route before recreate so we can navigate back after the Activity restarts.
     val languageAtStart = remember { state.language }
     LaunchedEffect(state.language) {
         if (state.language != languageAtStart) {
+            viewModel.savePendingRoute("settings")
             (context as? Activity)?.recreate()
         }
     }

@@ -49,6 +49,7 @@ class UserPreferences(private val context: Context) : SessionProvider {
         val SESSION_USER_ID = stringPreferencesKey("session_user_id")
         val BIOMETRIC_USER_ID = stringPreferencesKey("biometric_user_id")
         val LANGUAGE = stringPreferencesKey("language")
+        val PENDING_NAVIGATION_ROUTE = stringPreferencesKey("pending_navigation_route")
     }
 
     // ---- Helpers for user-scoped keys ----
@@ -221,6 +222,23 @@ class UserPreferences(private val context: Context) : SessionProvider {
     /** Suspending language read for use inside coroutines. */
     suspend fun currentLanguage(): String =
         context.eventFinderDataStore.data.first()[Keys.LANGUAGE] ?: "en"
+
+    /** Saves a route to navigate to after Activity recreation (e.g. language change). */
+    suspend fun setPendingNavigationRoute(route: String?) {
+        context.eventFinderDataStore.edit { prefs ->
+            if (route == null) prefs.remove(Keys.PENDING_NAVIGATION_ROUTE)
+            else prefs[Keys.PENDING_NAVIGATION_ROUTE] = route
+        }
+    }
+
+    /** Returns and clears the pending navigation route (one-shot). */
+    suspend fun consumePendingNavigationRoute(): String? {
+        val route = context.eventFinderDataStore.data.first()[Keys.PENDING_NAVIGATION_ROUTE]
+        if (route != null) {
+            context.eventFinderDataStore.edit { it.remove(Keys.PENDING_NAVIGATION_ROUTE) }
+        }
+        return route
+    }
 
     /**
      * Removes all DataStore preferences scoped to [userId] without affecting

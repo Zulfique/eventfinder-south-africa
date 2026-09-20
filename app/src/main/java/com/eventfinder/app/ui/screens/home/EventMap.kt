@@ -49,9 +49,11 @@ fun EventMap(
         onDispose { mapView.onPause() }
     }
 
-    // Rebuild markers whenever the visible event set changes.
+    // Rebuild markers whenever the visible event set changes; re-center if
+    // center changed (e.g. user location update).
     LaunchedEffect(events, center) {
         mapView.overlays.clear()
+        mapView.controller.animateTo(GeoPoint(center.first, center.second))
         events.forEach { event ->
             val marker = Marker(mapView).apply {
                 position = GeoPoint(event.latitude, event.longitude)
