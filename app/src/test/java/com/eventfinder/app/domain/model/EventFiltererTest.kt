@@ -38,8 +38,7 @@ class EventFiltererTest {
         organizerName = organizer,
         attendeeCount = 0,
         isFavorite = false,
-        isCreatedByUser = false,
-        isExternal = true
+        isCreatedByUser = false
     )
 
     private val jhb = event(

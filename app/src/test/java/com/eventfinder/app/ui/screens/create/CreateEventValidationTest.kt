@@ -25,8 +25,8 @@ class CreateEventValidationTest {
     private fun dateVenue(
         dateMillis: Long = future,
         venueName: String = "Maboneng Precinct Hall",
-        latitude: String = "",
-        longitude: String = ""
+        latitude: String = "-26.2041",
+        longitude: String = "28.0473"
     ) = CreateEventUiState(
         step = 2,
         dateMillis = dateMillis,
@@ -84,6 +84,14 @@ class CreateEventValidationTest {
     }
 
     @Test
+    fun `step two rejects blank coordinates`() {
+        assertEquals(
+            ValidationError.INVALID_COORDINATES,
+            validateCreateStep(dateVenue(latitude = "", longitude = ""))
+        )
+    }
+
+    @Test
     fun `step two passes with a future date and venue`() {
         assertNull(validateCreateStep(dateVenue()))
         assertNull(validateCreateStep(dateVenue(latitude = "-26.2041", longitude = "28.0473")))
@@ -95,14 +103,14 @@ class CreateEventValidationTest {
     }
 
     @Test
-    fun `coordinate bounds are inclusive and blanks allowed`() {
-        assertTrue(isValidLatitude(""))
+    fun `coordinate bounds are inclusive and blanks rejected`() {
+        assertFalse(isValidLatitude(""))
         assertTrue(isValidLatitude("-90"))
         assertTrue(isValidLatitude("90"))
         assertFalse(isValidLatitude("90.1"))
         assertFalse(isValidLatitude("abc"))
 
-        assertTrue(isValidLongitude(""))
+        assertFalse(isValidLongitude(""))
         assertTrue(isValidLongitude("-180"))
         assertTrue(isValidLongitude("180"))
         assertFalse(isValidLongitude("180.5"))

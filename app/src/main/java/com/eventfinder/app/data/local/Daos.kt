@@ -93,7 +93,7 @@ interface EventDao {
     }
 }
 
-/** Data access for favourites (offline-first, see FR-03). */
+/** Data access for favourites. */
 @Dao
 interface FavoriteDao {
 
@@ -112,14 +112,11 @@ interface FavoriteDao {
     @Query("SELECT EXISTS(SELECT 1 FROM favorites WHERE userId = :userId AND eventId = :eventId)")
     suspend fun exists(userId: String, eventId: String): Boolean
 
-    @Query("UPDATE favorites SET isFlushed = 1 WHERE userId = :userId AND eventId = :eventId")
-    suspend fun markFlushed(userId: String, eventId: String)
-
     @Query("DELETE FROM favorites WHERE userId = :userId")
     suspend fun deleteAllForUser(userId: String)
 }
 
-/** Data access for RSVPs (FR-02/FR-06). */
+/** Data access for RSVPs. */
 @Dao
 interface RsvpDao {
 
@@ -135,35 +132,9 @@ interface RsvpDao {
     @Query("SELECT status FROM rsvps WHERE userId = :userId AND eventId = :eventId LIMIT 1")
     suspend fun statusFor(userId: String, eventId: String): String?
 
-    @Query("UPDATE rsvps SET isFlushed = 1 WHERE userId = :userId AND eventId = :eventId")
-    suspend fun markFlushed(userId: String, eventId: String)
-
     @Query("SELECT COUNT(*) FROM rsvps WHERE status = 'attending'")
     suspend fun attendingCount(): Int
 
     @Query("DELETE FROM rsvps WHERE userId = :userId")
-    suspend fun deleteAllForUser(userId: String)
-}
-
-/** Data access for the offline action queue (FR-09). */
-@Dao
-interface PendingSyncDao {
-
-    @Insert
-    suspend fun insert(pending: PendingSyncEntity)
-
-    @Query("SELECT * FROM pending_sync WHERE userId = :userId ORDER BY createdAt ASC")
-    suspend fun allForUser(userId: String): List<PendingSyncEntity>
-
-    @Query("DELETE FROM pending_sync WHERE id = :id")
-    suspend fun delete(id: Long)
-
-    @Query("UPDATE pending_sync SET retryCount = retryCount + 1 WHERE id = :id")
-    suspend fun incrementRetry(id: Long)
-
-    @Query("SELECT COUNT(*) FROM pending_sync WHERE userId = :userId")
-    suspend fun countForUser(userId: String): Int
-
-    @Query("DELETE FROM pending_sync WHERE userId = :userId")
     suspend fun deleteAllForUser(userId: String)
 }

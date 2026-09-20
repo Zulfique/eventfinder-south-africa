@@ -5,8 +5,8 @@ import androidx.room.Index
 import androidx.room.PrimaryKey
 
 /**
- * Room entity for a registered user. Mirrors the `UserEntity` model from the
- * Part 1 design document §7.1. The password is stored as a salted PBKDF2 hash.
+ * Room entity for a registered user.
+ * The password is stored as a salted PBKDF2 hash.
  */
 @Entity(tableName = "users")
 data class UserEntity(
@@ -22,9 +22,8 @@ data class UserEntity(
 )
 
 /**
- * Room entity for an event. Mirrors `EventEntity` from §7.1 including the
- * favourite flag and the external-source indicator for the offline-first
- * prototype behaviour.
+ * Room entity for an event. All events live in this local catalogue —
+ * seed/demo events, user-created events, and externally-discovered events.
  */
 @Entity(
     tableName = "events",
@@ -42,16 +41,15 @@ data class EventEntity(
     val latitude: Double,
     val longitude: Double,
     val imageUrl: String?,
+    /** True = visible in this device's local catalogue. Has no cross-device semantics. */
     val isPublic: Boolean,
     val organizerId: String,
     val organizerName: String,
     val attendeeCount: Int,
-    val isCreatedByUser: Boolean,
-    /** True if this event was fetched from an external provider (e.g. a remote events API). */
-    val isExternal: Boolean
+    val isCreatedByUser: Boolean
 )
 
-/** Room entity for a favourite link (schema §5.3 / §7.1). */
+/** Room entity for a favourite link. */
 @Entity(
     tableName = "favorites",
     primaryKeys = ["userId", "eventId"]
@@ -59,12 +57,10 @@ data class EventEntity(
 data class FavoriteEntity(
     val userId: String,
     val eventId: String,
-    val createdAt: Long,
-    /** True once the local operation journal entry for this mutation has been drained. */
-    val isFlushed: Boolean
+    val createdAt: Long
 )
 
-/** Room entity for an RSVP link (schema §5.3). */
+/** Room entity for an RSVP link. */
 @Entity(
     tableName = "rsvps",
     primaryKeys = ["userId", "eventId"]
@@ -73,26 +69,5 @@ data class RsvpEntity(
     val userId: String,
     val eventId: String,
     val status: String,
-    val createdAt: Long,
-    /** True once the local operation journal entry for this mutation has been drained. */
-    val isFlushed: Boolean
-)
-
-/**
- * Local durable operation journal. Each row records a mutation (event create /
- * update / delete, favourite toggle, RSVP toggle) that has not yet been
- * reconciled with the local sync flags. The queue is drained on startup by
- * [EventRepositoryImpl.flushPendingActions], which marks the corresponding
- * entity as flushed and removes the journal entry.
- */
-@Entity(tableName = "pending_sync")
-data class PendingSyncEntity(
-    @PrimaryKey(autoGenerate = true) val id: Long = 0,
-    val entityType: String,
-    val entityId: String,
-    val action: String,
-    val payload: String,
-    val userId: String,
-    val createdAt: Long,
-    val retryCount: Int = 0
+    val createdAt: Long
 )

@@ -17,9 +17,12 @@ import java.util.Locale
  *
  * It deliberately does NOT invent event dates. These are venue/place
  * discovery records and should not be treated as scheduled events.
+ *
+ * If the primary Overpass endpoint fails, a secondary endpoint is tried.
  */
 class OpenStreetMapRepository(
-    private val api: OpenStreetMapApi
+    private val api: OpenStreetMapApi,
+    private val fallbackApi: OpenStreetMapApi? = null
 ) {
 
     private val tag = "OpenStreetMapRepository"
@@ -51,7 +54,16 @@ class OpenStreetMapRepository(
         )
 
         return try {
-            val response = api.queryOverpass(query)
+            val response = try {
+                api.queryOverpass(query)
+            } catch (e: Exception) {
+                if (fallbackApi != null) {
+                    AppLogger.w(tag, "Primary Overpass failed, trying fallback endpoint: ${e.message}")
+                    fallbackApi.queryOverpass(query)
+                } else {
+                    throw e
+                }
+            }
 
             val venues = response.elements
                 .mapNotNull { it.toVenue() }

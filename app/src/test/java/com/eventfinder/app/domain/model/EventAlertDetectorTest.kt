@@ -34,8 +34,7 @@ class EventAlertDetectorTest {
         organizerName = "Organizer",
         attendeeCount = 0,
         isFavorite = false,
-        isCreatedByUser = false,
-        isExternal = true
+        isCreatedByUser = false
     )
 
     @Test

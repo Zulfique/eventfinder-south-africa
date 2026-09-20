@@ -5,7 +5,7 @@
 ![Jetpack Compose](https://img.shields.io/badge/Jetpack%20Compose-BOM%202024.02-4285F4?logo=jetpackcompose&logoColor=white)
 ![minSdk](https://img.shields.io/badge/minSdk-26-brightgreen)
 ![targetSdk](https://img.shields.io/badge/targetSdk-34-brightgreen)
-![Tests](https://img.shields.io/badge/unit%20tests-107%20passing-success)
+![Tests](https://img.shields.io/badge/unit%20tests-103%20passing-success)
 
 A native **Android (Kotlin + Jetpack Compose)** app that helps people across South Africa
 discover, save and create local events — from Joburg jazz nights to Cape Town food markets
@@ -53,7 +53,7 @@ and runs on a physical device or emulator.
 | **Settings** | Language switch (English / Afrikaans), biometric login toggle, event reminders, new-event alerts, plus account tools (change password, clear local cache, delete account). |
 | **Auth** | Local email + password registration and login (PBKDF2-hashed), plus biometric unlock. Forgot password performs a local email-lookup and password change is available in Settings. |
 | **Reminders** | `AlarmManager` + `NotificationChannel` reminders **24 hours and 1 hour** before an attended event, cancelled when the RSVP is declined. |
-| **Event alerts** | After app startup, on-device notifications flag brand-new future events and changes to favourited events — computed by a pure diff, no push service required. |
+| **Event alerts** | On-device notifications flag newly added or changed events in the local Room catalogue — computed by a pure diff, no push service required. |
 
 ## Screenshots
 
@@ -224,10 +224,10 @@ through `LocaleManager` in `MainActivity.attachBaseContext`.
 ## Offline-first behaviour
 
 - Events, favourites and RSVPs are cached in **Room** and observed as `Flow`s, so the UI renders instantly.
-- Favourite, RSVP and event mutations are wrapped in **atomic `@Transaction` boundaries** that pair the local write with a local operation journal entry, preventing crash-induced inconsistencies.
-- The pending-operation journal is drained on app startup by `EventRepository.flushPendingActions()`, which reconciles local entity flags and removes completed journal entries. Each action is retried individually with per-action error handling.
+- Favourite, RSVP and event mutations are wrapped in **atomic `@Transaction` boundaries** for consistency.
+- The app attempts to discover public JSON event feeds when online; discovery failure never blocks the local catalogue.
 - Reminder alarms carry the owning `userId` and `ReminderReceiver` verifies the active session before posting, preventing stale-account notifications.
-- The UI never blocks on the network: a failed sync simply keeps the cached catalogue.
+- The UI never blocks on the network: a failed discovery simply keeps the cached catalogue.
 
 ## Security
 
@@ -286,7 +286,7 @@ adb install -r app\build\outputs\apk\debug\app-debug.apk
 
 ## Testing
 
-The project has **107 JVM unit tests** across 13 suites, all runnable from the command line with
+The project has **103 JVM unit tests** across 13 suites, all runnable from the command line with
 no emulator:
 
 ```bash
@@ -306,7 +306,7 @@ no emulator:
 | `CreateEventValidationTest` | Per-step wizard validation (required title/description, future date, venue, coordinate ranges) that drives the inline error messages. |
 | `EventAlertDetectorTest` | Pure new-event / favourite-changed diffing, including quiet first sync and past-event suppression. |
 | `DateTimeUtilsTest` | Relative date helpers (today/tomorrow, day & hour offsets) and stable date formatting. |
-| `LoginViewModelTest` | Password-reset mismatch and not-available (backend-disabled) flows with a fake repository. |
+| `LoginViewModelTest` | Password-reset flows (mismatch, success) with a fake repository. |
 
 HTML reports are written to `app/build/reports/tests/testDebugUnitTest/index.html`.
 
@@ -339,6 +339,7 @@ GitHub Actions runs on every push / PR to `main` (`.github/workflows/android-ci.
 5. Upload the test report and the debug APK as build artifacts
 
 CI never depends on a secret to compile — all external APIs are keyless.
+The pipeline runs unit tests, lint, and assembles a debug APK.
 
 ## Project structure
 
@@ -346,8 +347,10 @@ CI never depends on a secret to compile — all external APIs are keyless.
 app/src/main/java/com/eventfinder/app/
 ├── data/
 │   ├── local/          Room entities, DAOs, database + entity↔domain mappers
-│   ├── remote/         Retrofit services, DTOs, API client (Open-Meteo + Overpass)
-│   ├── repository/     Event / Auth / Weather repositories + sample seed data
+│   ├── remote/         Retrofit services, DTOs, API client (Open-Meteo + Overpass + public JSON)
+│   ├── remote/model/   Provider-independent RemoteEvent model
+│   ├── repository/     Event / Auth / Weather / Discovery repositories + sample seed data
+│   ├── sources/        EventSource interface, PublicJsonEventSource, mapper, South Africa config
 │   └── store/          DataStore user preferences
 ├── di/                 AppContainer (manual dependency injection)
 ├── domain/model/       Event, User, RSVP, categories, filter/sort engine
@@ -372,7 +375,7 @@ docs/screenshots/                        Real device screenshots
 | External library integration | Room, Retrofit/OkHttp, DataStore, Coil, osmdroid, AndroidX Biometric |
 | Native Android SDK integration | `AlarmManager` + `NotificationManager` reminders, `LocationManager`/location permissions, biometrics |
 | Offline-first / robustness | Room cache + local operation journal, graceful fallbacks, validation on every form |
-| Unit testing | 107 JVM tests + 6 Compose instrumented tests + GitHub Actions CI |
+| Unit testing | 103 JVM tests + 6 Compose instrumented tests + GitHub Actions CI |
 | Logging & comments | `AppLogger` used across data/UI layers; KDoc on every class |
 | Documentation | This README with Mermaid architecture diagrams |
 
@@ -388,7 +391,8 @@ features that need a shared server are intentionally out of scope:
 - **Push notifications** are replaced by on-device notifications (`AlarmManager` +
   `NotificationManager`); true push would need Firebase Cloud Messaging.
 - **Default city / radius** preferences exist in the data layer but have no settings UI yet.
-- **Offline operation journal** — the pending queue is a local-only journal reconciled on startup; entity flags track which mutations have been flushed. Multi-device synchronisation would require a shared backend.
+- **Public event feeds** — the architecture supports keyless public JSON event sources via `EventDiscoveryRepository`, but no sources are configured yet. When sources are added, events are deduplicated by `source:sourceId` and stored in Room alongside demo and user-created events.
+- **isPublic** means "visible in this device's local catalogue only" — there is no cross-device sharing.
 
 ## Attribution & licences
 

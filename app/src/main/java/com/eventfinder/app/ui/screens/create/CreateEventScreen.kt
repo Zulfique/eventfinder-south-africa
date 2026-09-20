@@ -79,7 +79,7 @@ import java.util.Calendar
 
 /**
  * Screen 8 (Create Event): a multi-step wizard covering details, date/venue
- * and a final review before the event is published locally + queued for REST.
+ * and a final review before the event is published to the local Room catalogue.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

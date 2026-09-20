@@ -7,24 +7,19 @@ import androidx.room.RoomDatabase
 import androidx.room.Transaction
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
-import com.eventfinder.app.domain.model.Event
 import com.eventfinder.app.domain.model.User
 
-/**
- * Transactional operations that the repository needs. Extracted into an
- * interface so tests can provide fakes without Room dependencies.
- */
 interface DatabaseTransactionHelper {
-    /** Atomically mutates a favourite and enqueues the journal entry. */
-    suspend fun setFavoriteAtomically(userId: String, eventId: String, favorite: Boolean, pendingAction: String, pendingPayload: String)
-    /** Atomically mutates an RSVP and enqueues the journal entry. */
-    suspend fun setRsvpAtomically(userId: String, eventId: String, status: String, pendingPayload: String)
-    /** Atomically creates an event and enqueues the journal entry. */
-    suspend fun createEventAtomically(event: EventEntity, userId: String, pendingPayload: String)
-    /** Atomically updates an event and enqueues the journal entry. */
-    suspend fun updateEventAtomically(event: EventEntity, userId: String, pendingPayload: String)
-    /** Atomically deletes an event, its favourite/RSVP links, and queues a journal entry. */
-    suspend fun deleteEventAtomically(eventId: String, userId: String, pendingPayload: String)
+    /** Atomically inserts or removes a favourite. */
+    suspend fun setFavoriteAtomically(userId: String, eventId: String, favorite: Boolean)
+    /** Atomically upserts an RSVP. */
+    suspend fun setRsvpAtomically(userId: String, eventId: String, status: String)
+    /** Atomically creates an event. */
+    suspend fun createEventAtomically(event: EventEntity)
+    /** Atomically updates an event. */
+    suspend fun updateEventAtomically(event: EventEntity)
+    /** Atomically deletes an event, its favourite/RSVP links. */
+    suspend fun deleteEventAtomically(eventId: String, userId: String)
     /** Atomically deletes all user data during account deletion. */
     suspend fun deleteAccountData(userId: String)
 }
@@ -36,25 +31,20 @@ interface DatabaseTransactionHelper {
  * Changes favorites and rsvps primary keys from (eventId) to (userId, eventId).
  *
  * Legacy rows: v1 did not store account ownership, so existing relationship
- * records (favorites, RSVPs) are retained under a 'legacy' owner. These rows
- * are effectively orphaned — no logged-in user can query them — but they are
- * preserved to avoid data loss during the schema upgrade.
+ * records (favorites, RSVPs) are retained under a 'legacy' owner.
  */
 private val MIGRATION_1_2 = object : Migration(1, 2) {
     override fun migrate(db: SupportSQLiteDatabase) {
-        // favorites: recreate with composite PK
         db.execSQL("CREATE TABLE IF NOT EXISTS favorites_new (userId TEXT NOT NULL, eventId TEXT NOT NULL, createdAt INTEGER NOT NULL, isSynced INTEGER NOT NULL, PRIMARY KEY(userId, eventId))")
         db.execSQL("INSERT INTO favorites_new (userId, eventId, createdAt, isSynced) SELECT 'legacy', eventId, createdAt, isSynced FROM favorites")
         db.execSQL("DROP TABLE favorites")
         db.execSQL("ALTER TABLE favorites_new RENAME TO favorites")
 
-        // rsvps: recreate with composite PK
         db.execSQL("CREATE TABLE IF NOT EXISTS rsvps_new (userId TEXT NOT NULL, eventId TEXT NOT NULL, status TEXT NOT NULL, createdAt INTEGER NOT NULL, isSynced INTEGER NOT NULL, PRIMARY KEY(userId, eventId))")
         db.execSQL("INSERT INTO rsvps_new (userId, eventId, status, createdAt, isSynced) SELECT 'legacy', eventId, status, createdAt, isSynced FROM rsvps")
         db.execSQL("DROP TABLE rsvps")
         db.execSQL("ALTER TABLE rsvps_new RENAME TO rsvps")
 
-        // pending_sync: add userId column
         db.execSQL("ALTER TABLE pending_sync ADD COLUMN userId TEXT NOT NULL DEFAULT ''")
     }
 }
@@ -63,9 +53,6 @@ private val MIGRATION_1_2 = object : Migration(1, 2) {
  * Room database migration from v2 to v3.
  *
  * Drops the dead `isFavorite` column from the events table.
- * The favourite relationship is now exclusively represented by the
- * `favorites` table (userId, eventId); the column was always set to false
- * after the v1→v2 migration and was never authoritative.
  */
 private val MIGRATION_2_3 = object : Migration(2, 3) {
     override fun migrate(db: SupportSQLiteDatabase) {
@@ -81,15 +68,13 @@ private val MIGRATION_2_3 = object : Migration(2, 3) {
 /**
  * Room database migration from v3 to v4.
  *
- * Renames misleadingly-named columns that date from the original cloud-sync
- * design:
- *  - events.isSynced → events.isExternal  (true = sourced from an external provider)
- *  - favorites.isSynced → favorites.isFlushed (true = journal entry drained)
- *  - rsvps.isSynced → rsvps.isFlushed
+ * Renames columns from the original cloud-sync design:
+ *  - events.isSynced -> events.isExternal
+ *  - favorites.isSynced -> favorites.isFlushed
+ *  - rsvps.isSynced -> rsvps.isFlushed
  */
 private val MIGRATION_3_4 = object : Migration(3, 4) {
     override fun migrate(db: SupportSQLiteDatabase) {
-        // events: recreate with isExternal instead of isSynced
         db.execSQL("CREATE TABLE IF NOT EXISTS events_new (id TEXT NOT NULL, title TEXT NOT NULL, description TEXT NOT NULL, category TEXT NOT NULL, startDate INTEGER NOT NULL, endDate INTEGER NOT NULL, venueName TEXT NOT NULL, address TEXT NOT NULL, latitude REAL NOT NULL, longitude REAL NOT NULL, imageUrl TEXT, isPublic INTEGER NOT NULL, organizerId TEXT NOT NULL, organizerName TEXT NOT NULL, attendeeCount INTEGER NOT NULL, isCreatedByUser INTEGER NOT NULL, isExternal INTEGER NOT NULL, PRIMARY KEY(id))")
         db.execSQL("INSERT INTO events_new (id, title, description, category, startDate, endDate, venueName, address, latitude, longitude, imageUrl, isPublic, organizerId, organizerName, attendeeCount, isCreatedByUser, isExternal) SELECT id, title, description, category, startDate, endDate, venueName, address, latitude, longitude, imageUrl, isPublic, organizerId, organizerName, attendeeCount, isCreatedByUser, isSynced FROM events")
         db.execSQL("DROP TABLE events")
@@ -97,13 +82,11 @@ private val MIGRATION_3_4 = object : Migration(3, 4) {
         db.execSQL("CREATE INDEX IF NOT EXISTS index_events_category ON events(category)")
         db.execSQL("CREATE INDEX IF NOT EXISTS index_events_startDate ON events(startDate)")
 
-        // favorites: recreate with isFlushed instead of isSynced
         db.execSQL("CREATE TABLE IF NOT EXISTS favorites_new (userId TEXT NOT NULL, eventId TEXT NOT NULL, createdAt INTEGER NOT NULL, isFlushed INTEGER NOT NULL, PRIMARY KEY(userId, eventId))")
         db.execSQL("INSERT INTO favorites_new (userId, eventId, createdAt, isFlushed) SELECT userId, eventId, createdAt, isSynced FROM favorites")
         db.execSQL("DROP TABLE favorites")
         db.execSQL("ALTER TABLE favorites_new RENAME TO favorites")
 
-        // rsvps: recreate with isFlushed instead of isSynced
         db.execSQL("CREATE TABLE IF NOT EXISTS rsvps_new (userId TEXT NOT NULL, eventId TEXT NOT NULL, status TEXT NOT NULL, createdAt INTEGER NOT NULL, isFlushed INTEGER NOT NULL, PRIMARY KEY(userId, eventId))")
         db.execSQL("INSERT INTO rsvps_new (userId, eventId, status, createdAt, isFlushed) SELECT userId, eventId, status, createdAt, isSynced FROM rsvps")
         db.execSQL("DROP TABLE rsvps")
@@ -112,22 +95,45 @@ private val MIGRATION_3_4 = object : Migration(3, 4) {
 }
 
 /**
- * Local persistence layer (Room) implementing the offline-first strategy from
- * FR-09 of the design document (§7.1 Local Database Models).
+ * Room database migration from v4 to v5.
  *
- * References:
- *  - Android Developers, "Room Persistence Library":
- *    https://developer.android.com/training/data-storage/room
+ * Removes legacy cloud-sync columns now that there is no backend:
+ *  - events: drops isExternal (was always false)
+ *  - favorites: drops isFlushed (no journal to reconcile)
+ *  - rsvps: drops isFlushed
+ *  - drops pending_sync table entirely (no pending-operation journal)
  */
+private val MIGRATION_4_5 = object : Migration(4, 5) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("CREATE TABLE IF NOT EXISTS events_new (id TEXT NOT NULL, title TEXT NOT NULL, description TEXT NOT NULL, category TEXT NOT NULL, startDate INTEGER NOT NULL, endDate INTEGER NOT NULL, venueName TEXT NOT NULL, address TEXT NOT NULL, latitude REAL NOT NULL, longitude REAL NOT NULL, imageUrl TEXT, isPublic INTEGER NOT NULL, organizerId TEXT NOT NULL, organizerName TEXT NOT NULL, attendeeCount INTEGER NOT NULL, isCreatedByUser INTEGER NOT NULL, PRIMARY KEY(id))")
+        db.execSQL("INSERT INTO events_new (id, title, description, category, startDate, endDate, venueName, address, latitude, longitude, imageUrl, isPublic, organizerId, organizerName, attendeeCount, isCreatedByUser) SELECT id, title, description, category, startDate, endDate, venueName, address, latitude, longitude, imageUrl, isPublic, organizerId, organizerName, attendeeCount, isCreatedByUser FROM events")
+        db.execSQL("DROP TABLE events")
+        db.execSQL("ALTER TABLE events_new RENAME TO events")
+        db.execSQL("CREATE INDEX IF NOT EXISTS index_events_category ON events(category)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS index_events_startDate ON events(startDate)")
+
+        db.execSQL("CREATE TABLE IF NOT EXISTS favorites_new (userId TEXT NOT NULL, eventId TEXT NOT NULL, createdAt INTEGER NOT NULL, PRIMARY KEY(userId, eventId))")
+        db.execSQL("INSERT INTO favorites_new (userId, eventId, createdAt) SELECT userId, eventId, createdAt FROM favorites")
+        db.execSQL("DROP TABLE favorites")
+        db.execSQL("ALTER TABLE favorites_new RENAME TO favorites")
+
+        db.execSQL("CREATE TABLE IF NOT EXISTS rsvps_new (userId TEXT NOT NULL, eventId TEXT NOT NULL, status TEXT NOT NULL, createdAt INTEGER NOT NULL, PRIMARY KEY(userId, eventId))")
+        db.execSQL("INSERT INTO rsvps_new (userId, eventId, status, createdAt) SELECT userId, eventId, status, createdAt FROM rsvps")
+        db.execSQL("DROP TABLE rsvps")
+        db.execSQL("ALTER TABLE rsvps_new RENAME TO rsvps")
+
+        db.execSQL("DROP TABLE IF EXISTS pending_sync")
+    }
+}
+
 @Database(
     entities = [
         UserEntity::class,
         EventEntity::class,
         FavoriteEntity::class,
-        RsvpEntity::class,
-        PendingSyncEntity::class
+        RsvpEntity::class
     ],
-    version = 4,
+    version = 5,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase(), DatabaseTransactionHelper {
@@ -136,79 +142,37 @@ abstract class AppDatabase : RoomDatabase(), DatabaseTransactionHelper {
     abstract fun eventDao(): EventDao
     abstract fun favoriteDao(): FavoriteDao
     abstract fun rsvpDao(): RsvpDao
-    abstract fun pendingSyncDao(): PendingSyncDao
 
     @Transaction
-    override suspend fun setFavoriteAtomically(userId: String, eventId: String, favorite: Boolean, pendingAction: String, pendingPayload: String) {
+    override suspend fun setFavoriteAtomically(userId: String, eventId: String, favorite: Boolean) {
         if (favorite) {
             favoriteDao().insert(
-                FavoriteEntity(userId = userId, eventId = eventId, createdAt = System.currentTimeMillis(), isFlushed = false)
+                FavoriteEntity(userId = userId, eventId = eventId, createdAt = System.currentTimeMillis())
             )
         } else {
             favoriteDao().delete(userId, eventId)
         }
-        pendingSyncDao().insert(
-            PendingSyncEntity(
-                entityType = "favorite",
-                entityId = eventId,
-                action = pendingAction,
-                payload = pendingPayload,
-                userId = userId,
-                createdAt = System.currentTimeMillis()
-            )
-        )
     }
 
     @Transaction
-    override suspend fun setRsvpAtomically(userId: String, eventId: String, status: String, pendingPayload: String) {
+    override suspend fun setRsvpAtomically(userId: String, eventId: String, status: String) {
         rsvpDao().upsert(
-            RsvpEntity(userId = userId, eventId = eventId, status = status, createdAt = System.currentTimeMillis(), isFlushed = false)
-        )
-        pendingSyncDao().insert(
-            PendingSyncEntity(
-                entityType = "rsvp",
-                entityId = eventId,
-                action = "update",
-                payload = pendingPayload,
-                userId = userId,
-                createdAt = System.currentTimeMillis()
-            )
+            RsvpEntity(userId = userId, eventId = eventId, status = status, createdAt = System.currentTimeMillis())
         )
     }
 
     @Transaction
-    override suspend fun createEventAtomically(event: EventEntity, userId: String, pendingPayload: String) {
+    override suspend fun createEventAtomically(event: EventEntity) {
         eventDao().upsert(event)
-        pendingSyncDao().insert(
-            PendingSyncEntity(
-                entityType = "event",
-                entityId = event.id,
-                action = "create",
-                payload = pendingPayload,
-                userId = userId,
-                createdAt = System.currentTimeMillis()
-            )
-        )
     }
 
     @Transaction
-    override suspend fun updateEventAtomically(event: EventEntity, userId: String, pendingPayload: String) {
+    override suspend fun updateEventAtomically(event: EventEntity) {
         eventDao().upsert(event)
-        pendingSyncDao().insert(
-            PendingSyncEntity(
-                entityType = "event",
-                entityId = event.id,
-                action = "update",
-                payload = pendingPayload,
-                userId = userId,
-                createdAt = System.currentTimeMillis()
-            )
-        )
     }
 
     @Transaction
     override suspend fun deleteAccountData(userId: String) {
-        pendingSyncDao().deleteAllForUser(userId)
         favoriteDao().deleteAllForUser(userId)
         rsvpDao().deleteAllForUser(userId)
         eventDao().deleteCreatedByUserId(userId)
@@ -216,33 +180,22 @@ abstract class AppDatabase : RoomDatabase(), DatabaseTransactionHelper {
     }
 
     @Transaction
-    override suspend fun deleteEventAtomically(eventId: String, userId: String, pendingPayload: String) {
+    override suspend fun deleteEventAtomically(eventId: String, userId: String) {
         eventDao().deleteById(eventId)
         favoriteDao().delete(userId, eventId)
         rsvpDao().delete(userId, eventId)
-        pendingSyncDao().insert(
-            PendingSyncEntity(
-                entityType = "event",
-                entityId = eventId,
-                action = "delete",
-                payload = pendingPayload,
-                userId = userId,
-                createdAt = System.currentTimeMillis()
-            )
-        )
     }
 
     companion object {
         private const val DB_NAME = "eventfinder.db"
 
-        /** Build the database instance. Room is a singleton to avoid leaks. */
         fun build(context: Context): AppDatabase =
             Room.databaseBuilder(
                 context.applicationContext,
                 AppDatabase::class.java,
                 DB_NAME
             )
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
                 .build()
     }
 }
@@ -260,23 +213,23 @@ fun UserEntity.toDomain(): User = User(
 )
 
 /** Maps a Room event row onto the immutable domain model. */
-fun EventEntity.toDomain(): Event = Event(
-    id = id,
-    title = title,
-    description = description,
-    category = com.eventfinder.app.domain.model.EventCategory.fromLabelKey(category),
-    startDate = startDate,
-    endDate = endDate,
-    venueName = venueName,
-    address = address,
-    latitude = latitude,
-    longitude = longitude,
-    imageUrl = imageUrl,
-    isPublic = isPublic,
-    organizerId = organizerId,
-    organizerName = organizerName,
-    attendeeCount = attendeeCount,
-    isFavorite = false,
-    isCreatedByUser = isCreatedByUser,
-    isExternal = isExternal
-)
+fun EventEntity.toDomain(): com.eventfinder.app.domain.model.Event =
+    com.eventfinder.app.domain.model.Event(
+        id = id,
+        title = title,
+        description = description,
+        category = com.eventfinder.app.domain.model.EventCategory.fromLabelKey(category),
+        startDate = startDate,
+        endDate = endDate,
+        venueName = venueName,
+        address = address,
+        latitude = latitude,
+        longitude = longitude,
+        imageUrl = imageUrl,
+        isPublic = isPublic,
+        organizerId = organizerId,
+        organizerName = organizerName,
+        attendeeCount = attendeeCount,
+        isFavorite = false,
+        isCreatedByUser = isCreatedByUser
+    )

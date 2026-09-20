@@ -3,13 +3,16 @@ package com.eventfinder.app.di
 import android.content.Context
 import com.eventfinder.app.data.local.AppDatabase
 import com.eventfinder.app.data.remote.ApiClient
+import com.eventfinder.app.data.remote.PublicJsonEventClient
 import com.eventfinder.app.data.repository.AuthRepository
 import com.eventfinder.app.data.repository.AuthRepositoryImpl
+import com.eventfinder.app.data.repository.EventDiscoveryRepository
 import com.eventfinder.app.data.repository.EventRepository
 import com.eventfinder.app.data.repository.EventRepositoryImpl
 import com.eventfinder.app.data.repository.OpenStreetMapRepository
 import com.eventfinder.app.data.repository.WeatherRepository
 import com.eventfinder.app.data.repository.WeatherRepositoryImpl
+import com.eventfinder.app.data.sources.SouthAfricaEventSources
 import com.eventfinder.app.data.store.UserPreferences
 import com.eventfinder.app.utils.AppLogger
 import com.eventfinder.app.utils.NetworkMonitor
@@ -19,7 +22,7 @@ import com.eventfinder.app.utils.NetworkMonitor
  *
  * Works well for a prototype and keeps constructors explicit so repositories
  * can be replaced with fakes in unit tests without reflection or heavyweight
- * frameworks. Annotation-based DI (Hilt) is documented as a final-POE upgrade.
+ * frameworks.
  */
 class AppContainer(context: Context) {
 
@@ -45,7 +48,6 @@ class AppContainer(context: Context) {
             eventDao = database.eventDao(),
             favoriteDao = database.favoriteDao(),
             rsvpDao = database.rsvpDao(),
-            pendingSyncDao = database.pendingSyncDao(),
             preferences = preferences,
             context = appContext
         )
@@ -57,9 +59,19 @@ class AppContainer(context: Context) {
 
     val openStreetMapRepository: OpenStreetMapRepository by lazy {
         OpenStreetMapRepository(
-            ApiClient.openStreetMapApi(
-                appContext.cacheDir
-            )
+            api = ApiClient.openStreetMapApi(appContext.cacheDir),
+            fallbackApi = ApiClient.openStreetMapFallbackApi(appContext.cacheDir)
+        )
+    }
+
+    private val publicJsonEventClient: PublicJsonEventClient by lazy {
+        ApiClient.publicJsonEventClient(appContext.cacheDir)
+    }
+
+    val eventDiscoveryRepository: EventDiscoveryRepository by lazy {
+        EventDiscoveryRepository(
+            eventDao = database.eventDao(),
+            sources = SouthAfricaEventSources.create(publicJsonEventClient)
         )
     }
 

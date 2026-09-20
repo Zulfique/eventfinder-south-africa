@@ -7,7 +7,6 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.eventfinder.app.R
-import com.eventfinder.app.data.repository.SyncResult
 import com.eventfinder.app.di.AppContainer
 import com.eventfinder.app.domain.model.Event
 import com.eventfinder.app.domain.model.EventCategory
@@ -47,8 +46,7 @@ data class HomeUiState(
 
 /**
  * Home screen logic (Screens 4 & 5): live event catalogue, category + keyword +
- * radius filtering (FR-02), proximity sorting and the map/list toggle. All list
- * manipulation funnels through [EventFilterer] so the rules are unit-tested.
+ * radius filtering (FR-02), proximity sorting and the map/list toggle.
  */
 class HomeViewModel(
     private val container: AppContainer,
@@ -56,6 +54,7 @@ class HomeViewModel(
 ) : ViewModel() {
 
     private val eventRepository = container.eventRepository
+    private val eventDiscoveryRepository = container.eventDiscoveryRepository
     private val preferences = container.preferences
 
     private val _uiState = MutableStateFlow(HomeUiState())
@@ -64,7 +63,6 @@ class HomeViewModel(
     val uiState: StateFlow<HomeUiState> = _uiState
     val messages: kotlinx.coroutines.flow.SharedFlow<UiMessage> = _messages
 
-    // Reactive filter inputs
     private val queryFlow = MutableStateFlow("")
     private val categoryFlow = MutableStateFlow<EventCategory?>(null)
     private val sortFlow = MutableStateFlow(EventSort.DATE)
@@ -84,29 +82,18 @@ class HomeViewModel(
     )
 
     init {
-        // Preferences (radius default), connectivity and content pipeline.
         viewModelScope.launch {
             preferences.defaultRadiusKm.first().let { radiusFlow.value = it }
         }
-        viewModelScope.launch {
-            container.networkMonitor.isOnline
-                .collect { online ->
-                    val wasOffline = _uiState.value.isOffline
-                    _uiState.value = _uiState.value.copy(isOffline = !online)
-                    if (online && wasOffline) {
-                        AppLogger.i("HomeViewModel", "Internet available - refreshing local journal")
-                        flushPendingActions()
-                    }
-                }
-        }
 
-        // Seed the offline cache on startup.
+        // Seed demo events, then attempt to discover public JSON feeds when online.
         viewModelScope.launch {
             eventRepository.ensureSeeded()
-            flushPendingActions()
+            runCatching { eventDiscoveryRepository.refresh() }.onFailure {
+                AppLogger.e("HomeViewModel", "Event discovery failed", it)
+            }
         }
 
-        // Combine catalog + favourites + RSVPs, then apply current controls.
         val combinedFlow = combine(
             eventRepository.observeAllEvents(),
             eventRepository.observeRsvpStatuses()
@@ -114,8 +101,6 @@ class HomeViewModel(
             Combined(events, rsvps)
         }
 
-        // Kotlin's `combine` only has typed overloads up to five flows, so the
-        // six control inputs are grouped into two triples that are combined again.
         val textControlsFlow = combine(queryFlow, categoryFlow, sortFlow) { query, category, sort ->
             Triple(query, category, sort)
         }
@@ -150,8 +135,6 @@ class HomeViewModel(
         return EventFilterer.attachDistances(sorted, userLat, userLng)
             .map { it.copy(rsvpStatus = combined.rsvps[it.event.id]) }
     }
-
-    // ---- User actions ----
 
     fun onQueryChange(value: String) {
         queryFlow.value = value
@@ -240,27 +223,24 @@ class HomeViewModel(
     fun refresh() {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
-            flushPendingActions()
+            runCatching { eventDiscoveryRepository.refresh() }.onFailure {
+                AppLogger.e("HomeViewModel", "Event discovery failed on refresh", it)
+            }
         }
     }
 
-    private suspend fun flushPendingActions() {
-        when (eventRepository.flushPendingActions()) {
-            SyncResult.Synced ->
+    fun refreshEvents() {
+        viewModelScope.launch {
+            val result = runCatching { eventDiscoveryRepository.refresh() }
+            result.onSuccess {
                 AppLogger.i(
                     "HomeViewModel",
-                    "Local pending journal reconciled"
+                    "Event discovery: fetched=${it.fetched}, inserted=${it.inserted}, failedSources=${it.failedSources}"
                 )
-            SyncResult.NoSession ->
-                AppLogger.d(
-                    "HomeViewModel",
-                    "No active session - local journal not processed"
-                )
-            SyncResult.Failed ->
-                AppLogger.w(
-                    "HomeViewModel",
-                    "Some local journal entries remain"
-                )
+            }
+            result.onFailure {
+                AppLogger.e("HomeViewModel", "Event discovery failed", it)
+            }
         }
     }
 

@@ -14,6 +14,7 @@ object ApiClient {
 
     private const val OM_BASE_URL = "https://api.open-meteo.com/"
     private const val OSM_OVERPASS_BASE_URL = "https://overpass-api.de/"
+    private const val OSM_OVERPASS_FALLBACK_URL = "https://overpass.kumi.systems/"
 
     private val gson: Gson = GsonBuilder()
         .setLenient()
@@ -63,6 +64,18 @@ object ApiClient {
             OSM_OVERPASS_BASE_URL,
             cacheDir
         ).create(OpenStreetMapApi::class.java)
+
+    fun openStreetMapFallbackApi(cacheDir: File?): OpenStreetMapApi =
+        retrofit(
+            OSM_OVERPASS_FALLBACK_URL,
+            cacheDir
+        ).create(OpenStreetMapApi::class.java)
+
+    fun publicJsonEventClient(cacheDir: File?): PublicJsonEventClient =
+        PublicJsonEventClient(
+            httpClient = httpClient(cacheDir),
+            gson = gson
+        )
 
     private fun retrofit(
         baseUrl: String,

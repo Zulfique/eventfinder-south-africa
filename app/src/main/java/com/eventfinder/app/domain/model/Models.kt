@@ -1,6 +1,6 @@
 package com.eventfinder.app.domain.model
 
-/** RSVP status values defined in the Part 1 design document (§5.3). */
+/** RSVP status values. */
 enum class RsvpStatus(val storage: String) {
     ATTENDING("attending"),
     MAYBE("maybe"),
@@ -16,8 +16,9 @@ enum class RsvpStatus(val storage: String) {
 enum class EventSort { DATE, DISTANCE, NAME }
 
 /**
- * Domain model for an event. Mirrors the `EventResponse` DTO from the Part 1
- * API specification (§5.3) and the room `EventEntity` defined in §7.1.
+ * Domain model for an event. All events in the local Room catalogue share
+ * this model — seed/demo events, user-created events, and externally-
+ * discovered events.
  */
 data class Event(
     val id: String,
@@ -31,13 +32,13 @@ data class Event(
     val latitude: Double,
     val longitude: Double,
     val imageUrl: String?,
+    /** True = visible in this device's local catalogue only. No cross-device semantics. */
     val isPublic: Boolean,
     val organizerId: String,
     val organizerName: String,
     val attendeeCount: Int,
     val isFavorite: Boolean,
-    val isCreatedByUser: Boolean,
-    val isExternal: Boolean
+    val isCreatedByUser: Boolean
 )
 
 /** Event combined with the viewing user's context (distance + RSVP state). */
@@ -47,7 +48,7 @@ data class EventView(
     val rsvpStatus: RsvpStatus? = null
 )
 
-/** Registered EventFinder user (subset of the User schema in §5.3). */
+/** Registered EventFinder user. */
 data class User(
     val id: String,
     val fullName: String,

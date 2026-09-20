@@ -41,26 +41,13 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x ./gradlew
 
-      # The free Ticketmaster key is optional: without it the app runs in
-      # offline / demo mode, so CI never depends on a secret to compile.
       - name: Run JVM unit tests
-        env:
-          TICKETMASTER_API_KEY: ${{ secrets.TICKETMASTER_API_KEY }}
         run: ./gradlew testDebugUnitTest --stacktrace
 
       - name: Run lint
-        env:
-          TICKETMASTER_API_KEY: ${{ secrets.TICKETMASTER_API_KEY }}
         run: ./gradlew lintDebug --stacktrace
 
-      - name: Run verification
-        env:
-          TICKETMASTER_API_KEY: ${{ secrets.TICKETMASTER_API_KEY }}
-        run: ./gradlew check --stacktrace
-
       - name: Assemble debug APK
-        env:
-          TICKETMASTER_API_KEY: ${{ secrets.TICKETMASTER_API_KEY }}
         run: ./gradlew assembleDebug --stacktrace
 
       - name: Upload unit test report

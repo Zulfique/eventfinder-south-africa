@@ -4,7 +4,6 @@ import com.eventfinder.app.data.local.DatabaseTransactionHelper
 import com.eventfinder.app.data.local.EventDao
 import com.eventfinder.app.data.local.EventEntity
 import com.eventfinder.app.data.local.FavoriteDao
-import com.eventfinder.app.data.local.PendingSyncDao
 import com.eventfinder.app.data.local.RsvpDao
 import com.eventfinder.app.data.local.toDomain
 import com.eventfinder.app.data.store.SessionProvider
@@ -18,15 +17,10 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 
-/** Outcome of a journal flush operation. */
-sealed interface SyncResult {
-    data object Synced : SyncResult
-    /** No user session is active; queue flush skipped. */
-    data object NoSession : SyncResult
-    data object Failed : SyncResult
-}
+/** Sentinel stored in [NewEventDraft.imageUrl] to indicate the image was removed. */
+const val IMAGE_REMOVED = "\u0000IMAGE_REMOVED"
 
-/** Draft for creating a new community event (FR-06). */
+/** Draft for creating or updating a community event. */
 data class NewEventDraft(
     val title: String,
     val description: String,
@@ -38,13 +32,13 @@ data class NewEventDraft(
     val latitude: Double,
     val longitude: Double,
     val isPublic: Boolean,
+    /** null = unchanged (edit mode), IMAGE_REMOVED = user removed image, otherwise = new image URL. */
     val imageUrl: String? = null
 )
 
 /**
- * Central event catalogue repository. Combines the Room cache (offline-first,
- * FR-09) with sample seed data. The pending-action queue is a local operation
- * journal — Room is the only authoritative store.
+ * Central event catalogue repository backed by Room. Room is the only
+ * authoritative data store. There is no cloud backend.
  */
 interface EventRepository {
     fun observeAllEvents(): Flow<List<Event>>
@@ -59,7 +53,6 @@ interface EventRepository {
     suspend fun deleteEvent(eventId: String): Result<Unit>
     suspend fun getEvent(eventId: String): Event?
     suspend fun clearLocalCache()
-    suspend fun flushPendingActions(): SyncResult
 }
 
 class EventRepositoryImpl(
@@ -67,7 +60,6 @@ class EventRepositoryImpl(
     private val eventDao: EventDao,
     private val favoriteDao: FavoriteDao,
     private val rsvpDao: RsvpDao,
-    private val pendingSyncDao: PendingSyncDao,
     private val preferences: SessionProvider,
     private val context: android.content.Context? = null
 ) : EventRepository {
@@ -119,7 +111,7 @@ class EventRepositoryImpl(
         val count = eventDao.count()
         if (count == 0) {
             val seed = SampleEventsProvider.johannesburgAndCapeTown()
-            eventDao.upsertAll(seed.map { it.toEntity(isExternal = false, isCreatedByUser = false) })
+            eventDao.upsertAll(seed.map { it.toEntity(isCreatedByUser = false) })
             AppLogger.i(tag, "Seeded ${seed.size} sample events into cache")
         } else {
             AppLogger.d(tag, "Cache already contains $count events - no seeding required")
@@ -137,13 +129,7 @@ class EventRepositoryImpl(
         val already = favoriteDao.exists(userId, eventId)
         val newValue = !already
 
-        database.setFavoriteAtomically(
-            userId = userId,
-            eventId = eventId,
-            favorite = newValue,
-            pendingAction = if (newValue) "create" else "delete",
-            pendingPayload = eventId
-        )
+        database.setFavoriteAtomically(userId, eventId, newValue)
         AppLogger.i(tag, "${if (newValue) "Added" else "Removed"} favourite: $eventId")
         return newValue
     }
@@ -155,12 +141,7 @@ class EventRepositoryImpl(
             AppLogger.w(tag, "Cannot set RSVP - event not found: $eventId")
             return
         }
-        database.setRsvpAtomically(
-            userId = userId,
-            eventId = eventId,
-            status = status.storage,
-            pendingPayload = status.storage
-        )
+        database.setRsvpAtomically(userId, eventId, status.storage)
         AppLogger.i(tag, "RSVP updated for $eventId -> ${status.storage}")
     }
 
@@ -185,10 +166,9 @@ class EventRepositoryImpl(
             organizerId = userId,
             organizerName = "You",
             attendeeCount = 0,
-            isCreatedByUser = true,
-            isExternal = false
+            isCreatedByUser = true
         )
-        database.createEventAtomically(entity, userId, "")
+        database.createEventAtomically(entity)
         AppLogger.i(tag, "Community event created locally: $id")
         return Result.success(id)
     }
@@ -206,6 +186,13 @@ class EventRepositoryImpl(
             AppLogger.w(tag, "Update rejected - user $userId does not own event $eventId")
             return Result.failure(SecurityException("not_owner"))
         }
+
+        val newImageUrl = when (draft.imageUrl) {
+            null -> existing.imageUrl
+            IMAGE_REMOVED -> null
+            else -> draft.imageUrl
+        }
+
         val updated = existing.copy(
             title = draft.title.trim(),
             description = draft.description.trim(),
@@ -216,11 +203,10 @@ class EventRepositoryImpl(
             address = draft.address.trim(),
             latitude = draft.latitude,
             longitude = draft.longitude,
-            imageUrl = draft.imageUrl ?: existing.imageUrl,
-            isPublic = draft.isPublic,
-            isExternal = false
+            imageUrl = newImageUrl,
+            isPublic = draft.isPublic
         )
-        database.updateEventAtomically(updated, userId, "")
+        database.updateEventAtomically(updated)
         AppLogger.i(tag, "Community event updated locally: $eventId")
         return Result.success(Unit)
     }
@@ -239,7 +225,7 @@ class EventRepositoryImpl(
             return Result.failure(SecurityException("not_owner"))
         }
         context?.let { com.eventfinder.app.notifications.NotificationHelper.cancelEventReminders(it, eventId) }
-        database.deleteEventAtomically(eventId, userId, "")
+        database.deleteEventAtomically(eventId, userId)
         AppLogger.i(tag, "Community event deleted locally: $eventId")
         return Result.success(Unit)
     }
@@ -250,93 +236,17 @@ class EventRepositoryImpl(
     override suspend fun clearLocalCache() {
         val userId = preferences.sessionUserId.first()
 
-        if (
-            userId != null &&
-            pendingSyncDao.countForUser(userId) > 0
-        ) {
-            AppLogger.w(
-                tag,
-                "Skipping cache clear because pending local changes exist"
-            )
+        if (userId != null && rsvpDao.attendingCount() > 0) {
+            AppLogger.w(tag, "Skipping cache clear because user has active RSVPs")
             return
         }
 
         eventDao.deleteNonUserCreated()
         ensureSeeded()
-
-        AppLogger.i(
-            tag,
-            "External/local catalogue cache cleared and seed data restored"
-        )
+        AppLogger.i(tag, "External/local catalogue cache cleared and seed data restored")
     }
 
-    /**
-     * Drains the local pending-operation queue.
-     *
-     * EventFinder has no cloud backend. Room is the authoritative data store.
-     * The pending queue is therefore a durable local operation journal. Draining
-     * it reconciles local entity flags (marks favorites/RSVPs as flushed and
-     * events as external where appropriate) and removes completed journal entries.
-     */
-    override suspend fun flushPendingActions(): SyncResult {
-        val userId =
-            preferences.sessionUserId.first()
-                ?: return SyncResult.NoSession
-
-        val pending =
-            pendingSyncDao.allForUser(userId)
-
-        if (pending.isEmpty()) {
-            return SyncResult.Synced
-        }
-
-        for (action in pending) {
-            try {
-                when (action.entityType) {
-                    "event" -> {
-                        // Room is the authoritative store.
-                        // Nothing needs to be uploaded or marked externally.
-                    }
-                    "favorite" -> {
-                        favoriteDao.markFlushed(
-                            userId,
-                            action.entityId
-                        )
-                    }
-                    "rsvp" -> {
-                        rsvpDao.markFlushed(
-                            userId,
-                            action.entityId
-                        )
-                    }
-                    else -> {
-                        AppLogger.w(
-                            tag,
-                            "Removing unknown local journal entry ${action.id}"
-                        )
-                    }
-                }
-
-                pendingSyncDao.delete(action.id)
-
-            } catch (e: Exception) {
-
-                AppLogger.e(
-                    tag,
-                    "Failed to reconcile local journal entry ${action.id}",
-                    e
-                )
-
-                pendingSyncDao.incrementRetry(action.id)
-
-                return SyncResult.Failed
-            }
-        }
-
-        return SyncResult.Synced
-    }
-
-    private fun Event.toEntity(isExternal: Boolean, isCreatedByUser: Boolean): EventEntity =
+    private fun Event.toEntity(isCreatedByUser: Boolean): EventEntity =
         EventEntity(
             id = id,
             title = title,
@@ -353,7 +263,6 @@ class EventRepositoryImpl(
             organizerId = organizerId,
             organizerName = organizerName,
             attendeeCount = attendeeCount,
-            isCreatedByUser = isCreatedByUser,
-            isExternal = isExternal
+            isCreatedByUser = isCreatedByUser
         )
 }

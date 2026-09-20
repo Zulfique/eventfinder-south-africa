@@ -9,6 +9,7 @@ import android.content.Context
 import android.net.Uri
 import com.eventfinder.app.R
 import com.eventfinder.app.data.repository.EventRepository
+import com.eventfinder.app.data.repository.IMAGE_REMOVED
 import com.eventfinder.app.data.repository.NewEventDraft
 import com.eventfinder.app.di.AppContainer
 import com.eventfinder.app.domain.model.EventCategory
@@ -81,7 +82,7 @@ internal fun isValidLatitude(raw: String): Boolean = isValidCoordinate(raw, -90.
 internal fun isValidLongitude(raw: String): Boolean = isValidCoordinate(raw, -180.0, 180.0)
 
 internal fun isValidCoordinate(raw: String, min: Double, max: Double): Boolean {
-    if (raw.isBlank()) return true
+    if (raw.isBlank()) return false
     val value = raw.toDoubleOrNull() ?: return false
     return value in min..max
 }
@@ -91,8 +92,7 @@ internal const val MIN_DESCRIPTION_LENGTH = 20
 
 /**
  * Create event wizard (Screen 8). Multi-step form with validation on each
- * step before the event is written to the local cache (REST publishing is
- * queued when offline).
+ * step before the event is written to the local Room catalogue.
  */
 class CreateEventViewModel(
     private val eventRepository: EventRepository,
@@ -158,7 +158,7 @@ class CreateEventViewModel(
     /** Removes the chosen image (and its local copy, if any). */
     fun removeImage() {
         ImageStorage.deleteIfLocal(_uiState.value.imageUrl)
-        _uiState.update { it.copy(imageUrl = null) }
+        _uiState.update { it.copy(imageUrl = IMAGE_REMOVED) }
     }
 
     fun onTitleChange(v: String) = _uiState.update { it.copy(title = v) }
@@ -196,17 +196,20 @@ class CreateEventViewModel(
         ValidationError.INVALID_COORDINATES -> R.string.invalid_coordinates
     }
 
-    /** Publishes the event to the local cache + offline queue. */
+    /** Publishes the event to the local Room catalogue. */
     fun publish() {
         val state = _uiState.value
         if (state.isSubmitting) return
-        // Default coordinates fall back to Johannesburg (South Africa).
-        val defaultLat = -26.2041
-        val defaultLng = 28.0473
         viewModelScope.launch {
             _uiState.update { it.copy(isSubmitting = true) }
-            val lat = state.latitude.toDoubleOrNull() ?: defaultLat
-            val lng = state.longitude.toDoubleOrNull() ?: defaultLng
+            val lat = state.latitude.toDoubleOrNull()
+                ?: return@launch _uiState.update { it.copy(isSubmitting = false) }.also {
+                    _messages.tryEmit(UiMessage.Resource(R.string.invalid_coordinates))
+                }
+            val lng = state.longitude.toDoubleOrNull()
+                ?: return@launch _uiState.update { it.copy(isSubmitting = false) }.also {
+                    _messages.tryEmit(UiMessage.Resource(R.string.invalid_coordinates))
+                }
             val draft = NewEventDraft(
                 title = state.title.trim(),
                 description = state.description.trim(),

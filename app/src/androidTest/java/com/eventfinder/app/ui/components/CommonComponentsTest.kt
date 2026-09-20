@@ -48,8 +48,7 @@ class CommonComponentsTest {
         organizerName = "Jazz SA",
         attendeeCount = 250,
         isFavorite = isFavorite,
-        isCreatedByUser = false,
-        isExternal = true
+        isCreatedByUser = false
     )
 
     @Test
