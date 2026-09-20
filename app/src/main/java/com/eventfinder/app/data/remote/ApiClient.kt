@@ -24,6 +24,16 @@ object ApiClient {
             .connectTimeout(20, TimeUnit.SECONDS)
             .readTimeout(60, TimeUnit.SECONDS)
             .writeTimeout(20, TimeUnit.SECONDS)
+            .addInterceptor { chain ->
+                val request = chain.request()
+                    .newBuilder()
+                    .header(
+                        "User-Agent",
+                        "EventFinder/1.0 (https://github.com/Zulfique/eventfinder-south-africa)"
+                    )
+                    .build()
+                chain.proceed(request)
+            }
             .addInterceptor(
                 HttpLoggingInterceptor().apply {
                     level = HttpLoggingInterceptor.Level.NONE

@@ -33,7 +33,7 @@ interface UserDao {
     suspend fun deleteById(id: String)
 }
 
-/** Data access for the event directory. */
+/** Data access for the local event catalogue. */
 @Dao
 interface EventDao {
 
@@ -74,9 +74,6 @@ interface EventDao {
 
     @Query("DELETE FROM events WHERE id = :id")
     suspend fun deleteById(id: String)
-
-    @Query("UPDATE events SET isExternal = 1 WHERE id = :id")
-    suspend fun markExternal(id: String)
 
     @Query("DELETE FROM events WHERE organizerId = :userId AND isCreatedByUser = 1")
     suspend fun deleteCreatedByUserId(userId: String)

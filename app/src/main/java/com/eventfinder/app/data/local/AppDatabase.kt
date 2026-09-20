@@ -15,17 +15,15 @@ import com.eventfinder.app.domain.model.User
  * interface so tests can provide fakes without Room dependencies.
  */
 interface DatabaseTransactionHelper {
-    /** Atomically inserts/removes a favourite. */
-    suspend fun setFavorite(userId: String, eventId: String, favorite: Boolean)
-    /** Atomically mutates a favourite and enqueues the sync action. */
+    /** Atomically mutates a favourite and enqueues the journal entry. */
     suspend fun setFavoriteAtomically(userId: String, eventId: String, favorite: Boolean, pendingAction: String, pendingPayload: String)
-    /** Atomically mutates an RSVP and enqueues the sync action. */
+    /** Atomically mutates an RSVP and enqueues the journal entry. */
     suspend fun setRsvpAtomically(userId: String, eventId: String, status: String, pendingPayload: String)
-    /** Atomically creates an event and enqueues the sync action. */
+    /** Atomically creates an event and enqueues the journal entry. */
     suspend fun createEventAtomically(event: EventEntity, userId: String, pendingPayload: String)
-    /** Atomically updates an event and enqueues the sync action. */
+    /** Atomically updates an event and enqueues the journal entry. */
     suspend fun updateEventAtomically(event: EventEntity, userId: String, pendingPayload: String)
-    /** Atomically deletes an event, its favourite/RSVP links, and queues a sync action. */
+    /** Atomically deletes an event, its favourite/RSVP links, and queues a journal entry. */
     suspend fun deleteEventAtomically(eventId: String, userId: String, pendingPayload: String)
     /** Atomically deletes all user data during account deletion. */
     suspend fun deleteAccountData(userId: String)
@@ -139,16 +137,6 @@ abstract class AppDatabase : RoomDatabase(), DatabaseTransactionHelper {
     abstract fun favoriteDao(): FavoriteDao
     abstract fun rsvpDao(): RsvpDao
     abstract fun pendingSyncDao(): PendingSyncDao
-
-    override suspend fun setFavorite(userId: String, eventId: String, favorite: Boolean) {
-        if (favorite) {
-            favoriteDao().insert(
-                FavoriteEntity(userId = userId, eventId = eventId, createdAt = System.currentTimeMillis(), isFlushed = false)
-            )
-        } else {
-            favoriteDao().delete(userId, eventId)
-        }
-    }
 
     @Transaction
     override suspend fun setFavoriteAtomically(userId: String, eventId: String, favorite: Boolean, pendingAction: String, pendingPayload: String) {

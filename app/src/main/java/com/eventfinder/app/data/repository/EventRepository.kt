@@ -18,7 +18,7 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 
-/** Outcome of a background sync or queue flush. */
+/** Outcome of a journal flush operation. */
 sealed interface SyncResult {
     data object Synced : SyncResult
     /** No user session is active; queue flush skipped. */
@@ -294,9 +294,8 @@ class EventRepositoryImpl(
             try {
                 when (action.entityType) {
                     "event" -> {
-                        if (action.action != "delete") {
-                            eventDao.markExternal(action.entityId)
-                        }
+                        // Room is the authoritative store.
+                        // Nothing needs to be uploaded or marked externally.
                     }
                     "favorite" -> {
                         favoriteDao.markFlushed(

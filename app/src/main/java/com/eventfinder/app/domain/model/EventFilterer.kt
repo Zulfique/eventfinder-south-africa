@@ -3,7 +3,7 @@ package com.eventfinder.app.domain.model
 import com.eventfinder.app.utils.DistanceCalculator
 
 /**
- * Pure Kotlin search / filter / sort engine for the event directory.
+ * Pure Kotlin search / filter / sort engine for the local event catalogue.
  *
  * Kept free of Android dependencies so sorting, radius filtering and category
  * filtering can be exhaustively tested on the JVM. The ViewModels delegate all

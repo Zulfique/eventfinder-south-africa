@@ -27,7 +27,7 @@ class OpenStreetMapRepository(
     suspend fun findNearbyVenues(
         latitude: Double,
         longitude: Double,
-        radiusMeters: Int = 25_000
+        radiusMeters: Int = 10_000
     ): Result<List<OsmVenue>> {
 
         if (latitude !in -90.0..90.0) {

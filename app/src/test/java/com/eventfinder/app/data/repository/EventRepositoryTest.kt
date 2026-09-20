@@ -89,11 +89,6 @@ class EventRepositoryTest {
             emit()
         }
 
-        override suspend fun markExternal(id: String) {
-            rows[id]?.let { rows[id] = it.copy(isExternal = true) }
-            emit()
-        }
-
         override suspend fun deleteCreatedByUserId(userId: String) {
             rows.values.filter { it.isCreatedByUser && it.organizerId == userId }.map { it.id }.forEach { rows.remove(it) }
             emit()
@@ -232,16 +227,12 @@ class EventRepositoryTest {
         private val rsvpDao: FakeRsvpDao,
         private val pendingSyncDao: FakePendingSyncDao
     ) : DatabaseTransactionHelper {
-        override suspend fun setFavorite(userId: String, eventId: String, favorite: Boolean) {
+        override suspend fun setFavoriteAtomically(userId: String, eventId: String, favorite: Boolean, pendingAction: String, pendingPayload: String) {
             if (favorite) {
                 favoriteDao.insert(FavoriteEntity(userId = userId, eventId = eventId, createdAt = System.currentTimeMillis(), isFlushed = false))
             } else {
                 favoriteDao.delete(userId, eventId)
             }
-        }
-
-        override suspend fun setFavoriteAtomically(userId: String, eventId: String, favorite: Boolean, pendingAction: String, pendingPayload: String) {
-            setFavorite(userId, eventId, favorite)
             pendingSyncDao.insert(
                 PendingSyncEntity(entityType = "favorite", entityId = eventId, action = pendingAction, payload = pendingPayload, userId = userId, createdAt = System.currentTimeMillis())
             )
@@ -714,7 +705,7 @@ class EventRepositoryTest {
     // ------------------------------------------------- flushPendingActions
 
     @Test
-    fun `flushPendingActions marks events as external and drains the queue`() = runTest {
+    fun `flushPendingActions drains the queue without corrupting isExternal`() = runTest {
         val pending = FakePendingSyncDao()
         val dao = FakeEventDao()
         val (repo, prefs) = repository(eventDao = dao, pendingDao = pending)
@@ -728,7 +719,7 @@ class EventRepositoryTest {
 
         assertEquals(SyncResult.Synced, result)
         assertTrue(pending.rows.isEmpty())
-        assertTrue(dao.findById(id)!!.isExternal)
+        assertFalse(dao.findById(id)!!.isExternal)
     }
 
     @Test

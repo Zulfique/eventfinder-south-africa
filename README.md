@@ -40,20 +40,20 @@ and runs on a physical device or emulator.
 
 | Area | What it does |
 | --- | --- |
-| **Discover** | Browse the national event directory, filter by category chip and free-text keyword, sort by date / distance / name. |
+| **Discover** | Browse the local event catalogue, filter by category chip and free-text keyword, sort by date / distance / name. |
 | **Near me** | Requests location permission and sorts events by distance using the Haversine great-circle formula. |
 | **Map** | Event locations plotted on a free OpenStreetMap map (osmdroid) — no Google Maps key or billing. |
 | **Event detail** | Hero image, organiser, attendee count, venue map link, **weather forecast at the venue** on the event day, share and RSVP. |
 | **Search** | Debounced keyword search with recent-search history and popular events. |
 | **Create event** | A 3-step wizard (details → date/time → location) with an optional photo picked from the system photo picker. |
 | **My events** | Organisers can edit or delete the events they created from the detail screen's overflow menu. |
-| **Favourites** | Save events offline; favourites survive app restarts and are queued for sync. |
+| **Favourites** | Save events offline; favourites survive app restarts and are stored in the local operation journal. |
 | **Profile** | Account header, activity stats (created / attending / favourites), My Events and Attending lists. |
 | **Edit profile** | Update display name and email with validation. |
 | **Settings** | Language switch (English / Afrikaans), biometric login toggle, event reminders, new-event alerts, plus account tools (change password, clear local cache, delete account). |
 | **Auth** | Local email + password registration and login (PBKDF2-hashed), plus biometric unlock. Forgot password performs a local email-lookup and password change is available in Settings. |
 | **Reminders** | `AlarmManager` + `NotificationChannel` reminders **24 hours and 1 hour** before an attended event, cancelled when the RSVP is declined. |
-| **Event alerts** | After each background sync, on-device notifications flag brand-new future events and changes to favourited events — computed by a pure diff, no push service required. |
+| **Event alerts** | After app startup, on-device notifications flag brand-new future events and changes to favourited events — computed by a pure diff, no push service required. |
 
 ## Screenshots
 
@@ -141,7 +141,7 @@ sequenceDiagram
     participant API as Overpass API
 
     H->>R: findNearbyVenues(lat, lng)
-    R->>API: POST /api/interpreter (around query)
+    R->>API: GET /api/interpreter (around query)
     API-->>R: OsmOverpassResponse
     R->>R: map to OsmVenue list
     R-->>H: nearby venues (theatres, stadiums, etc.)
@@ -385,7 +385,7 @@ features that need a shared server are intentionally out of scope:
   because accounts and events live only on the device. The RSVP counter and reminder cancellation
   work locally; a real attendee list would need a multi-user backend.
 - **Google sign-in** is shown but stubbed. Password reset is a local email-lookup that updates the Room hash — no cloud backend is needed. **Security limitation:** reset performs no proof of email ownership, so it must be replaced with email/SMS verification before production use. Password change is also available in Settings.
-- **Push notifications** are replaced by on-device sync alerts (`AlarmManager` +
+- **Push notifications** are replaced by on-device notifications (`AlarmManager` +
   `NotificationManager`); true push would need Firebase Cloud Messaging.
 - **Default city / radius** preferences exist in the data layer but have no settings UI yet.
 - **Offline operation journal** — the pending queue is a local-only journal reconciled on startup; entity flags track which mutations have been flushed. Multi-device synchronisation would require a shared backend.

@@ -7,6 +7,7 @@ import android.content.pm.PackageManager
 import android.location.Location
 import android.location.LocationListener
 import android.location.LocationManager
+import android.os.Handler
 import android.os.Looper
 import androidx.core.content.ContextCompat
 
@@ -78,6 +79,7 @@ object LocationUtils {
         }
 
         var delivered = false
+        val mainHandler = Handler(Looper.getMainLooper())
 
         val listener = object : LocationListener {
             override fun onLocationChanged(location: Location) {
@@ -89,6 +91,8 @@ object LocationUtils {
 
             override fun onProviderDisabled(provider: String) {
                 if (!delivered) {
+                    delivered = true
+                    manager.removeUpdates(this)
                     onUnavailable()
                 }
             }
@@ -101,6 +105,15 @@ object LocationUtils {
         } catch (_: Exception) {
             onUnavailable()
         }
+
+        // Safety timeout: if Android never delivers a callback, give up after 15s.
+        mainHandler.postDelayed({
+            if (!delivered) {
+                delivered = true
+                manager.removeUpdates(listener)
+                onUnavailable()
+            }
+        }, 15_000L)
     }
 
     private fun selectBest(first: Location?, second: Location?): Location? {
