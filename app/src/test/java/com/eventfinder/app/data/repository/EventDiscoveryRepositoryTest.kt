@@ -407,4 +407,130 @@ class EventDiscoveryRepositoryTest {
         assertEquals(0, result.inserted)
         assertTrue(dao.rows.isEmpty())
     }
+
+    @Test
+    fun `stale remote events are removed when no longer returned by source`() = runTest {
+        val dao = FakeEventDao()
+        val now = System.currentTimeMillis()
+        val oldRemote = EventEntity(
+            id = "remote:old-1",
+            title = "Old Event",
+            description = "Previously fetched",
+            category = "other",
+            startDate = now + 86_400_000L,
+            endDate = now + 172_800_000L,
+            venueName = "Old Venue",
+            address = "",
+            latitude = -33.0,
+            longitude = 18.0,
+            imageUrl = null,
+            isPublic = true,
+            organizerId = "external:fake-source",
+            organizerName = "Fake Source",
+            attendeeCount = 0,
+            isCreatedByUser = false
+        )
+        val userEvent = EventEntity(
+            id = "user:my-event",
+            title = "My Event",
+            description = "Created by me",
+            category = "other",
+            startDate = now + 86_400_000L,
+            endDate = now + 172_800_000L,
+            venueName = "My Venue",
+            address = "",
+            latitude = -33.0,
+            longitude = 18.0,
+            imageUrl = null,
+            isPublic = true,
+            organizerId = "user:me",
+            organizerName = "Me",
+            attendeeCount = 1,
+            isCreatedByUser = true
+        )
+
+        dao.rows["remote:old-1"] = oldRemote
+        dao.rows["user:my-event"] = userEvent
+
+        val newEvent = futureEvent(sourceId = "new-1", title = "New Event")
+        val source = FakeEventSource(eventsToReturn = listOf(newEvent))
+        val repo = EventDiscoveryRepository(dao, listOf(source))
+
+        val result = repo.refresh()
+
+        assertEquals(1, result.fetched)
+        assertEquals(1, result.inserted)
+        assertTrue(dao.rows.containsKey("remote:fake-source:new-1"))
+        assertTrue(dao.rows.containsKey("user:my-event"))
+        org.junit.Assert.assertFalse(dao.rows.containsKey("remote:old-1"))
+    }
+
+    @Test
+    fun `user-created events are preserved across refresh`() = runTest {
+        val dao = FakeEventDao()
+        val now = System.currentTimeMillis()
+        val userEvent = EventEntity(
+            id = "user:concert",
+            title = "My Concert",
+            description = "I created this event for testing",
+            category = "music",
+            startDate = now + 86_400_000L,
+            endDate = now + 172_800_000L,
+            venueName = "My Venue",
+            address = "123 Main St",
+            latitude = -33.9,
+            longitude = 18.4,
+            imageUrl = null,
+            isPublic = true,
+            organizerId = "user:me",
+            organizerName = "Me",
+            attendeeCount = 5,
+            isCreatedByUser = true
+        )
+        dao.rows["user:concert"] = userEvent
+
+        val remoteEvent = futureEvent(sourceId = "remote-1", title = "Remote Festival")
+        val source = FakeEventSource(eventsToReturn = listOf(remoteEvent))
+        val repo = EventDiscoveryRepository(dao, listOf(source))
+
+        repo.refresh()
+
+        assertTrue(dao.rows.containsKey("user:concert"))
+        assertTrue(dao.rows.containsKey("remote:fake-source:remote-1"))
+        assertEquals(2, dao.rows.size)
+    }
+
+    @Test
+    fun `empty source removes all remote events`() = runTest {
+        val dao = FakeEventDao()
+        val now = System.currentTimeMillis()
+        val staleEvent = EventEntity(
+            id = "remote:stale-1",
+            title = "Stale",
+            description = "Should be removed",
+            category = "other",
+            startDate = now + 86_400_000L,
+            endDate = now + 172_800_000L,
+            venueName = "Stale Venue",
+            address = "",
+            latitude = -33.0,
+            longitude = 18.0,
+            imageUrl = null,
+            isPublic = true,
+            organizerId = "external:fake-source",
+            organizerName = "Fake Source",
+            attendeeCount = 0,
+            isCreatedByUser = false
+        )
+        dao.rows["remote:stale-1"] = staleEvent
+
+        val source = FakeEventSource(eventsToReturn = emptyList())
+        val repo = EventDiscoveryRepository(dao, listOf(source))
+
+        val result = repo.refresh()
+
+        assertEquals(0, result.fetched)
+        assertEquals(0, result.inserted)
+        assertTrue(dao.rows.isEmpty())
+    }
 }
