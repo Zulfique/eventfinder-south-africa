@@ -9,6 +9,8 @@ import com.eventfinder.app.data.local.PendingSyncDao
 import com.eventfinder.app.data.local.PendingSyncEntity
 import com.eventfinder.app.data.local.RsvpDao
 import com.eventfinder.app.data.local.RsvpEntity
+import com.eventfinder.app.data.remote.CommunityEventApi
+import com.eventfinder.app.data.remote.CommunityEventDto
 import com.eventfinder.app.data.remote.TicketmasterApi
 import com.eventfinder.app.data.remote.dto.TmDates
 import com.eventfinder.app.data.remote.dto.TmEmbedded
@@ -320,12 +322,27 @@ class EventRepositoryTest {
         )
     )
 
+    private class FakeCommunityEventApi : CommunityEventApi {
+        val events = mutableMapOf<String, CommunityEventDto>()
+        val favourites = mutableSetOf<String>()   // "userId:eventId"
+        val rsvps = mutableMapOf<String, String>() // "userId:eventId" → status
+
+        override suspend fun upsertEvent(event: CommunityEventDto) { events[event.id] = event }
+        override suspend fun deleteEvent(eventId: String) { events.remove(eventId) }
+        override suspend fun upsertFavourite(userId: String, eventId: String) { favourites.add("$userId:$eventId") }
+        override suspend fun deleteFavourite(userId: String, eventId: String) { favourites.remove("$userId:$eventId") }
+        override suspend fun upsertRsvp(userId: String, eventId: String, status: String) { rsvps["$userId:$eventId"] = status }
+        override suspend fun getEventsByUser(userId: String) = events.values.filter { it.organizerId == userId }
+        override suspend fun getAllEvents() = events.values.toList()
+    }
+
     private fun repository(
         favoriteDao: FakeFavoriteDao = FakeFavoriteDao(),
         eventDao: FakeEventDao = FakeEventDao(favoriteDao),
         rsvpDao: FakeRsvpDao = FakeRsvpDao(),
         pendingDao: FakePendingSyncDao = FakePendingSyncDao(),
         api: TicketmasterApi = FakeTicketmasterApi(liveResponse()),
+        communityApi: CommunityEventApi = FakeCommunityEventApi(),
         apiKey: String = "test-key",
         preferences: TestPreferences = TestPreferences()
     ): Pair<EventRepositoryImpl, TestPreferences> =
@@ -337,6 +354,7 @@ class EventRepositoryTest {
                 rsvpDao = rsvpDao,
                 pendingSyncDao = pendingDao,
                 ticketmasterApi = api,
+                communityEventApi = communityApi,
                 apiKey = apiKey,
                 preferences = preferences
             ),

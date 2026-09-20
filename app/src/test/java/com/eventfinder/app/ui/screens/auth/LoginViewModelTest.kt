@@ -23,7 +23,7 @@ import org.junit.Before
 import org.junit.Test
 
 /**
- * ViewModel-level tests for the local password-reset flow (FR-01). A fake
+ * ViewModel-level tests for the login and password-reset flows (FR-01). A fake
  * [AuthRepository] keeps the test on the JVM with no Android dependencies.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -43,7 +43,9 @@ class LoginViewModelTest {
 
     private class FakeAuthRepository : AuthRepository {
         override val currentUser: Flow<User?> = flowOf(null)
-        var resetResult: Result<Unit> = Result.success(Unit)
+        var resetResult: Result<Unit> = Result.failure(
+            UnsupportedOperationException("password_reset_requires_authenticated_backend")
+        )
         var lastReset: Pair<String, String>? = null
 
         override suspend fun resetPassword(email: String, newPassword: String): Result<Unit> {
@@ -88,7 +90,7 @@ class LoginViewModelTest {
     }
 
     @Test
-    fun `successful reset flags completion and clears it on consume`() = runTest(dispatcher) {
+    fun `reset shows not-available message when backend is missing`() = runTest(dispatcher) {
         val repo = FakeAuthRepository()
         val viewModel = LoginViewModel(repo, biometricAvailable = false)
         viewModel.onEmailChange("user@example.com")
@@ -97,30 +99,10 @@ class LoginViewModelTest {
 
         viewModel.requestPasswordReset("NewPass1!", "NewPass1!")
         advanceUntilIdle()
+        job.cancel()
 
-        assertTrue(viewModel.uiState.value.passwordResetComplete)
+        assertTrue(messages.contains(UiMessage.Resource(R.string.reset_not_available)))
+        assertFalse(viewModel.uiState.value.passwordResetComplete)
         assertEquals("user@example.com" to "NewPass1!", repo.lastReset)
-        assertTrue(messages.contains(UiMessage.Resource(R.string.reset_success)))
-
-        viewModel.consumePasswordReset()
-        assertFalse(viewModel.uiState.value.passwordResetComplete)
-        job.cancel()
-    }
-
-    @Test
-    fun `unknown email surfaces a specific message and keeps the dialog open`() = runTest(dispatcher) {
-        val repo = FakeAuthRepository().apply {
-            resetResult = Result.failure(IllegalArgumentException("unknown_email"))
-        }
-        val viewModel = LoginViewModel(repo, biometricAvailable = false)
-        val messages = mutableListOf<UiMessage>()
-        val job = launch { viewModel.messages.collect { messages += it } }
-
-        viewModel.requestPasswordReset("NewPass1!", "NewPass1!")
-        advanceUntilIdle()
-        job.cancel()
-
-        assertTrue(messages.contains(UiMessage.Resource(R.string.unknown_email)))
-        assertFalse(viewModel.uiState.value.passwordResetComplete)
     }
 }
