@@ -13,9 +13,9 @@ import kotlinx.coroutines.flow.asStateFlow
  * banner (FR-09 / NFR-04 graceful degradation) and trigger a catch-up sync once
  * the device is back online.
  *
- * References:
- *  - Android Developers, "Monitor connectivity status":
- *    https://developer.android.com/training/monitoring-device-state/connectivity-status-type
+ * Uses [ConnectivityManager.registerDefaultNetworkCallback] so that both
+ * Wi-Fi and mobile data count as online, and losing one interface while
+ * another is still active does not incorrectly report offline.
  */
 class NetworkMonitor(context: Context) {
 
@@ -27,29 +27,38 @@ class NetworkMonitor(context: Context) {
 
     private val networkCallback = object : ConnectivityManager.NetworkCallback() {
         override fun onAvailable(network: Network) {
-            _isOnline.value = true
+            _isOnline.value = isCurrentlyOnline()
+        }
+
+        override fun onCapabilitiesChanged(
+            network: Network,
+            networkCapabilities: NetworkCapabilities
+        ) {
+            _isOnline.value = isCurrentlyOnline()
         }
 
         override fun onLost(network: Network) {
-            _isOnline.value = false
+            _isOnline.value = isCurrentlyOnline()
         }
     }
 
     fun start() {
-        val request = android.net.NetworkRequest.Builder()
-            .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
-            .build()
-        connectivityManager.registerNetworkCallback(request, networkCallback)
+        runCatching {
+            connectivityManager.registerDefaultNetworkCallback(networkCallback)
+        }
         _isOnline.value = isCurrentlyOnline()
     }
 
     fun stop() {
-        runCatching { connectivityManager.unregisterNetworkCallback(networkCallback) }
+        runCatching {
+            connectivityManager.unregisterNetworkCallback(networkCallback)
+        }
     }
 
     fun isCurrentlyOnline(): Boolean {
         val network = connectivityManager.activeNetwork ?: return false
-        val caps = connectivityManager.getNetworkCapabilities(network) ?: return false
-        return caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+        val capabilities = connectivityManager.getNetworkCapabilities(network) ?: return false
+        return capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
+            capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
     }
 }

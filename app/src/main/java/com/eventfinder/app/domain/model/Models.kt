@@ -58,3 +58,15 @@ data class User(
     val biometricEnabled: Boolean,
     val createdAt: Long
 )
+
+/**
+ * Aggregated environment data for an event's venue location.
+ * Populated by [FreeLocationRepository] and displayed on the event detail screen.
+ */
+data class EventEnvironment(
+    val weather: com.eventfinder.app.data.repository.WeatherSummary? = null,
+    val airQuality: com.eventfinder.app.data.repository.AirQualitySummary? = null,
+    val elevationMeters: Double? = null,
+    val address: String? = null,
+    val nearbyPlaces: List<com.eventfinder.app.data.repository.OsmPlace> = emptyList()
+)

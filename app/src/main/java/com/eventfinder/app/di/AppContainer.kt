@@ -10,6 +10,7 @@ import com.eventfinder.app.data.repository.EventRepository
 import com.eventfinder.app.data.repository.EventRepositoryImpl
 import com.eventfinder.app.data.repository.WeatherRepository
 import com.eventfinder.app.data.repository.WeatherRepositoryImpl
+import com.eventfinder.app.data.repository.FreeLocationRepository
 import com.eventfinder.app.data.store.UserPreferences
 import com.eventfinder.app.utils.AppLogger
 import com.eventfinder.app.utils.NetworkMonitor
@@ -55,6 +56,16 @@ class AppContainer(context: Context) {
 
     val weatherRepository: WeatherRepository by lazy {
         WeatherRepositoryImpl(ApiClient.openMeteoApi(appContext.cacheDir))
+    }
+
+    val freeLocationRepository: FreeLocationRepository by lazy {
+        FreeLocationRepository(
+            openMeteoApi = ApiClient.openMeteoApi(appContext.cacheDir),
+            openMeteoGeocodingApi = ApiClient.openMeteoGeocodingApi(appContext.cacheDir),
+            airQualityApi = ApiClient.openMeteoAirQualityApi(appContext.cacheDir),
+            nominatimApi = ApiClient.nominatimApi(appContext.cacheDir),
+            overpassApi = ApiClient.overpassApi(appContext.cacheDir)
+        )
     }
 
     val networkMonitor: NetworkMonitor by lazy { NetworkMonitor(appContext) }

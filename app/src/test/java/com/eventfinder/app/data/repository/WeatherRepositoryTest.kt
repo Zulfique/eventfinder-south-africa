@@ -51,11 +51,26 @@ class WeatherRepositoryTest {
             latitude: Double,
             longitude: Double,
             hourly: String,
-            startDate: String,
-            endDate: String,
+            daily: String,
+            forecastDays: Int,
             temperatureUnit: String,
-            timezone: String
+            windSpeedUnit: String,
+            timezone: String,
+            startDate: String?,
+            endDate: String?
         ): OmForecastResponse = response
+
+        override suspend fun geocode(
+            name: String,
+            count: Int,
+            language: String,
+            format: String
+        ) = throw UnsupportedOperationException()
+
+        override suspend fun elevation(
+            latitude: String,
+            longitude: String
+        ) = throw UnsupportedOperationException()
     }
 
     @Test
@@ -124,7 +139,7 @@ class WeatherRepositoryTest {
     }
 
     @Test
-    fun `returns nearest available hour even when on a different day`() = runTest {
+    fun `rejects forecast when nearest hour is too far from event time`() = runTest {
         val api = FakeOpenMeteoApi(
             OmForecastResponse(
                 timezone = zone.id,
@@ -136,8 +151,7 @@ class WeatherRepositoryTest {
             )
         )
         val result = WeatherRepositoryImpl(api).forecastFor("event-1", -33.9, 18.4, startDate)
-        assertTrue(result.isSuccess)
-        assertEquals("2026-10-04T10:00", result.getOrThrow().hourIso)
+        assertTrue(result.isFailure)
     }
 
     @Test

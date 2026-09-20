@@ -48,7 +48,8 @@ class EventFinderApp : Application() {
             this,
             getSharedPreferences("${packageName}_preferences", Context.MODE_PRIVATE)
         )
-        Configuration.getInstance().userAgentValue = "com.eventfinder.app"
+        Configuration.getInstance().userAgentValue =
+            "EventFinder/1.0 (https://github.com/Zulfique/eventfinder-south-africa)"
         AppLogger.d("EventFinderApp", "osmdroid configured with ${TileSourceFactory.MAPNIK.name()}")
     }
 }

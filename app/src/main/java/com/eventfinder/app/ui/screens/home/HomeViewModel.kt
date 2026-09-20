@@ -88,12 +88,19 @@ class HomeViewModel(
             preferences.defaultRadiusKm.first().let { radiusFlow.value = it }
         }
         viewModelScope.launch {
-            container.networkMonitor.isOnline.collect { online ->
-                _uiState.value = _uiState.value.copy(isOffline = !online)
-            }
+            container.networkMonitor.isOnline
+                .collect { online ->
+                    val wasOffline = _uiState.value.isOffline
+                    _uiState.value = _uiState.value.copy(isOffline = !online)
+                    if (online && wasOffline) {
+                        AppLogger.i("HomeViewModel", "Internet available - refreshing external data")
+                        flushPendingActions()
+                        syncFromApi()
+                    }
+                }
         }
 
-        // Seed the offline cache and attempt one live sync on startup.
+        // Seed the offline cache on startup.
         viewModelScope.launch {
             eventRepository.ensureSeeded()
             flushPendingActions()

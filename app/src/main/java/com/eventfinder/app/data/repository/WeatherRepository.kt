@@ -103,6 +103,15 @@ class WeatherRepositoryImpl(
                 return Result.failure(IllegalStateException("no_matching_hour"))
             }
 
+            val maxAllowedDistance = 12L * 60L * 60L * 1000L
+            if (bestDistance > maxAllowedDistance) {
+                AppLogger.w(
+                    tag,
+                    "Nearest forecast is too far from event time: ${bestDistance / 3_600_000}h"
+                )
+                return Result.failure(IllegalStateException("forecast_too_far"))
+            }
+
             val summary = WeatherSummary(
                 temperatureCelsius = temperatures[bestIndex],
                 weatherCode = codes.getOrElse(bestIndex) { 0 },

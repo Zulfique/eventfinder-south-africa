@@ -94,7 +94,7 @@ class EventRepositoryTest {
             emit()
         }
 
-        override suspend fun markSynced(id: String) {
+        override suspend fun markExternal(id: String) {
             rows[id]?.let { rows[id] = it.copy(isExternal = true) }
             emit()
         }
@@ -141,7 +141,7 @@ class EventRepositoryTest {
         override suspend fun exists(userId: String, eventId: String): Boolean =
             rows.containsKey("$userId:$eventId")
 
-        override suspend fun markSynced(userId: String, eventId: String) {
+        override suspend fun markFlushed(userId: String, eventId: String) {
             rows["$userId:$eventId"]?.let { rows["$userId:$eventId"] = it.copy(isFlushed = true) }
             emit()
         }
@@ -176,7 +176,7 @@ class EventRepositoryTest {
         override suspend fun statusFor(userId: String, eventId: String): String? =
             rows["$userId:$eventId"]?.status
 
-        override suspend fun markSynced(userId: String, eventId: String) {
+        override suspend fun markFlushed(userId: String, eventId: String) {
             rows["$userId:$eventId"]?.let { rows["$userId:$eventId"] = it.copy(isFlushed = true) }
             emit()
         }

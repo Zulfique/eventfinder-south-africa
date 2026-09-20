@@ -83,9 +83,15 @@ fun HomeScreen(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
         if (granted) {
-            LocationUtils.lastKnown(context)?.let { (lat, lng) ->
-                viewModel.setUserLocation(lat, lng)
-            }
+            LocationUtils.requestCurrentLocation(
+                context = context,
+                onLocation = { lat, lng -> viewModel.setUserLocation(lat, lng) },
+                onUnavailable = {
+                    LocationUtils.lastKnown(context)?.let { (lat, lng) ->
+                        viewModel.setUserLocation(lat, lng)
+                    }
+                }
+            )
         } else {
             AppLogger.w("HomeScreen", "Location permission denied - using default radius")
         }
