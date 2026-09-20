@@ -106,6 +106,13 @@ class EventRepositoryTest {
             deleteNonUserCreated()
             upsertAll(events)
         }
+
+        override suspend fun replaceEventsForSource(organizerId: String, events: List<EventEntity>) {
+            deleteByOrganizerId(organizerId)
+            if (events.isNotEmpty()) {
+                upsertAll(events)
+            }
+        }
     }
 
     private class FakeFavoriteDao : FavoriteDao {

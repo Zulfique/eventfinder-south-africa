@@ -27,11 +27,8 @@ class EventDiscoveryRepository(
                 val entities = validEvents.mapNotNull { it.toEntity() }
                 val organizerId = "external:${source.id}"
 
-                eventDao.deleteByOrganizerId(organizerId)
-                if (entities.isNotEmpty()) {
-                    eventDao.upsertAll(entities)
-                    totalInserted += entities.size
-                }
+                eventDao.replaceEventsForSource(organizerId, entities)
+                totalInserted += entities.size
                 AppLogger.i(tag, "Fetched ${validEvents.size} events from ${source.displayName}")
             } catch (e: Exception) {
                 failedSources++

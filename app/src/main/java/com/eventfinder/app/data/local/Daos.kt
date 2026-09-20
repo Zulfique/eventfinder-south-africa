@@ -94,6 +94,14 @@ interface EventDao {
         deleteNonUserCreated()
         upsertAll(events)
     }
+
+    @Transaction
+    suspend fun replaceEventsForSource(organizerId: String, events: List<EventEntity>) {
+        deleteByOrganizerId(organizerId)
+        if (events.isNotEmpty()) {
+            upsertAll(events)
+        }
+    }
 }
 
 /** Data access for favourites. */
