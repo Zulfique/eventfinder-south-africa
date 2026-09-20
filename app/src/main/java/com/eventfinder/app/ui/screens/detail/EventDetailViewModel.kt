@@ -9,6 +9,7 @@ import com.eventfinder.app.R
 import com.eventfinder.app.data.repository.WeatherRepository
 import com.eventfinder.app.data.repository.WeatherSummary
 import com.eventfinder.app.di.AppContainer
+import com.eventfinder.app.domain.model.Event
 import com.eventfinder.app.domain.model.EventView
 import com.eventfinder.app.domain.model.RsvpStatus
 import com.eventfinder.app.notifications.NotificationHelper
@@ -44,7 +45,7 @@ class EventDetailViewModel(
 
     private val eventRepository = container.eventRepository
 
-    private val eventFlow = MutableStateFlow<com.eventfinder.app.domain.model.Event?>(null)
+    private val eventFlow = MutableStateFlow<Event?>(null)
     private var weatherKey: Triple<Double, Double, Long>? = null
 
     private val _uiState = MutableStateFlow(EventDetailUiState())

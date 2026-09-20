@@ -261,7 +261,7 @@ class EventRepositoryImpl(
             return
         }
 
-        eventDao.deleteSynced()
+        eventDao.deleteNonUserCreated()
         ensureSeeded()
 
         AppLogger.i(

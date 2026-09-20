@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.eventfinder.app.R
+import com.eventfinder.app.data.repository.SyncResult
 import com.eventfinder.app.di.AppContainer
 import com.eventfinder.app.domain.model.Event
 import com.eventfinder.app.domain.model.EventCategory
@@ -245,17 +246,17 @@ class HomeViewModel(
 
     private suspend fun flushPendingActions() {
         when (eventRepository.flushPendingActions()) {
-            com.eventfinder.app.data.repository.SyncResult.Synced ->
+            SyncResult.Synced ->
                 AppLogger.i(
                     "HomeViewModel",
                     "Local pending journal reconciled"
                 )
-            com.eventfinder.app.data.repository.SyncResult.NoSession ->
+            SyncResult.NoSession ->
                 AppLogger.d(
                     "HomeViewModel",
                     "No active session - local journal not processed"
                 )
-            com.eventfinder.app.data.repository.SyncResult.Failed ->
+            SyncResult.Failed ->
                 AppLogger.w(
                     "HomeViewModel",
                     "Some local journal entries remain"

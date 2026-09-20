@@ -85,7 +85,7 @@ private val MIGRATION_2_3 = object : Migration(2, 3) {
  *
  * Renames misleadingly-named columns that date from the original cloud-sync
  * design:
- *  - events.isSynced → events.isExternal  (true = sourced from Ticketmaster)
+ *  - events.isSynced → events.isExternal  (true = sourced from an external provider)
  *  - favorites.isSynced → favorites.isFlushed (true = journal entry drained)
  *  - rsvps.isSynced → rsvps.isFlushed
  */

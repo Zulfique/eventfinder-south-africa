@@ -1,7 +1,6 @@
 package com.eventfinder.app.data.local
 
 import androidx.room.Dao
-import androidx.room.Delete
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
@@ -65,10 +64,10 @@ interface EventDao {
     suspend fun count(): Int
 
     @Query("SELECT * FROM events WHERE isCreatedByUser = 0")
-    suspend fun getSynced(): List<EventEntity>
+    suspend fun getNonUserCreated(): List<EventEntity>
 
     @Query("DELETE FROM events WHERE isCreatedByUser = 0")
-    suspend fun deleteSynced()
+    suspend fun deleteNonUserCreated()
 
     @Query("DELETE FROM events WHERE isCreatedByUser = 1")
     suspend fun deleteCreatedByUser()
@@ -91,8 +90,8 @@ interface EventDao {
     suspend fun getUpcomingAttendingEventsForUser(userId: String, now: Long): List<EventEntity>
 
     @Transaction
-    suspend fun replaceSyncedEvents(events: List<EventEntity>) {
-        deleteSynced()
+    suspend fun replaceNonUserCreated(events: List<EventEntity>) {
+        deleteNonUserCreated()
         upsertAll(events)
     }
 }

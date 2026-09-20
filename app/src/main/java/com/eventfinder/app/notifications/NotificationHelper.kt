@@ -175,7 +175,7 @@ object NotificationHelper {
     fun cancelEventReminders(context: Context, eventId: String) {
         val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
         var cancelled = 0
-        ReminderLead.values().forEach { lead ->
+        ReminderLead.entries.forEach { lead ->
             val pendingIntent = PendingIntent.getBroadcast(
                 context,
                 requestCode(eventId, lead),
@@ -263,7 +263,7 @@ class ReminderReceiver : android.content.BroadcastReceiver() {
         val title = intent.getStringExtra(EXTRA_TITLE) ?: context.getString(R.string.reminder_notification_title)
         val venue = intent.getStringExtra(EXTRA_VENUE) ?: ""
         val eventId = intent.getStringExtra(EXTRA_EVENT_ID)
-        val lead = ReminderLead.values()
+        val lead = ReminderLead.entries
             .firstOrNull { it.name == intent.getStringExtra(EXTRA_LEAD) }
             ?: ReminderLead.HOUR_BEFORE
 

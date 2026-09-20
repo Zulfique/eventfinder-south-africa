@@ -21,7 +21,7 @@ import retrofit2.http.Query
  * - event venues
  *
  * This is venue/place discovery, not a replacement for a dedicated
- * future-event catalogue such as Ticketmaster.
+ * future-event catalogue.
  */
 interface OpenStreetMapApi {
 

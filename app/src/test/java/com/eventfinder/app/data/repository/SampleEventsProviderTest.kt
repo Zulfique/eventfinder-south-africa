@@ -6,7 +6,7 @@ import org.junit.Test
 
 /**
  * Validates the bundled South African demo dataset that seeds the offline cache
- * when no Ticketmaster API key is configured.
+ * on first launch.
  */
 class SampleEventsProviderTest {
 

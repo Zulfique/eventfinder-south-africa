@@ -71,10 +71,10 @@ class EventRepositoryTest {
 
         override suspend fun count(): Int = rows.size
 
-        override suspend fun getSynced(): List<EventEntity> =
+        override suspend fun getNonUserCreated(): List<EventEntity> =
             rows.values.filter { !it.isCreatedByUser }
 
-        override suspend fun deleteSynced() {
+        override suspend fun deleteNonUserCreated() {
             rows.values.filter { !it.isCreatedByUser }.map { it.id }.forEach { rows.remove(it) }
             emit()
         }
@@ -104,8 +104,8 @@ class EventRepositoryTest {
                 event.startDate > now
             }
 
-        override suspend fun replaceSyncedEvents(events: List<EventEntity>) {
-            deleteSynced()
+        override suspend fun replaceNonUserCreated(events: List<EventEntity>) {
+            deleteNonUserCreated()
             upsertAll(events)
         }
     }

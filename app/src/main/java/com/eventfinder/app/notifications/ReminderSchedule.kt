@@ -31,5 +31,5 @@ object ReminderSchedule {
         startDate: Long,
         now: Long = System.currentTimeMillis()
     ): List<ReminderLead> =
-        ReminderLead.values().filter { triggerAt(startDate, it) > now }
+        ReminderLead.entries.filter { triggerAt(startDate, it) > now }
 }

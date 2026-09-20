@@ -1,6 +1,5 @@
 package com.eventfinder.app.ui.components
 
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -28,6 +27,7 @@ import androidx.compose.material.icons.outlined.LocationOn
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -201,10 +201,11 @@ fun EventCard(
                 )
                 Spacer(Modifier.height(4.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Image(
+                    Icon(
                         Icons.Outlined.CalendarMonth,
                         contentDescription = null,
-                        modifier = Modifier.size(16.dp)
+                        modifier = Modifier.size(16.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Spacer(Modifier.width(4.dp))
                     Text(
@@ -214,10 +215,11 @@ fun EventCard(
                 }
                 Spacer(Modifier.height(2.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Image(
+                    Icon(
                         Icons.Outlined.LocationOn,
                         contentDescription = null,
-                        modifier = Modifier.size(16.dp)
+                        modifier = Modifier.size(16.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Spacer(Modifier.width(4.dp))
                     Text(
@@ -239,14 +241,15 @@ fun EventCard(
             }
             if (onFavoriteToggle != null) {
                 Spacer(Modifier.width(8.dp))
-                Image(
+                Icon(
                     if (event.isFavorite) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
                     contentDescription = stringResource(
                         if (event.isFavorite) R.string.favorite_remove else R.string.favorite_add
                     ),
                     modifier = Modifier
                         .size(28.dp)
-                        .clickable { onFavoriteToggle() }
+                        .clickable { onFavoriteToggle() },
+                    tint = if (event.isFavorite) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }

@@ -1,6 +1,5 @@
 package com.eventfinder.app.data.local
 
-import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
@@ -48,7 +47,7 @@ data class EventEntity(
     val organizerName: String,
     val attendeeCount: Int,
     val isCreatedByUser: Boolean,
-    /** True if this event was fetched from the external Ticketmaster API. */
+    /** True if this event was fetched from an external provider (e.g. a remote events API). */
     val isExternal: Boolean
 )
 
