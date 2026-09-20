@@ -5,7 +5,7 @@
 ![Jetpack Compose](https://img.shields.io/badge/Jetpack%20Compose-BOM%202024.02-4285F4?logo=jetpackcompose&logoColor=white)
 ![minSdk](https://img.shields.io/badge/minSdk-26-brightgreen)
 ![targetSdk](https://img.shields.io/badge/targetSdk-34-brightgreen)
-![Tests](https://img.shields.io/badge/unit%20tests-119%20passing-success)
+![Tests](https://img.shields.io/badge/unit%20tests-168%20passing-success)
 
 A native **Android (Kotlin + Jetpack Compose)** app that helps people across South Africa
 discover, save and create local events — from Joburg jazz nights to Cape Town food markets
@@ -51,7 +51,7 @@ and runs on a physical device or emulator.
 | **Profile** | Account header, activity stats (created / attending / favourites), My Events and Attending lists. |
 | **Edit profile** | Update display name and email with validation. |
 | **Settings** | Language switch (English / Afrikaans), biometric login toggle, event reminders, new-event alerts, plus account tools (change password, clear local cache, delete account). |
-| **Auth** | Local email + password registration and login (PBKDF2-hashed), plus biometric unlock. Forgot password is disabled (requires a verified backend); password change is available in Settings. |
+| **Auth** | Local email + password registration and login (PBKDF2-hashed), plus biometric unlock. Forgot password performs a local email-lookup and password change is available in Settings. |
 | **Reminders** | `AlarmManager` + `NotificationChannel` reminders **24 hours and 1 hour** before an attended event, cancelled when the RSVP is declined. |
 | **Event alerts** | After each background sync, on-device notifications flag brand-new future events and changes to favourited events — computed by a pure diff, no push service required. |
 
@@ -207,8 +207,8 @@ through `LocaleManager` in `MainActivity.attachBaseContext`.
 ## Offline-first behaviour
 
 - Events, favourites and RSVPs are cached in **Room** and observed as `Flow`s, so the UI renders instantly.
-- Favourite, RSVP and event mutations are wrapped in **atomic `@Transaction` boundaries** that pair the local write with a `pending_sync` queue insert, preventing crash-induced inconsistencies.
-- The offline action queue is replayed against a local **in-memory community backend** via `EventRepository.flushPendingActions()`. Each action is retried individually with per-action error handling — successful replays are removed from the queue, failed ones are retried on the next flush.
+- Favourite, RSVP and event mutations are wrapped in **atomic `@Transaction` boundaries** that pair the local write with a `pending_sync` journal entry, preventing crash-induced inconsistencies.
+- The pending-operation journal is drained on app startup by `EventRepository.flushPendingActions()`, which marks the corresponding local entities as `isSynced` and removes completed journal entries. Each action is retried individually with per-action error handling.
 - Reminder alarms carry the owning `userId` and `ReminderReceiver` verifies the active session before posting, preventing stale-account notifications.
 - The UI never blocks on the network: a failed sync simply keeps the cached catalogue.
 
@@ -268,7 +268,7 @@ adb install -r app\build\outputs\apk\debug\app-debug.apk
 
 ## Testing
 
-The project has **119 JVM unit tests** across 14 suites, all runnable from the command line with
+The project has **168 JVM unit tests** across 15 suites, all runnable from the command line with
 no emulator:
 
 ```bash
@@ -282,7 +282,7 @@ no emulator:
 | `DistanceCalculatorTest` | Haversine distance, symmetry, rounding and radius checks. |
 | `EventFiltererTest` | Keyword / category / radius filtering (including address and description matching), three sort orders, distance attachment. |
 | `EventCategoryTest` | Ticketmaster segment ↔ local category mapping in both directions. |
-| `TicketmasterMapperTest` | Full payload mapping, malformed-row skipping, coordinate fallback, image selection, date parsing. |
+| `TicketmasterMapperTest` | Full payload mapping, malformed-row skipping, coordinate fallback, image selection, date parsing, address construction. |
 | `WeatherRepositoryTest` | WMO weather-code descriptions and Open-Meteo payload handling. |
 | `EventRepositoryTest` | Seeding, sync (network + no-key) including new/updated-favourite alert payloads, favourite/RSVP toggling, event creation, editing/deleting with ownership guard, cache clearing — using in-memory DAO fakes. |
 | `SampleEventsProviderTest` | Demo catalogue integrity (unique ids, valid SA coordinates, sane dates). |
@@ -356,7 +356,7 @@ docs/screenshots/                        Real device screenshots
 | External library integration | Room, Retrofit/OkHttp, DataStore, Coil, osmdroid, AndroidX Biometric |
 | Native Android SDK integration | `AlarmManager` + `NotificationManager` reminders, `LocationManager`/location permissions, biometrics |
 | Offline-first / robustness | Room cache + `pending_sync` queue, graceful fallbacks, validation on every form |
-| Unit testing | 119 JVM tests + 6 Compose instrumented tests + GitHub Actions CI |
+| Unit testing | 168 JVM tests + 6 Compose instrumented tests + GitHub Actions CI |
 | Logging & comments | `AppLogger` used across data/UI layers; KDoc on every class |
 | Documentation | This README with Mermaid architecture diagrams |
 
@@ -368,13 +368,11 @@ features that need a shared server are intentionally out of scope:
 - **RSVP attendee management** — there is no way to approve or decline other people's attendance
   because accounts and events live only on the device. The RSVP counter and reminder cancellation
   work locally; a real attendee list would need a multi-user backend.
-- **Google sign-in** is shown but stubbed, and password reset is disabled (that would require a
-  verified backend to confirm email ownership). Password change is available in Settings.
+- **Google sign-in** is shown but stubbed. Password reset is a local email-lookup that updates the Room hash — no cloud backend is needed. Password change is also available in Settings.
 - **Push notifications** are replaced by on-device sync alerts (`AlarmManager` +
   `NotificationManager`); true push would need Firebase Cloud Messaging.
 - **Default city / radius** preferences exist in the data layer but have no settings UI yet.
-- **Offline sync** replays against an in-memory mock backend — a real REST API with persistent
-  storage would be needed for multi-device synchronisation.
+- **Offline operation journal** — the pending queue is a local-only journal reconciled on startup. Multi-device synchronisation would require a shared backend.
 
 ## Attribution & licences
 
