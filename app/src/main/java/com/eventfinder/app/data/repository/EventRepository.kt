@@ -25,7 +25,7 @@ import java.io.IOException
 /** Outcome of a background sync or queue flush. */
 sealed interface SyncResult {
     data object Synced : SyncResult
-    data object NoApiKey : SyncResult
+    data object NoSession : SyncResult
     data object Failed : SyncResult
 }
 
@@ -146,7 +146,7 @@ class EventRepositoryImpl(
     override suspend fun syncFromApi(): SyncOutcome {
         if (apiKey.isBlank()) {
             AppLogger.w(tag, "Sync skipped - no Ticketmaster API key configured (demo mode)")
-            return SyncOutcome(SyncResult.NoApiKey)
+            return SyncOutcome(SyncResult.NoSession)
         }
         return try {
             val previous = eventDao.getSynced().map { it.toDomain() }
@@ -314,7 +314,7 @@ class EventRepositoryImpl(
      * it reconciles local sync flags and removes completed journal entries.
      */
     override suspend fun flushPendingActions(): SyncResult {
-        val userId = preferences.sessionUserId.first() ?: return SyncResult.NoApiKey
+        val userId = preferences.sessionUserId.first() ?: return SyncResult.NoSession
         val pending = pendingSyncDao.allForUser(userId)
         if (pending.isEmpty()) return SyncResult.Synced
 

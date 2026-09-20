@@ -243,7 +243,7 @@ class HomeViewModel(
         when (eventRepository.flushPendingActions()) {
             com.eventfinder.app.data.repository.SyncResult.Synced ->
                 AppLogger.i("HomeViewModel", "Local pending queue drained")
-            com.eventfinder.app.data.repository.SyncResult.NoApiKey ->
+            com.eventfinder.app.data.repository.SyncResult.NoSession ->
                 AppLogger.d("HomeViewModel", "No active session - local queue was not drained")
             com.eventfinder.app.data.repository.SyncResult.Failed ->
                 AppLogger.w("HomeViewModel", "Some local pending operations remain queued")
@@ -255,7 +255,7 @@ class HomeViewModel(
         when (outcome.result) {
             com.eventfinder.app.data.repository.SyncResult.Synced ->
                 AppLogger.i("HomeViewModel", "Live sync completed")
-            com.eventfinder.app.data.repository.SyncResult.NoApiKey ->
+            com.eventfinder.app.data.repository.SyncResult.NoSession ->
                 AppLogger.w("HomeViewModel", "No API key - running in demo mode with seeded data")
             com.eventfinder.app.data.repository.SyncResult.Failed ->
                 AppLogger.e("HomeViewModel", "Sync failed - preserving cached events")

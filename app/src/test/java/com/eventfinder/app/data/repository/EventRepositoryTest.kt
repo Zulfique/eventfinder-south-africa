@@ -382,10 +382,10 @@ class EventRepositoryTest {
     // ------------------------------------------------------------ syncFromApi
 
     @Test
-    fun `sync without an API key reports NoApiKey in demo mode`() = runTest {
+    fun `sync without an API key reports NoSession in demo mode`() = runTest {
         val (repo, _) = repository(apiKey = "")
 
-        assertEquals(SyncResult.NoApiKey, repo.syncFromApi().result)
+        assertEquals(SyncResult.NoSession, repo.syncFromApi().result)
     }
 
     @Test
@@ -859,10 +859,10 @@ class EventRepositoryTest {
     }
 
     @Test
-    fun `flushPendingActions returns NoApiKey when no session`() = runTest {
+    fun `flushPendingActions returns NoSession when no session`() = runTest {
         val pending = FakePendingSyncDao()
         val (repo, _) = repository(pendingDao = pending)
 
-        assertEquals(SyncResult.NoApiKey, repo.flushPendingActions())
+        assertEquals(SyncResult.NoSession, repo.flushPendingActions())
     }
 }
