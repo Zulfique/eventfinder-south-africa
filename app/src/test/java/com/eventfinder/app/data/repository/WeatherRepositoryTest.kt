@@ -42,8 +42,9 @@ class WeatherRepositoryTest {
     // -------------------------------------------------- WeatherRepositoryImpl
 
     private val isoDate = "2026-10-03"
+    private val zone = ZoneId.systemDefault()
     private val startDate: Long = LocalDate.of(2026, 10, 3)
-        .atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+        .atStartOfDay(zone).toInstant().toEpochMilli()
 
     private class FakeOpenMeteoApi(private val response: OmForecastResponse) : OpenMeteoApi {
         override suspend fun getForecast(
@@ -52,14 +53,16 @@ class WeatherRepositoryTest {
             hourly: String,
             startDate: String,
             endDate: String,
+            temperatureUnit: String,
             timezone: String
         ): OmForecastResponse = response
     }
 
     @Test
-    fun `returns the first hourly sample on the event day`() = runTest {
+    fun `returns the hourly sample closest to the event start hour`() = runTest {
         val api = FakeOpenMeteoApi(
             OmForecastResponse(
+                timezone = zone.id,
                 hourly = OmHourly(
                     time = listOf("2026-10-03T00:00", "2026-10-03T09:00", "2026-10-03T12:00"),
                     temperature2m = listOf(12.0, 18.5, 22.0),
@@ -80,9 +83,35 @@ class WeatherRepositoryTest {
     }
 
     @Test
+    fun `selects closest hour when event starts in the afternoon`() = runTest {
+        val afternoonStart = LocalDate.of(2026, 10, 3)
+            .atTime(14, 0).atZone(zone).toInstant().toEpochMilli()
+
+        val api = FakeOpenMeteoApi(
+            OmForecastResponse(
+                timezone = zone.id,
+                hourly = OmHourly(
+                    time = listOf("2026-10-03T06:00", "2026-10-03T12:00", "2026-10-03T18:00"),
+                    temperature2m = listOf(12.0, 22.0, 25.0),
+                    weatherCode = listOf(0, 1, 3)
+                ),
+                hourlyUnits = OmHourlyUnits(temperatureUnit = "°C")
+            )
+        )
+
+        val result = WeatherRepositoryImpl(api).forecastFor("event-1", -26.2, 28.0, afternoonStart)
+
+        assertTrue(result.isSuccess)
+        val summary = result.getOrThrow()
+        assertEquals(22.0, summary.temperatureCelsius, 0.0001)
+        assertEquals("2026-10-03T12:00", summary.hourIso)
+    }
+
+    @Test
     fun `defaults the unit when the API omits it`() = runTest {
         val api = FakeOpenMeteoApi(
             OmForecastResponse(
+                timezone = zone.id,
                 hourly = OmHourly(
                     time = listOf("2026-10-03T10:00"),
                     temperature2m = listOf(20.0),
@@ -95,13 +124,31 @@ class WeatherRepositoryTest {
     }
 
     @Test
-    fun `fails when no hourly sample matches the event day`() = runTest {
+    fun `returns nearest available hour even when on a different day`() = runTest {
         val api = FakeOpenMeteoApi(
             OmForecastResponse(
+                timezone = zone.id,
                 hourly = OmHourly(
                     time = listOf("2026-10-04T10:00"),
                     temperature2m = listOf(20.0),
                     weatherCode = listOf(3)
+                )
+            )
+        )
+        val result = WeatherRepositoryImpl(api).forecastFor("event-1", -33.9, 18.4, startDate)
+        assertTrue(result.isSuccess)
+        assertEquals("2026-10-04T10:00", result.getOrThrow().hourIso)
+    }
+
+    @Test
+    fun `fails when the payload has no hourly data at all`() = runTest {
+        val api = FakeOpenMeteoApi(
+            OmForecastResponse(
+                timezone = zone.id,
+                hourly = OmHourly(
+                    time = emptyList(),
+                    temperature2m = emptyList(),
+                    weatherCode = emptyList()
                 )
             )
         )

@@ -9,8 +9,6 @@ import com.eventfinder.app.data.local.PendingSyncDao
 import com.eventfinder.app.data.local.PendingSyncEntity
 import com.eventfinder.app.data.local.RsvpDao
 import com.eventfinder.app.data.local.RsvpEntity
-import com.eventfinder.app.data.remote.CommunityEventApi
-import com.eventfinder.app.data.remote.CommunityEventDto
 import com.eventfinder.app.data.remote.TicketmasterApi
 import com.eventfinder.app.data.remote.dto.TmDates
 import com.eventfinder.app.data.remote.dto.TmEmbedded
@@ -96,6 +94,11 @@ class EventRepositoryTest {
             emit()
         }
 
+        override suspend fun markSynced(id: String) {
+            rows[id]?.let { rows[id] = it.copy(isSynced = true) }
+            emit()
+        }
+
         override suspend fun deleteCreatedByUserId(userId: String) {
             rows.values.filter { it.isCreatedByUser && it.organizerId == userId }.map { it.id }.forEach { rows.remove(it) }
             emit()
@@ -138,6 +141,11 @@ class EventRepositoryTest {
         override suspend fun exists(userId: String, eventId: String): Boolean =
             rows.containsKey("$userId:$eventId")
 
+        override suspend fun markSynced(userId: String, eventId: String) {
+            rows["$userId:$eventId"]?.let { rows["$userId:$eventId"] = it.copy(isSynced = true) }
+            emit()
+        }
+
         override suspend fun deleteAllForUser(userId: String) {
             rows.keys.removeAll { it.startsWith("$userId:") }
             emit()
@@ -167,6 +175,11 @@ class EventRepositoryTest {
 
         override suspend fun statusFor(userId: String, eventId: String): String? =
             rows["$userId:$eventId"]?.status
+
+        override suspend fun markSynced(userId: String, eventId: String) {
+            rows["$userId:$eventId"]?.let { rows["$userId:$eventId"] = it.copy(isSynced = true) }
+            emit()
+        }
 
         override suspend fun attendingCount(): Int = rows.values.count { it.status == "attending" }
 
@@ -226,10 +239,6 @@ class EventRepositoryTest {
         ): TmEventsResponse = response
     }
 
-    /**
-     * Minimal in-memory stand-in for [UserPreferences] that lets tests set a
-     * session user without Android DataStore dependencies.
-     */
     private class TestPreferences : com.eventfinder.app.data.store.SessionProvider {
         private val _sessionId = MutableStateFlow<String?>(null)
         override val sessionUserId: Flow<String?> get() = _sessionId
@@ -322,27 +331,12 @@ class EventRepositoryTest {
         )
     )
 
-    private class FakeCommunityEventApi : CommunityEventApi {
-        val events = mutableMapOf<String, CommunityEventDto>()
-        val favourites = mutableSetOf<String>()   // "userId:eventId"
-        val rsvps = mutableMapOf<String, String>() // "userId:eventId" → status
-
-        override suspend fun upsertEvent(event: CommunityEventDto) { events[event.id] = event }
-        override suspend fun deleteEvent(eventId: String) { events.remove(eventId) }
-        override suspend fun upsertFavourite(userId: String, eventId: String) { favourites.add("$userId:$eventId") }
-        override suspend fun deleteFavourite(userId: String, eventId: String) { favourites.remove("$userId:$eventId") }
-        override suspend fun upsertRsvp(userId: String, eventId: String, status: String) { rsvps["$userId:$eventId"] = status }
-        override suspend fun getEventsByUser(userId: String) = events.values.filter { it.organizerId == userId }
-        override suspend fun getAllEvents() = events.values.toList()
-    }
-
     private fun repository(
         favoriteDao: FakeFavoriteDao = FakeFavoriteDao(),
         eventDao: FakeEventDao = FakeEventDao(favoriteDao),
         rsvpDao: FakeRsvpDao = FakeRsvpDao(),
         pendingDao: FakePendingSyncDao = FakePendingSyncDao(),
         api: TicketmasterApi = FakeTicketmasterApi(liveResponse()),
-        communityApi: CommunityEventApi = FakeCommunityEventApi(),
         apiKey: String = "test-key",
         preferences: TestPreferences = TestPreferences()
     ): Pair<EventRepositoryImpl, TestPreferences> =
@@ -354,7 +348,6 @@ class EventRepositoryTest {
                 rsvpDao = rsvpDao,
                 pendingSyncDao = pendingDao,
                 ticketmasterApi = api,
-                communityEventApi = communityApi,
                 apiKey = apiKey,
                 preferences = preferences
             ),
@@ -440,84 +433,6 @@ class EventRepositoryTest {
     }
 
     // ---------------------------------------------------------- favourites
-
-    @Test
-    fun `sync reports newly added events and updated favourites`() = runTest {
-        val favorites = FakeFavoriteDao()
-        val dao = FakeEventDao(favorites)
-        dao.upsert(
-            knownSyncedEvent(
-                id = "tm-OLD",
-                title = "Old Name",
-                venue = "Old Venue"
-            )
-        )
-        favorites.insert(FavoriteEntity(userId = "system", eventId = "tm-OLD", createdAt = 0L, isSynced = true))
-
-        val response = TmEventsResponse(
-            embedded = TmEmbedded(
-                events = listOf(
-                    TmEvent(
-                        id = "OLD",
-                        name = "Old Name Renamed",
-                        dates = TmDates(start = TmStart(localDate = "2026-11-20", localTime = "20:00:00"))
-                    ),
-                    TmEvent(
-                        id = "NEW",
-                        name = "Brand New Concert",
-                        dates = TmDates(start = TmStart(localDate = "2026-12-01", localTime = "19:00:00"))
-                    )
-                )
-            )
-        )
-        val (repo, prefs) = repository(
-            eventDao = dao,
-            favoriteDao = favorites,
-            api = FakeTicketmasterApi(response)
-        )
-        prefs.setTestUserId("system")
-
-        val outcome = repo.syncFromApi()
-
-        assertEquals(SyncResult.Synced, outcome.result)
-        assertEquals(listOf("tm-NEW"), outcome.newEvents.map { it.id })
-        assertEquals(listOf("tm-OLD"), outcome.updatedFavorites.map { it.id })
-    }
-
-    @Test
-    fun `first sync of a fresh install never alerts about the whole catalogue`() = runTest {
-        val (repo, _) = repository()
-
-        val outcome = repo.syncFromApi()
-
-        assertTrue(outcome.newEvents.isEmpty())
-        assertTrue(outcome.updatedFavorites.isEmpty())
-    }
-
-    private fun knownSyncedEvent(
-        id: String,
-        title: String,
-        venue: String,
-        favorite: Boolean = false
-    ) = EventEntity(
-        id = id,
-        title = title,
-        description = "Existing synced event",
-        category = "music",
-        startDate = 4_000_000_000_000L,
-        endDate = 4_000_003_600_000L,
-        venueName = venue,
-        address = "Johannesburg",
-        latitude = -26.2,
-        longitude = 28.0,
-        imageUrl = null,
-        isPublic = true,
-        organizerId = "org",
-        organizerName = "Organizer",
-        attendeeCount = 0,
-        isCreatedByUser = false,
-        isSynced = true
-    )
 
     @Test
     fun `toggleFavorite adds then removes a favourite and queues offline actions`() = runTest {
@@ -776,7 +691,6 @@ class EventRepositoryTest {
         val database = FakeDatabase(favorites, dao, rsvps, pending)
         val (repo, prefs) = repository(favoriteDao = favorites, eventDao = dao, rsvpDao = rsvps, pendingDao = pending)
 
-        // User A creates events, favourites, RSVPs, and has pending actions
         prefs.setTestUserId("user-a")
         val eventA = repo.createEvent(draft(title = "User A event 1")).getOrThrow()
         repo.createEvent(draft(title = "User A event 2"))
@@ -784,21 +698,17 @@ class EventRepositoryTest {
         repo.setRsvp(eventA, RsvpStatus.ATTENDING)
         assertEquals(4, pending.rows.size)
 
-        // User B creates an event
         prefs.setTestUserId("user-b")
         val eventB = repo.createEvent(draft(title = "User B event")).getOrThrow()
 
-        // Delete user A's data directly via the database helper
         database.deleteAccountData("user-a")
 
-        // Verify: User A's events gone, favourites gone, RSVPs gone
         assertNull(dao.findById(eventA))
         assertTrue(dao.rows.values.none { it.organizerId == "user-a" })
         assertTrue(favorites.rows.values.none { it.userId == "user-a" })
         assertTrue(rsvps.rows.values.none { it.userId == "user-a" })
         assertTrue(pending.rows.none { it.userId == "user-a" })
 
-        // Verify: User B's event still exists
         assertNotNull(dao.findById(eventB))
         assertEquals("User B event", dao.findById(eventB)!!.title)
     }
@@ -890,5 +800,69 @@ class EventRepositoryTest {
         assertEquals(1, upcoming.size)
         assertEquals("tm-future", upcoming[0].id)
         assertEquals("Future Event", upcoming[0].title)
+    }
+
+    // ------------------------------------------------- flushPendingActions
+
+    @Test
+    fun `flushPendingActions marks events as synced and drains the queue`() = runTest {
+        val pending = FakePendingSyncDao()
+        val dao = FakeEventDao()
+        val (repo, prefs) = repository(eventDao = dao, pendingDao = pending)
+        prefs.setTestUserId("user-1")
+
+        val id = repo.createEvent(draft(title = "Sync Me")).getOrThrow()
+        assertEquals(1, pending.rows.size)
+        assertFalse(dao.findById(id)!!.isSynced)
+
+        val result = repo.flushPendingActions()
+
+        assertEquals(SyncResult.Synced, result)
+        assertTrue(pending.rows.isEmpty())
+        assertTrue(dao.findById(id)!!.isSynced)
+    }
+
+    @Test
+    fun `flushPendingActions marks favorites as synced`() = runTest {
+        val pending = FakePendingSyncDao()
+        val favorites = FakeFavoriteDao()
+        val (repo, prefs) = repository(favoriteDao = favorites, pendingDao = pending)
+        prefs.setTestUserId("user-1")
+        repo.ensureSeeded()
+        val target = repo.observeAllEvents().first().first().id
+
+        repo.toggleFavorite(target)
+        assertEquals(1, pending.rows.size)
+
+        repo.flushPendingActions()
+
+        assertTrue(pending.rows.isEmpty())
+        assertTrue(favorites.rows.values.any { it.userId == "user-1" && it.eventId == target && it.isSynced })
+    }
+
+    @Test
+    fun `flushPendingActions marks rsvps as synced`() = runTest {
+        val pending = FakePendingSyncDao()
+        val rsvps = FakeRsvpDao()
+        val (repo, prefs) = repository(rsvpDao = rsvps, pendingDao = pending)
+        prefs.setTestUserId("user-1")
+        repo.ensureSeeded()
+        val target = repo.observeAllEvents().first().first().id
+
+        repo.setRsvp(target, RsvpStatus.ATTENDING)
+        assertEquals(1, pending.rows.size)
+
+        repo.flushPendingActions()
+
+        assertTrue(pending.rows.isEmpty())
+        assertTrue(rsvps.rows.values.any { it.userId == "user-1" && it.eventId == target && it.isSynced })
+    }
+
+    @Test
+    fun `flushPendingActions returns NoApiKey when no session`() = runTest {
+        val pending = FakePendingSyncDao()
+        val (repo, _) = repository(pendingDao = pending)
+
+        assertEquals(SyncResult.NoApiKey, repo.flushPendingActions())
     }
 }

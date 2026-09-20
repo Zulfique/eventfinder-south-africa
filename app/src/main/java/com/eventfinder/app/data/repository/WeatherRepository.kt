@@ -5,15 +5,12 @@ import com.eventfinder.app.data.remote.dto.OmForecastResponse
 import com.eventfinder.app.utils.AppLogger
 import com.eventfinder.app.utils.DateTimeUtils
 import java.io.IOException
+import java.time.Instant
+import java.time.LocalDateTime
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 import retrofit2.HttpException
 
-/**
- * A forecast summarised for the event-detail weather card.
- *
- * The prototype reads the first hourly sample for the event day. Only
- * temperature and weather code are carried across; the UI resolves the
- * description from string resources using [WeatherCodeMapper].
- */
 data class WeatherSummary(
     val temperatureCelsius: Double,
     val weatherCode: Int,
@@ -21,11 +18,6 @@ data class WeatherSummary(
     val hourIso: String
 )
 
-/**
- * Describes WMO weather codes for UI translation. Codes follow the World
- * Meteorological Organisation standard used by Open-Meteo.
- *  - https://open-meteo.com/en/docs#weathervariables
- */
 fun describeWeatherCode(code: Int): String = when (code) {
     0 -> "Clear"
     in 1..3 -> "Partly cloudy"
@@ -39,9 +31,13 @@ fun describeWeatherCode(code: Int): String = when (code) {
     else -> "Unknown"
 }
 
-/** Weather boundary backed by the keyless Open-Meteo REST API. */
 interface WeatherRepository {
-    suspend fun forecastFor(eventId: String, latitude: Double, longitude: Double, startDate: Long): Result<WeatherSummary>
+    suspend fun forecastFor(
+        eventId: String,
+        latitude: Double,
+        longitude: Double,
+        startDate: Long
+    ): Result<WeatherSummary>
 }
 
 class WeatherRepositoryImpl(
@@ -49,55 +45,87 @@ class WeatherRepositoryImpl(
 ) : WeatherRepository {
 
     private val tag = "WeatherRepository"
+    private val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm")
 
     override suspend fun forecastFor(
         eventId: String,
         latitude: Double,
         longitude: Double,
         startDate: Long
-    ): Result<WeatherSummary> = try {
-        val iso = DateTimeUtils.isoDate(startDate)
-        val response: OmForecastResponse = openMeteoApi.getForecast(
-            latitude = latitude,
-            longitude = longitude,
-            startDate = iso,
-            endDate = iso
-        )
-        val time = response.hourly?.time.orEmpty()
-        val temps = response.hourly?.temperature2m.orEmpty()
-        val codes = response.hourly?.weatherCode.orEmpty()
-        val index = time.indexOfFirst { it.startsWith(iso) }
-        if (index >= 0 && index < temps.size) {
-            val summary = WeatherSummary(
-                temperatureCelsius = temps[index],
-                weatherCode = codes.getOrElse(index) { 0 },
-                unit = response.hourlyUnits?.temperatureUnit ?: "°C",
-                hourIso = time[index]
+    ): Result<WeatherSummary> {
+        return try {
+            val isoDate = DateTimeUtils.isoDate(startDate)
+
+            val response: OmForecastResponse = openMeteoApi.getForecast(
+                latitude = latitude,
+                longitude = longitude,
+                startDate = isoDate,
+                endDate = isoDate
             )
-            AppLogger.d(tag, "Forecast for event $eventId: ${summary.temperatureCelsius}${summary.unit}")
+
+            val hourly = response.hourly
+                ?: return Result.failure(IllegalStateException("no_hourly_data"))
+
+            val times = hourly.time.orEmpty()
+            val temperatures = hourly.temperature2m.orEmpty()
+            val codes = hourly.weatherCode.orEmpty()
+
+            if (times.isEmpty() || temperatures.isEmpty()) {
+                AppLogger.w(tag, "No hourly weather data for event $eventId")
+                return Result.failure(IllegalStateException("no_hourly_data"))
+            }
+
+            val timezone = runCatching {
+                ZoneId.of(response.timezone ?: ZoneId.systemDefault().id)
+            }.getOrElse { ZoneId.systemDefault() }
+
+            val targetInstant = Instant.ofEpochMilli(startDate)
+
+            var bestIndex = -1
+            var bestDistance = Long.MAX_VALUE
+
+            for (index in times.indices) {
+                if (index >= temperatures.size) break
+
+                val forecastInstant = runCatching {
+                    LocalDateTime.parse(times[index], formatter).atZone(timezone).toInstant()
+                }.getOrNull() ?: continue
+
+                val distance = kotlin.math.abs(forecastInstant.toEpochMilli() - targetInstant.toEpochMilli())
+
+                if (distance < bestDistance) {
+                    bestDistance = distance
+                    bestIndex = index
+                }
+            }
+
+            if (bestIndex < 0) {
+                return Result.failure(IllegalStateException("no_matching_hour"))
+            }
+
+            val summary = WeatherSummary(
+                temperatureCelsius = temperatures[bestIndex],
+                weatherCode = codes.getOrElse(bestIndex) { 0 },
+                unit = response.hourlyUnits?.temperatureUnit ?: "°C",
+                hourIso = times[bestIndex]
+            )
+
+            AppLogger.d(
+                tag,
+                "Forecast for event $eventId: ${summary.temperatureCelsius}${summary.unit} " +
+                    "at ${summary.hourIso} ($timezone)"
+            )
+
             Result.success(summary)
-        } else {
-            AppLogger.w(tag, "No hourly sample on event day for $eventId")
-            Result.failure(IllegalStateException("no_hourly_data"))
+        } catch (t: HttpException) {
+            AppLogger.e(tag, "Open-Meteo HTTP ${t.code()} for $eventId", t)
+            Result.failure(t)
+        } catch (t: IOException) {
+            AppLogger.e(tag, "Weather lookup failed - offline", t)
+            Result.failure(t)
+        } catch (t: Exception) {
+            AppLogger.e(tag, "Weather lookup failed", t)
+            Result.failure(t)
         }
-    } catch (t: HttpException) {
-        when {
-            t.code() == 400 -> {
-                AppLogger.w(tag, "Open-Meteo rejected forecast request for $eventId")
-            }
-            t.code() in 500..599 -> {
-                AppLogger.e(tag, "Open-Meteo server error for $eventId", t)
-            }
-            else -> {
-                AppLogger.e(tag, "Open-Meteo HTTP ${t.code()} for $eventId", t)
-            }
-        }
-        Result.failure(t)
-    } catch (t: IOException) {
-        AppLogger.e(tag, "Weather lookup failed (offline)", t)
-        Result.failure(t)
-    } catch (t: Exception) {
-        AppLogger.e(tag, "Weather lookup failed", t)
-        Result.failure(t)
     }
 }

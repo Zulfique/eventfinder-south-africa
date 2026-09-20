@@ -17,3 +17,5 @@ captures/
 # Key store files (never commit signing keys)
 *.jks
 *.keystore
+# JVM crash logs
+app/hs_err_*.log

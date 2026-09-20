@@ -10,6 +10,7 @@ import com.google.gson.annotations.SerializedName
 data class OmForecastResponse(
     @SerializedName("latitude") val latitude: Double? = null,
     @SerializedName("longitude") val longitude: Double? = null,
+    @SerializedName("timezone") val timezone: String? = null,
     @SerializedName("hourly") val hourly: OmHourly? = null,
     @SerializedName("hourly_units") val hourlyUnits: OmHourlyUnits? = null
 )
@@ -17,7 +18,7 @@ data class OmForecastResponse(
 data class OmHourly(
     @SerializedName("time") val time: List<String>? = null,
     @SerializedName("temperature_2m") val temperature2m: List<Double>? = null,
-    @SerializedName("weathercode") val weatherCode: List<Int>? = null
+    @SerializedName("weather_code") val weatherCode: List<Int>? = null
 )
 
 data class OmHourlyUnits(

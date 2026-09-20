@@ -4,7 +4,6 @@ import android.content.Context
 import com.eventfinder.app.BuildConfig
 import com.eventfinder.app.data.local.AppDatabase
 import com.eventfinder.app.data.remote.ApiClient
-import com.eventfinder.app.data.remote.MockCommunityEventBackend
 import com.eventfinder.app.data.repository.AuthRepository
 import com.eventfinder.app.data.repository.AuthRepositoryImpl
 import com.eventfinder.app.data.repository.EventRepository
@@ -21,10 +20,6 @@ import com.eventfinder.app.utils.NetworkMonitor
  * Works well for a prototype and keeps constructors explicit so repositories
  * can be replaced with fakes in unit tests without reflection or heavyweight
  * frameworks. Annotation-based DI (Hilt) is documented as a final-POE upgrade.
- *
- * References:
- *  - Android Developers, "Manual dependency injection":
- *    https://developer.android.com/training/dependency-injection/manual
  */
 class AppContainer(context: Context) {
 
@@ -52,14 +47,11 @@ class AppContainer(context: Context) {
             rsvpDao = database.rsvpDao(),
             pendingSyncDao = database.pendingSyncDao(),
             ticketmasterApi = ApiClient.ticketmasterApi(appContext.cacheDir),
-            communityEventApi = communityEventApi,
             apiKey = BuildConfig.TICKETMASTER_API_KEY,
             preferences = preferences,
             context = appContext
         )
     }
-
-    private val communityEventApi = MockCommunityEventBackend()
 
     val weatherRepository: WeatherRepository by lazy {
         WeatherRepositoryImpl(ApiClient.openMeteoApi(appContext.cacheDir))

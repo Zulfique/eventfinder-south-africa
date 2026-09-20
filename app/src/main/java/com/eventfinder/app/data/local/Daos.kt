@@ -76,6 +76,9 @@ interface EventDao {
     @Query("DELETE FROM events WHERE id = :id")
     suspend fun deleteById(id: String)
 
+    @Query("UPDATE events SET isSynced = 1 WHERE id = :id")
+    suspend fun markSynced(id: String)
+
     @Query("DELETE FROM events WHERE organizerId = :userId AND isCreatedByUser = 1")
     suspend fun deleteCreatedByUserId(userId: String)
 
@@ -113,6 +116,9 @@ interface FavoriteDao {
     @Query("SELECT EXISTS(SELECT 1 FROM favorites WHERE userId = :userId AND eventId = :eventId)")
     suspend fun exists(userId: String, eventId: String): Boolean
 
+    @Query("UPDATE favorites SET isSynced = 1 WHERE userId = :userId AND eventId = :eventId")
+    suspend fun markSynced(userId: String, eventId: String)
+
     @Query("DELETE FROM favorites WHERE userId = :userId")
     suspend fun deleteAllForUser(userId: String)
 }
@@ -132,6 +138,9 @@ interface RsvpDao {
 
     @Query("SELECT status FROM rsvps WHERE userId = :userId AND eventId = :eventId LIMIT 1")
     suspend fun statusFor(userId: String, eventId: String): String?
+
+    @Query("UPDATE rsvps SET isSynced = 1 WHERE userId = :userId AND eventId = :eventId")
+    suspend fun markSynced(userId: String, eventId: String)
 
     @Query("SELECT COUNT(*) FROM rsvps WHERE status = 'attending'")
     suspend fun attendingCount(): Int

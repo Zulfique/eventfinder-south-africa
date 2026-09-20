@@ -7,8 +7,6 @@ import com.eventfinder.app.data.local.FavoriteDao
 import com.eventfinder.app.data.local.PendingSyncDao
 import com.eventfinder.app.data.local.RsvpDao
 import com.eventfinder.app.data.local.toDomain
-import com.eventfinder.app.data.remote.CommunityEventApi
-import com.eventfinder.app.data.remote.CommunityEventDto
 import com.eventfinder.app.data.remote.TicketmasterApi
 import com.eventfinder.app.data.remote.TicketmasterMapper
 import com.eventfinder.app.data.store.SessionProvider
@@ -16,18 +14,15 @@ import com.eventfinder.app.domain.model.Event
 import com.eventfinder.app.domain.model.EventAlertDetector
 import com.eventfinder.app.domain.model.EventCategory
 import com.eventfinder.app.domain.model.RsvpStatus
-import com.eventfinder.app.notifications.NotificationHelper
 import com.eventfinder.app.utils.AppLogger
-import com.google.gson.Gson
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import java.io.IOException
-import java.util.UUID
 
-/** Outcome of a background API sync. */
+/** Outcome of a background sync or queue flush. */
 sealed interface SyncResult {
     data object Synced : SyncResult
     data object NoApiKey : SyncResult
@@ -61,45 +56,23 @@ data class NewEventDraft(
 
 /**
  * Central event catalogue repository. Combines the Room cache (offline-first,
- * FR-09) with the free Ticketmaster REST API for live sync.
+ * FR-09) with the free Ticketmaster REST API for live sync. The pending-action
+ * queue is a local operation journal — Room is the only authoritative store.
  */
 interface EventRepository {
-    /** All events from the local cache, streamed reactively. */
     fun observeAllEvents(): Flow<List<Event>>
-
-    /** Favourite events (offline-accessible, FR-03). */
     fun observeFavoriteEvents(): Flow<List<Event>>
-
-    /** Favourite event ids kept in sync with the cache. */
     fun observeFavoriteIds(): Flow<Set<String>>
-
-    /** RSVP state per event id. */
     fun observeRsvpStatuses(): Flow<Map<String, RsvpStatus>>
-
-    /** Seeds the cache with a curated SA sample directory on first run. */
     suspend fun ensureSeeded()
-
-    /** Pulls fresh events from the free Ticketmaster API. Returns the outcome. */
     suspend fun syncFromApi(): SyncOutcome
-
     suspend fun toggleFavorite(eventId: String): Boolean
-
     suspend fun setRsvp(eventId: String, status: RsvpStatus)
-
     suspend fun createEvent(draft: NewEventDraft): Result<String>
-
-    /** Updates a community event the user created (FR-06). */
     suspend fun updateEvent(eventId: String, draft: NewEventDraft): Result<Unit>
-
-    /** Deletes a community event the user created (FR-06). */
     suspend fun deleteEvent(eventId: String): Result<Unit>
-
     suspend fun getEvent(eventId: String): Event?
-
-    /** Clears the synced catalogue + user events, then reseeds the sample set. */
     suspend fun clearLocalCache()
-
-    /** Tries to flush the offline action queue to the API (best effort). */
     suspend fun flushPendingActions(): SyncResult
 }
 
@@ -110,15 +83,12 @@ class EventRepositoryImpl(
     private val rsvpDao: RsvpDao,
     private val pendingSyncDao: PendingSyncDao,
     private val ticketmasterApi: TicketmasterApi,
-    private val communityEventApi: CommunityEventApi,
     private val apiKey: String,
     private val preferences: SessionProvider,
     private val context: android.content.Context? = null
 ) : EventRepository {
 
     private val mapper = TicketmasterMapper()
-    private val gson = Gson()
-
     private val tag = "EventRepository"
 
     private suspend fun requireCurrentUserId(): Result<String> {
@@ -136,7 +106,7 @@ class EventRepositoryImpl(
     override fun observeFavoriteIds(): Flow<Set<String>> =
         preferences.sessionUserId.flatMapLatest { userId ->
             if (userId.isNullOrBlank()) {
-                kotlinx.coroutines.flow.flowOf(emptySet())
+                flowOf(emptySet())
             } else {
                 favoriteDao.observeAllForUser(userId).map { rows -> rows.map { it.eventId }.toSet() }
             }
@@ -145,7 +115,7 @@ class EventRepositoryImpl(
     override fun observeFavoriteEvents(): Flow<List<Event>> =
         preferences.sessionUserId.flatMapLatest { userId ->
             if (userId.isNullOrBlank()) {
-                kotlinx.coroutines.flow.flowOf(emptyList())
+                flowOf(emptyList())
             } else {
                 eventDao.observeFavoriteEventsForUser(userId).map { rows -> rows.map { it.toDomain() } }
             }
@@ -154,7 +124,7 @@ class EventRepositoryImpl(
     override fun observeRsvpStatuses(): Flow<Map<String, RsvpStatus>> =
         preferences.sessionUserId.flatMapLatest { userId ->
             if (userId.isNullOrBlank()) {
-                kotlinx.coroutines.flow.flowOf(emptyMap())
+                flowOf(emptyMap())
             } else {
                 rsvpDao.observeAllForUser(userId).map { rows ->
                     rows.mapNotNull { row -> RsvpStatus.fromStorage(row.status)?.let { row.eventId to it } }.toMap()
@@ -196,7 +166,6 @@ class EventRepositoryImpl(
 
             val alerts = EventAlertDetector.detect(previous, mapped, favoriteIds)
 
-            // Replace the synced catalogue atomically to prevent half-updated state.
             eventDao.replaceSyncedEvents(mapped.map { it.toEntity(isSynced = true, isCreatedByUser = false) })
             AppLogger.i(tag, "Sync complete - ${mapped.size} live events stored")
             if (!alerts.isEmpty) {
@@ -226,7 +195,7 @@ class EventRepositoryImpl(
             eventId = eventId,
             favorite = newValue,
             pendingAction = if (newValue) "create" else "delete",
-            pendingPayload = gson.toJson(eventId)
+            pendingPayload = eventId
         )
         AppLogger.i(tag, "${if (newValue) "Added" else "Removed"} favourite: $eventId")
         return newValue
@@ -238,7 +207,7 @@ class EventRepositoryImpl(
             userId = userId,
             eventId = eventId,
             status = status.storage,
-            pendingPayload = gson.toJson(status.storage)
+            pendingPayload = status.storage
         )
         AppLogger.i(tag, "RSVP updated for $eventId -> ${status.storage}")
     }
@@ -247,7 +216,7 @@ class EventRepositoryImpl(
         val userId = preferences.sessionUserId.first()
             ?: return Result.failure(IllegalStateException("not_logged_in"))
 
-        val id = UUID.randomUUID().toString()
+        val id = java.util.UUID.randomUUID().toString()
         val entity = EventEntity(
             id = id,
             title = draft.title.trim(),
@@ -267,7 +236,7 @@ class EventRepositoryImpl(
             isCreatedByUser = true,
             isSynced = false
         )
-        database.createEventAtomically(entity, userId, gson.toJson(entity))
+        database.createEventAtomically(entity, userId, "")
         AppLogger.i(tag, "Community event created locally: $id")
         return Result.success(id)
     }
@@ -299,7 +268,7 @@ class EventRepositoryImpl(
             isPublic = draft.isPublic,
             isSynced = false
         )
-        database.updateEventAtomically(updated, userId, gson.toJson(updated))
+        database.updateEventAtomically(updated, userId, "")
         AppLogger.i(tag, "Community event updated locally: $eventId")
         return Result.success(Unit)
     }
@@ -317,8 +286,8 @@ class EventRepositoryImpl(
             AppLogger.w(tag, "Delete rejected - user $userId does not own event $eventId")
             return Result.failure(SecurityException("not_owner"))
         }
-        context?.let { NotificationHelper.cancelEventReminders(it, eventId) }
-        database.deleteEventAtomically(eventId, userId, gson.toJson(eventId))
+        context?.let { com.eventfinder.app.notifications.NotificationHelper.cancelEventReminders(it, eventId) }
+        database.deleteEventAtomically(eventId, userId, "")
         AppLogger.i(tag, "Community event deleted locally: $eventId")
         return Result.success(Unit)
     }
@@ -337,55 +306,44 @@ class EventRepositoryImpl(
         AppLogger.i(tag, "Remote cache cleared and sample events restored")
     }
 
+    /**
+     * Drains the local pending-operation queue.
+     *
+     * EventFinder has no cloud backend. Room is the authoritative data store.
+     * The pending queue is therefore a durable local operation journal. Draining
+     * it reconciles local sync flags and removes completed journal entries.
+     */
     override suspend fun flushPendingActions(): SyncResult {
         val userId = preferences.sessionUserId.first() ?: return SyncResult.NoApiKey
         val pending = pendingSyncDao.allForUser(userId)
         if (pending.isEmpty()) return SyncResult.Synced
 
-        var failed = 0
         for (action in pending) {
             try {
                 when (action.entityType) {
-                    "event" -> replayEventAction(action)
-                    "favorite" -> replayFavouriteAction(action, userId)
-                    "rsvp" -> replayRsvpAction(action, userId)
-                    else -> AppLogger.w(tag, "Unknown pending entity type: ${action.entityType}")
+                    "event" -> {
+                        if (action.action != "delete") {
+                            eventDao.markSynced(action.entityId)
+                        }
+                    }
+                    "favorite" -> {
+                        favoriteDao.markSynced(userId, action.entityId)
+                    }
+                    "rsvp" -> {
+                        rsvpDao.markSynced(userId, action.entityId)
+                    }
+                    else -> {
+                        AppLogger.w(tag, "Removing unknown local queue entry ${action.id}")
+                    }
                 }
                 pendingSyncDao.delete(action.id)
             } catch (e: Exception) {
-                AppLogger.e(tag, "Failed to replay action ${action.id} (${action.entityType}/${action.action})", e)
+                AppLogger.e(tag, "Failed to drain local queue entry ${action.id}", e)
                 pendingSyncDao.incrementRetry(action.id)
-                failed++
+                return SyncResult.Failed
             }
         }
-        return if (failed == 0) SyncResult.Synced else SyncResult.Failed
-    }
-
-    private suspend fun replayEventAction(action: com.eventfinder.app.data.local.PendingSyncEntity) {
-        val payload = action.payload
-        when (action.action) {
-            "create", "update" -> {
-                val entity = gson.fromJson(payload, EventEntity::class.java)
-                communityEventApi.upsertEvent(entity.toCommunityDto())
-            }
-            "delete" -> {
-                val eventId = gson.fromJson(payload, String::class.java)
-                communityEventApi.deleteEvent(eventId)
-            }
-        }
-    }
-
-    private suspend fun replayFavouriteAction(action: com.eventfinder.app.data.local.PendingSyncEntity, userId: String) {
-        val eventId = gson.fromJson(action.payload, String::class.java)
-        when (action.action) {
-            "create" -> communityEventApi.upsertFavourite(userId, eventId)
-            "delete" -> communityEventApi.deleteFavourite(userId, eventId)
-        }
-    }
-
-    private suspend fun replayRsvpAction(action: com.eventfinder.app.data.local.PendingSyncEntity, userId: String) {
-        val status = gson.fromJson(action.payload, String::class.java)
-        communityEventApi.upsertRsvp(userId, action.entityId, status)
+        return SyncResult.Synced
     }
 
     private fun Event.toEntity(isSynced: Boolean, isCreatedByUser: Boolean): EventEntity =
@@ -407,24 +365,5 @@ class EventRepositoryImpl(
             attendeeCount = attendeeCount,
             isCreatedByUser = isCreatedByUser,
             isSynced = isSynced
-        )
-
-    private fun EventEntity.toCommunityDto(): CommunityEventDto =
-        CommunityEventDto(
-            id = id,
-            title = title,
-            description = description,
-            category = category,
-            startDate = startDate,
-            endDate = endDate,
-            venueName = venueName,
-            address = address,
-            latitude = latitude,
-            longitude = longitude,
-            imageUrl = imageUrl,
-            isPublic = isPublic,
-            organizerId = organizerId,
-            organizerName = organizerName,
-            attendeeCount = attendeeCount
         )
 }

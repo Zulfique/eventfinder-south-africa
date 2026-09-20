@@ -43,9 +43,7 @@ class LoginViewModelTest {
 
     private class FakeAuthRepository : AuthRepository {
         override val currentUser: Flow<User?> = flowOf(null)
-        var resetResult: Result<Unit> = Result.failure(
-            UnsupportedOperationException("password_reset_requires_authenticated_backend")
-        )
+        var resetResult: Result<Unit> = Result.success(Unit)
         var lastReset: Pair<String, String>? = null
 
         override suspend fun resetPassword(email: String, newPassword: String): Result<Unit> {
@@ -90,8 +88,9 @@ class LoginViewModelTest {
     }
 
     @Test
-    fun `reset shows not-available message when backend is missing`() = runTest(dispatcher) {
+    fun `successful local reset shows completion`() = runTest(dispatcher) {
         val repo = FakeAuthRepository()
+        repo.resetResult = Result.success(Unit)
         val viewModel = LoginViewModel(repo, biometricAvailable = false)
         viewModel.onEmailChange("user@example.com")
         val messages = mutableListOf<UiMessage>()
@@ -101,8 +100,89 @@ class LoginViewModelTest {
         advanceUntilIdle()
         job.cancel()
 
-        assertTrue(messages.contains(UiMessage.Resource(R.string.reset_not_available)))
-        assertFalse(viewModel.uiState.value.passwordResetComplete)
+        assertTrue(messages.contains(UiMessage.Resource(R.string.reset_success)))
+        assertTrue(viewModel.uiState.value.passwordResetComplete)
         assertEquals("user@example.com" to "NewPass1!", repo.lastReset)
+    }
+
+    @Test
+    fun `reset with invalid email shows error`() = runTest(dispatcher) {
+        val repo = FakeAuthRepository()
+        repo.resetResult = Result.failure(IllegalArgumentException("invalid_email"))
+        val viewModel = LoginViewModel(repo, biometricAvailable = false)
+        viewModel.onEmailChange("bad-email")
+        val messages = mutableListOf<UiMessage>()
+        val job = launch { viewModel.messages.collect { messages += it } }
+
+        viewModel.requestPasswordReset("NewPass1!", "NewPass1!")
+        advanceUntilIdle()
+        job.cancel()
+
+        assertTrue(messages.any { it == UiMessage.Resource(R.string.invalid_email) })
+        assertFalse(viewModel.uiState.value.passwordResetComplete)
+    }
+
+    @Test
+    fun `reset with unknown email shows error`() = runTest(dispatcher) {
+        val repo = FakeAuthRepository()
+        repo.resetResult = Result.failure(IllegalArgumentException("unknown_email"))
+        val viewModel = LoginViewModel(repo, biometricAvailable = false)
+        viewModel.onEmailChange("unknown@example.com")
+        val messages = mutableListOf<UiMessage>()
+        val job = launch { viewModel.messages.collect { messages += it } }
+
+        viewModel.requestPasswordReset("NewPass1!", "NewPass1!")
+        advanceUntilIdle()
+        job.cancel()
+
+        assertTrue(messages.any { it == UiMessage.Resource(R.string.unknown_email) })
+        assertFalse(viewModel.uiState.value.passwordResetComplete)
+    }
+
+    @Test
+    fun `reset with weak password shows error`() = runTest(dispatcher) {
+        val repo = FakeAuthRepository()
+        repo.resetResult = Result.failure(IllegalArgumentException("weak_password"))
+        val viewModel = LoginViewModel(repo, biometricAvailable = false)
+        viewModel.onEmailChange("user@example.com")
+        val messages = mutableListOf<UiMessage>()
+        val job = launch { viewModel.messages.collect { messages += it } }
+
+        viewModel.requestPasswordReset("weak", "weak")
+        advanceUntilIdle()
+        job.cancel()
+
+        assertTrue(messages.any { it == UiMessage.Resource(R.string.weak_password) })
+        assertFalse(viewModel.uiState.value.passwordResetComplete)
+    }
+
+    @Test
+    fun `reset with same password shows error`() = runTest(dispatcher) {
+        val repo = FakeAuthRepository()
+        repo.resetResult = Result.failure(IllegalArgumentException("same_password"))
+        val viewModel = LoginViewModel(repo, biometricAvailable = false)
+        viewModel.onEmailChange("user@example.com")
+        val messages = mutableListOf<UiMessage>()
+        val job = launch { viewModel.messages.collect { messages += it } }
+
+        viewModel.requestPasswordReset("SamePass1!", "SamePass1!")
+        advanceUntilIdle()
+        job.cancel()
+
+        assertTrue(messages.any { it == UiMessage.Resource(R.string.password_unchanged) })
+        assertFalse(viewModel.uiState.value.passwordResetComplete)
+    }
+
+    @Test
+    fun `consumePasswordReset clears the completion flag`() = runTest(dispatcher) {
+        val repo = FakeAuthRepository()
+        val viewModel = LoginViewModel(repo, biometricAvailable = false)
+
+        viewModel.uiState.value.let { state ->
+            assertFalse(state.passwordResetComplete)
+        }
+
+        viewModel.consumePasswordReset()
+        assertFalse(viewModel.uiState.value.passwordResetComplete)
     }
 }

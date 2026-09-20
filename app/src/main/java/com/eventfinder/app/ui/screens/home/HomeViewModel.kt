@@ -6,7 +6,6 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
-import com.eventfinder.app.BuildConfig
 import com.eventfinder.app.R
 import com.eventfinder.app.di.AppContainer
 import com.eventfinder.app.domain.model.Event
@@ -42,7 +41,6 @@ data class HomeUiState(
     val userLat: Double? = null,
     val userLng: Double? = null,
     val isMapView: Boolean = false,
-    val hasApiKey: Boolean = false,
     val showFilterSheet: Boolean = false
 )
 
@@ -98,6 +96,7 @@ class HomeViewModel(
         // Seed the offline cache and attempt one live sync on startup.
         viewModelScope.launch {
             eventRepository.ensureSeeded()
+            flushPendingActions()
             syncFromApi()
         }
 
@@ -127,9 +126,6 @@ class HomeViewModel(
                     _uiState.value = _uiState.value.copy(events = views, isLoading = false)
                 }
         }
-
-        // Report initial flags derived from the build config.
-        _uiState.value = _uiState.value.copy(hasApiKey = BuildConfig.TICKETMASTER_API_KEY.isNotBlank())
     }
 
     private fun applyControls(combined: Combined, c: Controls): List<EventView> {
@@ -238,7 +234,19 @@ class HomeViewModel(
     fun refresh() {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
+            flushPendingActions()
             syncFromApi()
+        }
+    }
+
+    private suspend fun flushPendingActions() {
+        when (eventRepository.flushPendingActions()) {
+            com.eventfinder.app.data.repository.SyncResult.Synced ->
+                AppLogger.i("HomeViewModel", "Local pending queue drained")
+            com.eventfinder.app.data.repository.SyncResult.NoApiKey ->
+                AppLogger.d("HomeViewModel", "No active session - local queue was not drained")
+            com.eventfinder.app.data.repository.SyncResult.Failed ->
+                AppLogger.w("HomeViewModel", "Some local pending operations remain queued")
         }
     }
 

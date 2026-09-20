@@ -178,9 +178,21 @@ class AuthRepositoryImpl(
     }
 
     override suspend fun resetPassword(email: String, newPassword: String): Result<Unit> {
-        return Result.failure(
-            UnsupportedOperationException("password_reset_requires_authenticated_backend")
-        )
+        val normalizedEmail = email.trim().lowercase()
+        if (!EmailValidator.isValid(normalizedEmail)) {
+            return Result.failure(IllegalArgumentException("invalid_email"))
+        }
+        val user = userDao.findByEmail(normalizedEmail)
+            ?: return Result.failure(IllegalArgumentException("unknown_email"))
+        if (PasswordValidator.validate(newPassword) is ValidationResult.Invalid) {
+            return Result.failure(IllegalArgumentException("weak_password"))
+        }
+        if (PasswordHasher.verify(newPassword, user.passwordHash)) {
+            return Result.failure(IllegalArgumentException("same_password"))
+        }
+        userDao.upsert(user.copy(passwordHash = PasswordHasher.hash(newPassword)))
+        AppLogger.i("AuthRepository", "Local password reset completed for ${user.email}")
+        return Result.success(Unit)
     }
 
     override suspend fun changePassword(currentPassword: String, newPassword: String): Result<Unit> {
