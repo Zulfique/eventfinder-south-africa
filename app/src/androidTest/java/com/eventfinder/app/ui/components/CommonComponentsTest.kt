@@ -49,7 +49,7 @@ class CommonComponentsTest {
         attendeeCount = 250,
         isFavorite = isFavorite,
         isCreatedByUser = false,
-        isSynced = true
+        isExternal = true
     )
 
     @Test

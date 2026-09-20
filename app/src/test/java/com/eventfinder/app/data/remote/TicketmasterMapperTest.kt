@@ -77,7 +77,7 @@ class TicketmasterMapperTest {
         assertEquals(-26.19, event.latitude, 0.01)
         assertEquals(28.04, event.longitude, 0.01)
         assertEquals("https://example.com/hero.jpg", event.imageUrl)
-        assertTrue(event.isSynced)
+        assertTrue(event.isExternal)
         assertTrue(!event.isCreatedByUser)
     }
 
@@ -570,7 +570,7 @@ class TicketmasterMapperTest {
         assertEquals("ticketmaster", event.organizerId)
         assertEquals("Ticketmaster", event.organizerName)
         assertTrue(event.isPublic)
-        assertTrue(event.isSynced)
+        assertTrue(event.isExternal)
         assertTrue(!event.isCreatedByUser)
         assertEquals(0, event.attendeeCount)
     }

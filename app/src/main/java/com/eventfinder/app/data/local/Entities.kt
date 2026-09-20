@@ -24,7 +24,8 @@ data class UserEntity(
 
 /**
  * Room entity for an event. Mirrors `EventEntity` from §7.1 including the
- * favourite + sync flags needed for the offline-first prototype behaviour.
+ * favourite flag and the external-source indicator for the offline-first
+ * prototype behaviour.
  */
 @Entity(
     tableName = "events",
@@ -47,7 +48,8 @@ data class EventEntity(
     val organizerName: String,
     val attendeeCount: Int,
     val isCreatedByUser: Boolean,
-    val isSynced: Boolean
+    /** True if this event was fetched from the external Ticketmaster API. */
+    val isExternal: Boolean
 )
 
 /** Room entity for a favourite link (schema §5.3 / §7.1). */
@@ -59,7 +61,8 @@ data class FavoriteEntity(
     val userId: String,
     val eventId: String,
     val createdAt: Long,
-    val isSynced: Boolean
+    /** True once the local operation journal entry for this mutation has been drained. */
+    val isFlushed: Boolean
 )
 
 /** Room entity for an RSVP link (schema §5.3). */
@@ -72,7 +75,8 @@ data class RsvpEntity(
     val eventId: String,
     val status: String,
     val createdAt: Long,
-    val isSynced: Boolean
+    /** True once the local operation journal entry for this mutation has been drained. */
+    val isFlushed: Boolean
 )
 
 /**
@@ -80,7 +84,7 @@ data class RsvpEntity(
  * update / delete, favourite toggle, RSVP toggle) that has not yet been
  * reconciled with the local sync flags. The queue is drained on startup by
  * [EventRepositoryImpl.flushPendingActions], which marks the corresponding
- * entity as `isSynced` and removes the journal entry.
+ * entity as flushed and removes the journal entry.
  */
 @Entity(tableName = "pending_sync")
 data class PendingSyncEntity(

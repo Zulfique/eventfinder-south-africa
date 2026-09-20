@@ -25,6 +25,9 @@ import java.io.IOException
 /** Outcome of a background sync or queue flush. */
 sealed interface SyncResult {
     data object Synced : SyncResult
+    /** The Ticketmaster API key is not configured; running in demo mode. */
+    data object NoApiKey : SyncResult
+    /** No user session is active; queue flush skipped. */
     data object NoSession : SyncResult
     data object Failed : SyncResult
 }
@@ -136,7 +139,7 @@ class EventRepositoryImpl(
         val count = eventDao.count()
         if (count == 0) {
             val seed = SampleEventsProvider.johannesburgAndCapeTown()
-            eventDao.upsertAll(seed.map { it.toEntity(isSynced = false, isCreatedByUser = false) })
+            eventDao.upsertAll(seed.map { it.toEntity(isExternal = false, isCreatedByUser = false) })
             AppLogger.i(tag, "Seeded ${seed.size} sample events into cache")
         } else {
             AppLogger.d(tag, "Cache already contains $count events - no seeding required")
@@ -146,7 +149,7 @@ class EventRepositoryImpl(
     override suspend fun syncFromApi(): SyncOutcome {
         if (apiKey.isBlank()) {
             AppLogger.w(tag, "Sync skipped - no Ticketmaster API key configured (demo mode)")
-            return SyncOutcome(SyncResult.NoSession)
+            return SyncOutcome(SyncResult.NoApiKey)
         }
         return try {
             val previous = eventDao.getSynced().map { it.toDomain() }
@@ -166,7 +169,7 @@ class EventRepositoryImpl(
 
             val alerts = EventAlertDetector.detect(previous, mapped, favoriteIds)
 
-            eventDao.replaceSyncedEvents(mapped.map { it.toEntity(isSynced = true, isCreatedByUser = false) })
+            eventDao.replaceSyncedEvents(mapped.map { it.toEntity(isExternal = true, isCreatedByUser = false) })
             AppLogger.i(tag, "Sync complete - ${mapped.size} live events stored")
             if (!alerts.isEmpty) {
                 AppLogger.i(
@@ -187,6 +190,11 @@ class EventRepositoryImpl(
     override suspend fun toggleFavorite(eventId: String): Boolean {
         val userId = preferences.sessionUserId.first()
             ?: return run { AppLogger.w(tag, "Cannot toggle favourite - not logged in") }.let { false }
+        val event = eventDao.findById(eventId)
+        if (event == null) {
+            AppLogger.w(tag, "Cannot toggle favourite - event not found: $eventId")
+            return false
+        }
         val already = favoriteDao.exists(userId, eventId)
         val newValue = !already
 
@@ -203,6 +211,11 @@ class EventRepositoryImpl(
 
     override suspend fun setRsvp(eventId: String, status: RsvpStatus) {
         val userId = preferences.sessionUserId.first() ?: return
+        val event = eventDao.findById(eventId)
+        if (event == null) {
+            AppLogger.w(tag, "Cannot set RSVP - event not found: $eventId")
+            return
+        }
         database.setRsvpAtomically(
             userId = userId,
             eventId = eventId,
@@ -234,7 +247,7 @@ class EventRepositoryImpl(
             organizerName = "You",
             attendeeCount = 0,
             isCreatedByUser = true,
-            isSynced = false
+            isExternal = false
         )
         database.createEventAtomically(entity, userId, "")
         AppLogger.i(tag, "Community event created locally: $id")
@@ -266,7 +279,7 @@ class EventRepositoryImpl(
             longitude = draft.longitude,
             imageUrl = draft.imageUrl ?: existing.imageUrl,
             isPublic = draft.isPublic,
-            isSynced = false
+            isExternal = false
         )
         database.updateEventAtomically(updated, userId, "")
         AppLogger.i(tag, "Community event updated locally: $eventId")
@@ -306,13 +319,14 @@ class EventRepositoryImpl(
         AppLogger.i(tag, "Remote cache cleared and sample events restored")
     }
 
-    /**
-     * Drains the local pending-operation queue.
-     *
-     * EventFinder has no cloud backend. Room is the authoritative data store.
-     * The pending queue is therefore a durable local operation journal. Draining
-     * it reconciles local sync flags and removes completed journal entries.
-     */
+/**
+ * Drains the local pending-operation queue.
+ *
+ * EventFinder has no cloud backend. Room is the authoritative data store.
+ * The pending queue is therefore a durable local operation journal. Draining
+ * it reconciles local entity flags (marks favorites/RSVPs as flushed and
+ * events as external where appropriate) and removes completed journal entries.
+ */
     override suspend fun flushPendingActions(): SyncResult {
         val userId = preferences.sessionUserId.first() ?: return SyncResult.NoSession
         val pending = pendingSyncDao.allForUser(userId)
@@ -323,14 +337,14 @@ class EventRepositoryImpl(
                 when (action.entityType) {
                     "event" -> {
                         if (action.action != "delete") {
-                            eventDao.markSynced(action.entityId)
+                            eventDao.markExternal(action.entityId)
                         }
                     }
                     "favorite" -> {
-                        favoriteDao.markSynced(userId, action.entityId)
+                        favoriteDao.markFlushed(userId, action.entityId)
                     }
                     "rsvp" -> {
-                        rsvpDao.markSynced(userId, action.entityId)
+                        rsvpDao.markFlushed(userId, action.entityId)
                     }
                     else -> {
                         AppLogger.w(tag, "Removing unknown local queue entry ${action.id}")
@@ -346,7 +360,7 @@ class EventRepositoryImpl(
         return SyncResult.Synced
     }
 
-    private fun Event.toEntity(isSynced: Boolean, isCreatedByUser: Boolean): EventEntity =
+    private fun Event.toEntity(isExternal: Boolean, isCreatedByUser: Boolean): EventEntity =
         EventEntity(
             id = id,
             title = title,
@@ -364,6 +378,6 @@ class EventRepositoryImpl(
             organizerName = organizerName,
             attendeeCount = attendeeCount,
             isCreatedByUser = isCreatedByUser,
-            isSynced = isSynced
+            isExternal = isExternal
         )
 }

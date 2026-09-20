@@ -81,6 +81,39 @@ private val MIGRATION_2_3 = object : Migration(2, 3) {
 }
 
 /**
+ * Room database migration from v3 to v4.
+ *
+ * Renames misleadingly-named columns that date from the original cloud-sync
+ * design:
+ *  - events.isSynced → events.isExternal  (true = sourced from Ticketmaster)
+ *  - favorites.isSynced → favorites.isFlushed (true = journal entry drained)
+ *  - rsvps.isSynced → rsvps.isFlushed
+ */
+private val MIGRATION_3_4 = object : Migration(3, 4) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        // events: recreate with isExternal instead of isSynced
+        db.execSQL("CREATE TABLE IF NOT EXISTS events_new (id TEXT NOT NULL, title TEXT NOT NULL, description TEXT NOT NULL, category TEXT NOT NULL, startDate INTEGER NOT NULL, endDate INTEGER NOT NULL, venueName TEXT NOT NULL, address TEXT NOT NULL, latitude REAL NOT NULL, longitude REAL NOT NULL, imageUrl TEXT, isPublic INTEGER NOT NULL, organizerId TEXT NOT NULL, organizerName TEXT NOT NULL, attendeeCount INTEGER NOT NULL, isCreatedByUser INTEGER NOT NULL, isExternal INTEGER NOT NULL, PRIMARY KEY(id))")
+        db.execSQL("INSERT INTO events_new (id, title, description, category, startDate, endDate, venueName, address, latitude, longitude, imageUrl, isPublic, organizerId, organizerName, attendeeCount, isCreatedByUser, isExternal) SELECT id, title, description, category, startDate, endDate, venueName, address, latitude, longitude, imageUrl, isPublic, organizerId, organizerName, attendeeCount, isCreatedByUser, isSynced FROM events")
+        db.execSQL("DROP TABLE events")
+        db.execSQL("ALTER TABLE events_new RENAME TO events")
+        db.execSQL("CREATE INDEX IF NOT EXISTS index_events_category ON events(category)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS index_events_startDate ON events(startDate)")
+
+        // favorites: recreate with isFlushed instead of isSynced
+        db.execSQL("CREATE TABLE IF NOT EXISTS favorites_new (userId TEXT NOT NULL, eventId TEXT NOT NULL, createdAt INTEGER NOT NULL, isFlushed INTEGER NOT NULL, PRIMARY KEY(userId, eventId))")
+        db.execSQL("INSERT INTO favorites_new (userId, eventId, createdAt, isFlushed) SELECT userId, eventId, createdAt, isSynced FROM favorites")
+        db.execSQL("DROP TABLE favorites")
+        db.execSQL("ALTER TABLE favorites_new RENAME TO favorites")
+
+        // rsvps: recreate with isFlushed instead of isSynced
+        db.execSQL("CREATE TABLE IF NOT EXISTS rsvps_new (userId TEXT NOT NULL, eventId TEXT NOT NULL, status TEXT NOT NULL, createdAt INTEGER NOT NULL, isFlushed INTEGER NOT NULL, PRIMARY KEY(userId, eventId))")
+        db.execSQL("INSERT INTO rsvps_new (userId, eventId, status, createdAt, isFlushed) SELECT userId, eventId, status, createdAt, isSynced FROM rsvps")
+        db.execSQL("DROP TABLE rsvps")
+        db.execSQL("ALTER TABLE rsvps_new RENAME TO rsvps")
+    }
+}
+
+/**
  * Local persistence layer (Room) implementing the offline-first strategy from
  * FR-09 of the design document (§7.1 Local Database Models).
  *
@@ -96,7 +129,7 @@ private val MIGRATION_2_3 = object : Migration(2, 3) {
         RsvpEntity::class,
         PendingSyncEntity::class
     ],
-    version = 3,
+    version = 4,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase(), DatabaseTransactionHelper {
@@ -110,7 +143,7 @@ abstract class AppDatabase : RoomDatabase(), DatabaseTransactionHelper {
     override suspend fun setFavorite(userId: String, eventId: String, favorite: Boolean) {
         if (favorite) {
             favoriteDao().insert(
-                FavoriteEntity(userId = userId, eventId = eventId, createdAt = System.currentTimeMillis(), isSynced = false)
+                FavoriteEntity(userId = userId, eventId = eventId, createdAt = System.currentTimeMillis(), isFlushed = false)
             )
         } else {
             favoriteDao().delete(userId, eventId)
@@ -121,7 +154,7 @@ abstract class AppDatabase : RoomDatabase(), DatabaseTransactionHelper {
     override suspend fun setFavoriteAtomically(userId: String, eventId: String, favorite: Boolean, pendingAction: String, pendingPayload: String) {
         if (favorite) {
             favoriteDao().insert(
-                FavoriteEntity(userId = userId, eventId = eventId, createdAt = System.currentTimeMillis(), isSynced = false)
+                FavoriteEntity(userId = userId, eventId = eventId, createdAt = System.currentTimeMillis(), isFlushed = false)
             )
         } else {
             favoriteDao().delete(userId, eventId)
@@ -141,7 +174,7 @@ abstract class AppDatabase : RoomDatabase(), DatabaseTransactionHelper {
     @Transaction
     override suspend fun setRsvpAtomically(userId: String, eventId: String, status: String, pendingPayload: String) {
         rsvpDao().upsert(
-            RsvpEntity(userId = userId, eventId = eventId, status = status, createdAt = System.currentTimeMillis(), isSynced = false)
+            RsvpEntity(userId = userId, eventId = eventId, status = status, createdAt = System.currentTimeMillis(), isFlushed = false)
         )
         pendingSyncDao().insert(
             PendingSyncEntity(
@@ -221,7 +254,7 @@ abstract class AppDatabase : RoomDatabase(), DatabaseTransactionHelper {
                 AppDatabase::class.java,
                 DB_NAME
             )
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
                 .build()
     }
 }
@@ -257,5 +290,5 @@ fun EventEntity.toDomain(): Event = Event(
     attendeeCount = attendeeCount,
     isFavorite = false,
     isCreatedByUser = isCreatedByUser,
-    isSynced = isSynced
+    isExternal = isExternal
 )

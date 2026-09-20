@@ -95,7 +95,7 @@ class EventRepositoryTest {
         }
 
         override suspend fun markSynced(id: String) {
-            rows[id]?.let { rows[id] = it.copy(isSynced = true) }
+            rows[id]?.let { rows[id] = it.copy(isExternal = true) }
             emit()
         }
 
@@ -142,7 +142,7 @@ class EventRepositoryTest {
             rows.containsKey("$userId:$eventId")
 
         override suspend fun markSynced(userId: String, eventId: String) {
-            rows["$userId:$eventId"]?.let { rows["$userId:$eventId"] = it.copy(isSynced = true) }
+            rows["$userId:$eventId"]?.let { rows["$userId:$eventId"] = it.copy(isFlushed = true) }
             emit()
         }
 
@@ -177,7 +177,7 @@ class EventRepositoryTest {
             rows["$userId:$eventId"]?.status
 
         override suspend fun markSynced(userId: String, eventId: String) {
-            rows["$userId:$eventId"]?.let { rows["$userId:$eventId"] = it.copy(isSynced = true) }
+            rows["$userId:$eventId"]?.let { rows["$userId:$eventId"] = it.copy(isFlushed = true) }
             emit()
         }
 
@@ -261,7 +261,7 @@ class EventRepositoryTest {
     ) : DatabaseTransactionHelper {
         override suspend fun setFavorite(userId: String, eventId: String, favorite: Boolean) {
             if (favorite) {
-                favoriteDao.insert(FavoriteEntity(userId = userId, eventId = eventId, createdAt = System.currentTimeMillis(), isSynced = false))
+                favoriteDao.insert(                FavoriteEntity(userId = userId, eventId = eventId, createdAt = System.currentTimeMillis(), isFlushed = false))
             } else {
                 favoriteDao.delete(userId, eventId)
             }
@@ -275,7 +275,7 @@ class EventRepositoryTest {
         }
 
         override suspend fun setRsvpAtomically(userId: String, eventId: String, status: String, pendingPayload: String) {
-            rsvpDao.upsert(RsvpEntity(userId = userId, eventId = eventId, status = status, createdAt = System.currentTimeMillis(), isSynced = false))
+            rsvpDao.upsert(RsvpEntity(userId = userId, eventId = eventId, status = status, createdAt = System.currentTimeMillis(), isFlushed = false))
             pendingSyncDao.insert(
                 PendingSyncEntity(entityType = "rsvp", entityId = eventId, action = "update", payload = pendingPayload, userId = userId, createdAt = System.currentTimeMillis())
             )
@@ -382,10 +382,10 @@ class EventRepositoryTest {
     // ------------------------------------------------------------ syncFromApi
 
     @Test
-    fun `sync without an API key reports NoSession in demo mode`() = runTest {
+    fun `sync without an API key reports NoApiKey in demo mode`() = runTest {
         val (repo, _) = repository(apiKey = "")
 
-        assertEquals(SyncResult.NoSession, repo.syncFromApi().result)
+        assertEquals(SyncResult.NoApiKey, repo.syncFromApi().result)
     }
 
     @Test
@@ -526,7 +526,7 @@ class EventRepositoryTest {
         assertEquals("Church Square", stored.venueName)
         assertEquals("user-1", stored.organizerId)
         assertTrue(stored.isCreatedByUser)
-        assertFalse(stored.isSynced)
+        assertFalse(stored.isExternal)
         assertEquals(1, pending.rows.size)
     }
 
@@ -770,7 +770,7 @@ class EventRepositoryTest {
                 organizerName = "Organizer",
                 attendeeCount = 0,
                 isCreatedByUser = false,
-                isSynced = true
+                isExternal = true
             )
         )
         dao.upsert(
@@ -791,7 +791,7 @@ class EventRepositoryTest {
                 organizerName = "Organizer",
                 attendeeCount = 0,
                 isCreatedByUser = false,
-                isSynced = true
+                isExternal = true
             )
         )
 
@@ -813,13 +813,13 @@ class EventRepositoryTest {
 
         val id = repo.createEvent(draft(title = "Sync Me")).getOrThrow()
         assertEquals(1, pending.rows.size)
-        assertFalse(dao.findById(id)!!.isSynced)
+        assertFalse(dao.findById(id)!!.isExternal)
 
         val result = repo.flushPendingActions()
 
         assertEquals(SyncResult.Synced, result)
         assertTrue(pending.rows.isEmpty())
-        assertTrue(dao.findById(id)!!.isSynced)
+        assertTrue(dao.findById(id)!!.isExternal)
     }
 
     @Test
@@ -837,7 +837,7 @@ class EventRepositoryTest {
         repo.flushPendingActions()
 
         assertTrue(pending.rows.isEmpty())
-        assertTrue(favorites.rows.values.any { it.userId == "user-1" && it.eventId == target && it.isSynced })
+        assertTrue(favorites.rows.values.any { it.userId == "user-1" && it.eventId == target && it.isFlushed })
     }
 
     @Test
@@ -855,7 +855,7 @@ class EventRepositoryTest {
         repo.flushPendingActions()
 
         assertTrue(pending.rows.isEmpty())
-        assertTrue(rsvps.rows.values.any { it.userId == "user-1" && it.eventId == target && it.isSynced })
+        assertTrue(rsvps.rows.values.any { it.userId == "user-1" && it.eventId == target && it.isFlushed })
     }
 
     @Test

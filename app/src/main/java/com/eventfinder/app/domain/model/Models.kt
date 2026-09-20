@@ -37,7 +37,7 @@ data class Event(
     val attendeeCount: Int,
     val isFavorite: Boolean,
     val isCreatedByUser: Boolean,
-    val isSynced: Boolean
+    val isExternal: Boolean
 )
 
 /** Event combined with the viewing user's context (distance + RSVP state). */

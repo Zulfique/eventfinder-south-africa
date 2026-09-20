@@ -41,7 +41,7 @@ object SampleEventsProvider {
                 attendeeCount = 240,
                 isFavorite = false,
                 isCreatedByUser = false,
-                isSynced = false
+                isExternal = false
             ),
             Event(
                 id = "sample-jhb-food",
@@ -61,7 +61,7 @@ object SampleEventsProvider {
                 attendeeCount = 450,
                 isFavorite = false,
                 isCreatedByUser = false,
-                isSynced = false
+                isExternal = false
             ),
             Event(
                 id = "sample-jhb-sports",
@@ -81,7 +81,7 @@ object SampleEventsProvider {
                 attendeeCount = 182,
                 isFavorite = false,
                 isCreatedByUser = false,
-                isSynced = false
+                isExternal = false
             ),
             Event(
                 id = "sample-jhb-business",
@@ -101,7 +101,7 @@ object SampleEventsProvider {
                 attendeeCount = 96,
                 isFavorite = false,
                 isCreatedByUser = false,
-                isSynced = false
+                isExternal = false
             ),
             Event(
                 id = "sample-jhb-arts",
@@ -121,7 +121,7 @@ object SampleEventsProvider {
                 attendeeCount = 130,
                 isFavorite = false,
                 isCreatedByUser = false,
-                isSynced = false
+                isExternal = false
             ),
             Event(
                 id = "sample-cpt-music",
@@ -141,7 +141,7 @@ object SampleEventsProvider {
                 attendeeCount = 600,
                 isFavorite = false,
                 isCreatedByUser = false,
-                isSynced = false
+                isExternal = false
             ),
             Event(
                 id = "sample-cpt-food",
@@ -161,7 +161,7 @@ object SampleEventsProvider {
                 attendeeCount = 320,
                 isFavorite = false,
                 isCreatedByUser = false,
-                isSynced = false
+                isExternal = false
             ),
             Event(
                 id = "sample-cpt-sports",
@@ -181,7 +181,7 @@ object SampleEventsProvider {
                 attendeeCount = 78,
                 isFavorite = false,
                 isCreatedByUser = false,
-                isSynced = false
+                isExternal = false
             ),
             Event(
                 id = "sample-cpt-community",
@@ -201,7 +201,7 @@ object SampleEventsProvider {
                 attendeeCount = 55,
                 isFavorite = false,
                 isCreatedByUser = false,
-                isSynced = false
+                isExternal = false
             ),
             Event(
                 id = "sample-dbn-music",
@@ -221,7 +221,7 @@ object SampleEventsProvider {
                 attendeeCount = 510,
                 isFavorite = false,
                 isCreatedByUser = false,
-                isSynced = false
+                isExternal = false
             ),
             Event(
                 id = "sample-dbn-food",
@@ -241,7 +241,7 @@ object SampleEventsProvider {
                 attendeeCount = 265,
                 isFavorite = false,
                 isCreatedByUser = false,
-                isSynced = false
+                isExternal = false
             ),
             Event(
                 id = "sample-jhb-community",
@@ -261,7 +261,7 @@ object SampleEventsProvider {
                 attendeeCount = 140,
                 isFavorite = false,
                 isCreatedByUser = false,
-                isSynced = false
+                isExternal = false
             ),
             Event(
                 id = "sample-jhb-arts-2",
@@ -281,7 +281,7 @@ object SampleEventsProvider {
                 attendeeCount = 88,
                 isFavorite = false,
                 isCreatedByUser = false,
-                isSynced = false
+                isExternal = false
             ),
             Event(
                 id = "sample-cpt-business",
@@ -301,7 +301,7 @@ object SampleEventsProvider {
                 attendeeCount = 102,
                 isFavorite = false,
                 isCreatedByUser = false,
-                isSynced = false
+                isExternal = false
             )
         )
         return eventive
