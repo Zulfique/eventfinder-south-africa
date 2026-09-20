@@ -296,8 +296,11 @@ class ReminderReceiver : android.content.BroadcastReceiver() {
             )
         }
 
-        NotificationManagerCompat.from(context)
-            .notify(NotificationHelper.notificationId(eventId ?: title, lead), builder.build())
+        // Only post notification if permission is granted (lint: MissingPermission)
+        if (NotificationHelper.hasNotificationPermission(context)) {
+            NotificationManagerCompat.from(context)
+                .notify(NotificationHelper.notificationId(eventId ?: title, lead), builder.build())
+        }
         AppLogger.i("ReminderReceiver", "Reminder notification posted for '$title' (${lead.name})")
     }
 }
