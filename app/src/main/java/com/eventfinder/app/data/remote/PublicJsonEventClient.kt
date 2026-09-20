@@ -7,10 +7,8 @@ import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import okhttp3.Timeout
 import okhttp3.OkHttpClient
 import okhttp3.Request
-import java.util.concurrent.TimeUnit
 
 class PublicJsonEventClient(
     private val httpClient: OkHttpClient,
@@ -28,7 +26,6 @@ suspend fun fetch(
                 "User-Agent",
                 "EventFinder/1.0 (https://github.com/Zulfique/eventfinder-south-africa)"
             )
-            .timeout(Timeout.timeout(timeoutMillis, TimeUnit.MILLISECONDS))
             .build()
 
         httpClient.newCall(request).execute().use { response ->
