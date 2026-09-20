@@ -92,6 +92,11 @@ class EventRepositoryTest {
             emit()
         }
 
+        override suspend fun deleteByOrganizerId(organizerId: String) {
+            rows.values.filter { it.organizerId == organizerId && !it.isCreatedByUser }.map { it.id }.forEach { rows.remove(it) }
+            emit()
+        }
+
         override suspend fun getUpcomingAttendingEventsForUser(userId: String, now: Long): List<EventEntity> =
             rows.values.filter { event ->
                 event.startDate > now

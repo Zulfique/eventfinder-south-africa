@@ -68,6 +68,12 @@ class EventDiscoveryRepositoryTest {
             emit()
         }
 
+        override suspend fun deleteByOrganizerId(organizerId: String) {
+            rows.values.filter { it.organizerId == organizerId && !it.isCreatedByUser }
+                .forEach { rows.remove(it.id) }
+            emit()
+        }
+
         override suspend fun getUpcomingAttendingEventsForUser(userId: String, now: Long): List<EventEntity> =
             rows.values.filter { it.startDate > now }
 
@@ -532,5 +538,74 @@ class EventDiscoveryRepositoryTest {
         assertEquals(0, result.fetched)
         assertEquals(0, result.inserted)
         assertTrue(dao.rows.isEmpty())
+    }
+
+    @Test
+    fun `failed source does not erase other sources cached events`() = runTest {
+        val dao = FakeEventDao()
+        val now = System.currentTimeMillis()
+
+        val sourceAEvent = EventEntity(
+            id = "remote:sourceA:evt-1",
+            title = "Event A",
+            description = "From source A",
+            category = "other",
+            startDate = now + 86_400_000L,
+            endDate = now + 172_800_000L,
+            venueName = "Venue A",
+            address = "",
+            latitude = -33.0,
+            longitude = 18.0,
+            imageUrl = null,
+            isPublic = true,
+            organizerId = "external:sourceA",
+            organizerName = "Source A",
+            attendeeCount = 0,
+            isCreatedByUser = false
+        )
+
+        val sourceBEvent = EventEntity(
+            id = "remote:sourceB:evt-1",
+            title = "Event B",
+            description = "From source B",
+            category = "other",
+            startDate = now + 86_400_000L,
+            endDate = now + 172_800_000L,
+            venueName = "Venue B",
+            address = "",
+            latitude = -34.0,
+            longitude = 19.0,
+            imageUrl = null,
+            isPublic = true,
+            organizerId = "external:sourceB",
+            organizerName = "Source B",
+            attendeeCount = 0,
+            isCreatedByUser = false
+        )
+
+        dao.rows["remote:sourceA:evt-1"] = sourceAEvent
+        dao.rows["remote:sourceB:evt-1"] = sourceBEvent
+
+        val sourceA = FakeEventSource(
+            id = "sourceA",
+            displayName = "Source A",
+            eventsToReturn = listOf(futureEvent(source = "sourceA", sourceId = "evt-new"))
+        )
+        val sourceB = FakeEventSource(
+            id = "sourceB",
+            displayName = "Source B",
+            exceptionToThrow = RuntimeException("Source B is down")
+        )
+
+        val repo = EventDiscoveryRepository(dao, listOf(sourceA, sourceB))
+        val result = repo.refresh()
+
+        assertEquals(1, result.fetched)
+        assertEquals(1, result.inserted)
+        assertEquals(1, result.failedSources)
+
+        assertTrue(dao.rows.containsKey("remote:sourceA:evt-new"))
+        assertTrue(dao.rows.containsKey("remote:sourceB:evt-1"))
+        org.junit.Assert.assertFalse(dao.rows.containsKey("remote:sourceA:evt-1"))
     }
 }

@@ -15,8 +15,8 @@ class EventDiscoveryRepository(
 
     suspend fun refresh(): DiscoveryResult {
         var totalFetched = 0
+        var totalInserted = 0
         var failedSources = 0
-        val allValid = mutableListOf<RemoteEvent>()
 
         for (source in sources) {
             try {
@@ -24,7 +24,14 @@ class EventDiscoveryRepository(
                 val events = source.fetchEvents()
                 totalFetched += events.size
                 val validEvents = events.filter { isValid(it) }.distinctBy { it.stableId }
-                allValid.addAll(validEvents)
+                val entities = validEvents.mapNotNull { it.toEntity() }
+                val organizerId = "external:${source.id}"
+
+                eventDao.deleteByOrganizerId(organizerId)
+                if (entities.isNotEmpty()) {
+                    eventDao.upsertAll(entities)
+                    totalInserted += entities.size
+                }
                 AppLogger.i(tag, "Fetched ${validEvents.size} events from ${source.displayName}")
             } catch (e: Exception) {
                 failedSources++
@@ -32,17 +39,11 @@ class EventDiscoveryRepository(
             }
         }
 
-        val entities = allValid.mapNotNull { it.toEntity() }
-        if (entities.isNotEmpty()) {
-            eventDao.replaceNonUserCreated(entities)
-        } else {
-            eventDao.deleteNonUserCreated()
-        }
-        AppLogger.i(tag, "Discovery complete: ${allValid.size} valid, ${entities.size} inserted, $failedSources failed sources")
+        AppLogger.i(tag, "Discovery complete: $totalInserted inserted, $failedSources failed sources")
 
         return DiscoveryResult(
             fetched = totalFetched,
-            inserted = entities.size,
+            inserted = totalInserted,
             failedSources = failedSources
         )
     }

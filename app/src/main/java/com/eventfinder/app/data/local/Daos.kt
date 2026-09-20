@@ -78,6 +78,9 @@ interface EventDao {
     @Query("DELETE FROM events WHERE organizerId = :userId AND isCreatedByUser = 1")
     suspend fun deleteCreatedByUserId(userId: String)
 
+    @Query("DELETE FROM events WHERE organizerId = :organizerId AND isCreatedByUser = 0")
+    suspend fun deleteByOrganizerId(organizerId: String)
+
     @Query("""
         SELECT e.* FROM events e
         INNER JOIN rsvps r ON r.eventId = e.id
