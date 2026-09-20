@@ -132,6 +132,8 @@ class LoginViewModel(
                 .onFailure { throwable ->
                     AppLogger.w("LoginViewModel", "Password reset failed: ${throwable.message}")
                     when (throwable.message) {
+                        "password_reset_requires_authenticated_backend" ->
+                            _messages.emit(UiMessage.Resource(R.string.reset_not_available))
                         "invalid_email" -> {
                             _uiState.update { it.copy(emailError = R.string.invalid_email) }
                             _messages.emit(UiMessage.Resource(R.string.invalid_email))

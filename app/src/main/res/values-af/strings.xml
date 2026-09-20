@@ -45,9 +45,10 @@
     <string name="register_success">Rekening geskep</string>
     <string name="login_failed">Verkeerde e-pos of wagwoord</string>
     <string name="biometric_hint">Bevestig met jou vingerafdruk</string>
-    <string name="forgot_password_hint">Voer jou rekening se e-pos in en kies \'n nuwe wagwoord. Die demo herstel dit op hierdie toestel — geen e-pos word gestuur nie.</string>
+    <string name="forgot_password_hint">Wagwoordherstel vereis \'n geverifieerde agtergrondrekening. Kontak ondersteuning of gebruik Wagwoord verander in Instellings as jy jou huidige wagwoord ken.</string>
     <string name="reset_password_title">Herstel wagwoord</string>
     <string name="reset_password_action">Herstel wagwoord</string>
+    <string name="reset_not_available">Wagwoordherstel is nie beskikbaar in hierdie prototipe nie. Gebruik Wagwoord verander in Instellings.</string>
     <string name="reset_success">Wagwoord herstel — teken in met jou nuwe wagwoord</string>
     <string name="unknown_email">Geen rekening vir daardie e-pos gevind nie</string>
     <string name="reset_failed">Kon nie die wagwoord herstel nie</string>
