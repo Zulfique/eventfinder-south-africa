@@ -149,7 +149,7 @@ sequenceDiagram
         R->>API: GET /discovery/v2/events.json?countryCode=ZA
         API-->>R: JSON payload
         R->>R: TicketmasterMapper.mapPage()
-        R->>DB: deleteSynced() + upsertAll(mapped)
+        R->>DB: deleteSynced() + upsertAll(mapped) [preserves user-created events]
         DB-->>H: Flow re-emits live events
     else No key / offline
         R-->>H: demo mode (seeded SA sample events)
@@ -207,8 +207,8 @@ through `LocaleManager` in `MainActivity.attachBaseContext`.
 ## Offline-first behaviour
 
 - Events, favourites and RSVPs are cached in **Room** and observed as `Flow`s, so the UI renders instantly.
-- Favourite, RSVP and event mutations are wrapped in **atomic `@Transaction` boundaries** that pair the local write with a `pending_sync` journal entry, preventing crash-induced inconsistencies.
-- The pending-operation journal is drained on app startup by `EventRepository.flushPendingActions()`, which marks the corresponding local entities as `isSynced` and removes completed journal entries. Each action is retried individually with per-action error handling.
+- Favourite, RSVP and event mutations are wrapped in **atomic `@Transaction` boundaries** that pair the local write with a local operation journal entry, preventing crash-induced inconsistencies.
+- The pending-operation journal is drained on app startup by `EventRepository.flushPendingActions()`, which reconciles local entity flags and removes completed journal entries. Each action is retried individually with per-action error handling.
 - Reminder alarms carry the owning `userId` and `ReminderReceiver` verifies the active session before posting, preventing stale-account notifications.
 - The UI never blocks on the network: a failed sync simply keeps the cached catalogue.
 
@@ -355,7 +355,7 @@ docs/screenshots/                        Real device screenshots
 | RESTful API integration | Ticketmaster Discovery v2 (`EventRepository`, `TicketmasterMapper`) and Open-Meteo (`WeatherRepository`) |
 | External library integration | Room, Retrofit/OkHttp, DataStore, Coil, osmdroid, AndroidX Biometric |
 | Native Android SDK integration | `AlarmManager` + `NotificationManager` reminders, `LocationManager`/location permissions, biometrics |
-| Offline-first / robustness | Room cache + `pending_sync` queue, graceful fallbacks, validation on every form |
+| Offline-first / robustness | Room cache + local operation journal, graceful fallbacks, validation on every form |
 | Unit testing | 168 JVM tests + 6 Compose instrumented tests + GitHub Actions CI |
 | Logging & comments | `AppLogger` used across data/UI layers; KDoc on every class |
 | Documentation | This README with Mermaid architecture diagrams |
@@ -368,11 +368,11 @@ features that need a shared server are intentionally out of scope:
 - **RSVP attendee management** — there is no way to approve or decline other people's attendance
   because accounts and events live only on the device. The RSVP counter and reminder cancellation
   work locally; a real attendee list would need a multi-user backend.
-- **Google sign-in** is shown but stubbed. Password reset is a local email-lookup that updates the Room hash — no cloud backend is needed. Password change is also available in Settings.
+- **Google sign-in** is shown but stubbed. Password reset is a local email-lookup that updates the Room hash — no cloud backend is needed. **Security limitation:** reset performs no proof of email ownership, so it must be replaced with email/SMS verification before production use. Password change is also available in Settings.
 - **Push notifications** are replaced by on-device sync alerts (`AlarmManager` +
   `NotificationManager`); true push would need Firebase Cloud Messaging.
 - **Default city / radius** preferences exist in the data layer but have no settings UI yet.
-- **Offline operation journal** — the pending queue is a local-only journal reconciled on startup. Multi-device synchronisation would require a shared backend.
+- **Offline operation journal** — the pending queue is a local-only journal reconciled on startup; entity flags track which mutations have been flushed. Multi-device synchronisation would require a shared backend.
 
 ## Attribution & licences
 

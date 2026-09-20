@@ -26,6 +26,11 @@ import java.util.UUID
  * Authentication boundary. Performs local registration/login with PBKDF2-hashed
  * passwords (see [PasswordHasher]). Password reset is a local email-lookup that
  * updates the Room hash — no cloud backend is required.
+ *
+ * **Security limitation:** password reset performs no proof of email ownership.
+ * Anyone who knows a registered email can reset that account's password. This is
+ * acceptable for a single-device prototype but must be replaced with email/SMS
+ * verification before production use.
  */
 interface AuthRepository {
     val currentUser: Flow<User?>
