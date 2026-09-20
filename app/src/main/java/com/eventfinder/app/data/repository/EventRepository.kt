@@ -7,6 +7,8 @@ import com.eventfinder.app.data.local.FavoriteDao
 import com.eventfinder.app.data.local.PendingSyncDao
 import com.eventfinder.app.data.local.RsvpDao
 import com.eventfinder.app.data.local.toDomain
+import com.eventfinder.app.data.remote.CommunityEventApi
+import com.eventfinder.app.data.remote.CommunityEventDto
 import com.eventfinder.app.data.remote.TicketmasterApi
 import com.eventfinder.app.data.remote.TicketmasterMapper
 import com.eventfinder.app.data.store.SessionProvider
@@ -108,6 +110,7 @@ class EventRepositoryImpl(
     private val rsvpDao: RsvpDao,
     private val pendingSyncDao: PendingSyncDao,
     private val ticketmasterApi: TicketmasterApi,
+    private val communityEventApi: CommunityEventApi,
     private val apiKey: String,
     private val preferences: SessionProvider,
     private val context: android.content.Context? = null
@@ -335,16 +338,54 @@ class EventRepositoryImpl(
     }
 
     override suspend fun flushPendingActions(): SyncResult {
-        if (apiKey.isBlank()) return SyncResult.NoApiKey
         val userId = preferences.sessionUserId.first() ?: return SyncResult.NoApiKey
         val pending = pendingSyncDao.allForUser(userId)
         if (pending.isEmpty()) return SyncResult.Synced
-        AppLogger.w(
-            tag,
-            "Pending actions exist, but server replay is not implemented. " +
-                "Keeping ${pending.size} action(s) queued."
-        )
-        return SyncResult.Failed
+
+        var failed = 0
+        for (action in pending) {
+            try {
+                when (action.entityType) {
+                    "event" -> replayEventAction(action)
+                    "favorite" -> replayFavouriteAction(action, userId)
+                    "rsvp" -> replayRsvpAction(action, userId)
+                    else -> AppLogger.w(tag, "Unknown pending entity type: ${action.entityType}")
+                }
+                pendingSyncDao.delete(action.id)
+            } catch (e: Exception) {
+                AppLogger.e(tag, "Failed to replay action ${action.id} (${action.entityType}/${action.action})", e)
+                pendingSyncDao.incrementRetry(action.id)
+                failed++
+            }
+        }
+        return if (failed == 0) SyncResult.Synced else SyncResult.Failed
+    }
+
+    private suspend fun replayEventAction(action: com.eventfinder.app.data.local.PendingSyncEntity) {
+        val payload = action.payload
+        when (action.action) {
+            "create", "update" -> {
+                val entity = gson.fromJson(payload, EventEntity::class.java)
+                communityEventApi.upsertEvent(entity.toCommunityDto())
+            }
+            "delete" -> {
+                val eventId = gson.fromJson(payload, String::class.java)
+                communityEventApi.deleteEvent(eventId)
+            }
+        }
+    }
+
+    private suspend fun replayFavouriteAction(action: com.eventfinder.app.data.local.PendingSyncEntity, userId: String) {
+        val eventId = gson.fromJson(action.payload, String::class.java)
+        when (action.action) {
+            "create" -> communityEventApi.upsertFavourite(userId, eventId)
+            "delete" -> communityEventApi.deleteFavourite(userId, eventId)
+        }
+    }
+
+    private suspend fun replayRsvpAction(action: com.eventfinder.app.data.local.PendingSyncEntity, userId: String) {
+        val status = gson.fromJson(action.payload, String::class.java)
+        communityEventApi.upsertRsvp(userId, action.entityId, status)
     }
 
     private fun Event.toEntity(isSynced: Boolean, isCreatedByUser: Boolean): EventEntity =
@@ -366,5 +407,24 @@ class EventRepositoryImpl(
             attendeeCount = attendeeCount,
             isCreatedByUser = isCreatedByUser,
             isSynced = isSynced
+        )
+
+    private fun EventEntity.toCommunityDto(): CommunityEventDto =
+        CommunityEventDto(
+            id = id,
+            title = title,
+            description = description,
+            category = category,
+            startDate = startDate,
+            endDate = endDate,
+            venueName = venueName,
+            address = address,
+            latitude = latitude,
+            longitude = longitude,
+            imageUrl = imageUrl,
+            isPublic = isPublic,
+            organizerId = organizerId,
+            organizerName = organizerName,
+            attendeeCount = attendeeCount
         )
 }
