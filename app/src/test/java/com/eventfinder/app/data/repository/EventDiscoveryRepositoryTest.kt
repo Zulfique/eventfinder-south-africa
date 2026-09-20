@@ -303,4 +303,33 @@ class EventDiscoveryRepositoryTest {
         assertEquals(0, result.failedSources)
         assertTrue(dao.rows.isEmpty())
     }
+
+    @Test
+    fun `ardent africa location string does not crash parser`() = runTest {
+        val dao = FakeEventDao()
+        val event = RemoteEvent(
+            source = "ardent-africa",
+            sourceId = "test-id",
+            title = "Ardent Test Event",
+            description = "Test",
+            category = "Education & Academic",
+            startDate = System.currentTimeMillis() + 86_400_000L,
+            endDate = System.currentTimeMillis() + 172_800_000L,
+            venueName = "Unknown venue",
+            address = "",
+            latitude = null,
+            longitude = null,
+            imageUrl = "https://example.com/image.jpg",
+            sourceUrl = null,
+            organizerName = null
+        )
+        val source = FakeEventSource(eventsToReturn = listOf(event))
+        val repo = EventDiscoveryRepository(dao, listOf(source))
+
+        val result = repo.refresh()
+
+        assertEquals(1, result.fetched)
+        assertEquals(0, result.inserted)
+        assertEquals(0, result.failedSources)
+    }
 }

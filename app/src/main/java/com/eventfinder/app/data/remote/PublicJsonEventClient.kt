@@ -41,6 +41,7 @@ class PublicJsonEventClient(
     }
 
     private fun parseEvents(json: String): List<PublicJsonEventDto> {
+        @Suppress("DEPRECATION")
         val root = JsonParser().parse(json)
         return when {
             root.isJsonArray -> parseArray(root.asJsonArray)

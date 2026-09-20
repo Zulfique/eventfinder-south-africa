@@ -264,5 +264,5 @@
     <string name="event_reminders">Gebeurtenisherinnerings</string>
     <string name="event_reminders_hint">Laat my 24 uur en 1 uur voor \'n gebeurtenis wat ek bywoon weet</string>
     <string name="new_events_alerts">Nuwe gebeurteniswaarskuwings</string>
-    <string name="settings_about">%1$s-prototipe — gebou met gratis API\'s (Ticketmaster, Open-Meteo, OpenStreetMap).</string>
+    <string name="settings_about">%1$s-prototipe — gebou met gratis API\'s (Ardent Africa, Open-Meteo, OpenStreetMap).</string>
 </resources>

@@ -59,18 +59,6 @@ class WeatherRepositoryTest {
             startDate: String?,
             endDate: String?
         ): OmForecastResponse = response
-
-        override suspend fun geocode(
-            name: String,
-            count: Int,
-            language: String,
-            format: String
-        ) = throw UnsupportedOperationException()
-
-        override suspend fun elevation(
-            latitude: String,
-            longitude: String
-        ) = throw UnsupportedOperationException()
     }
 
     @Test

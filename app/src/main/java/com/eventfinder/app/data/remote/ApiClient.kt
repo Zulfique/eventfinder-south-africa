@@ -13,6 +13,8 @@ import java.util.concurrent.TimeUnit
 object ApiClient {
 
     private const val OM_BASE_URL = "https://api.open-meteo.com/"
+    private const val OM_GEOCODING_BASE_URL = "https://geocoding-api.open-meteo.com/"
+    private const val OM_AIR_QUALITY_BASE_URL = "https://air-quality-api.open-meteo.com/"
     private const val OSM_OVERPASS_BASE_URL = "https://overpass-api.de/"
     private const val OSM_OVERPASS_FALLBACK_URL = "https://overpass.kumi.systems/"
 
@@ -58,6 +60,18 @@ object ApiClient {
             OM_BASE_URL,
             cacheDir
         ).create(OpenMeteoApi::class.java)
+
+    fun openMeteoGeocodingApi(cacheDir: File?): OpenMeteoGeocodingApi =
+        retrofit(
+            OM_GEOCODING_BASE_URL,
+            cacheDir
+        ).create(OpenMeteoGeocodingApi::class.java)
+
+    fun openMeteoAirQualityApi(cacheDir: File?): OpenMeteoAirQualityApi =
+        retrofit(
+            OM_AIR_QUALITY_BASE_URL,
+            cacheDir
+        ).create(OpenMeteoAirQualityApi::class.java)
 
     fun openStreetMapApi(cacheDir: File?): OpenStreetMapApi =
         retrofit(

@@ -46,7 +46,7 @@ class EventDiscoveryRepository(
     private fun isValid(event: RemoteEvent): Boolean {
         if (event.title.isBlank()) return false
         if (event.sourceId.isBlank()) return false
-        if (event.endDate <= System.currentTimeMillis()) return false
+        if (event.endDate < System.currentTimeMillis()) return false
         if (event.startDate <= 0L) return false
         return true
     }

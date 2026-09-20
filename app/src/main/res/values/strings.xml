@@ -264,5 +264,5 @@
     <string name="event_reminders">Event reminders</string>
     <string name="event_reminders_hint">Notify me 24 hours and 1 hour before an event I am attending</string>
     <string name="new_events_alerts">New event alerts</string>
-    <string name="settings_about">%1$s prototype — built with free APIs (Ticketmaster, Open-Meteo, OpenStreetMap).</string>
+    <string name="settings_about">%1$s prototype — built with free APIs (Ardent Africa, Open-Meteo, OpenStreetMap).</string>
 </resources>

@@ -5,7 +5,7 @@
 ![Jetpack Compose](https://img.shields.io/badge/Jetpack%20Compose-BOM%202024.02-4285F4?logo=jetpackcompose&logoColor=white)
 ![minSdk](https://img.shields.io/badge/minSdk-26-brightgreen)
 ![targetSdk](https://img.shields.io/badge/targetSdk-34-brightgreen)
-![Tests](https://img.shields.io/badge/unit%20tests-115%20passing-success)
+![Tests](https://img.shields.io/badge/unit%20tests-121%20passing-success)
 
 A native **Android (Kotlin + Jetpack Compose)** app that helps people across South Africa
 discover, save and create local events — from Joburg jazz nights to Cape Town food markets
@@ -307,7 +307,7 @@ adb install -r app\build\outputs\apk\debug\app-debug.apk
 
 ## Testing
 
-The project has **115 JVM unit tests** across 14 suites, all runnable from the command line with
+The project has **121 JVM unit tests** across 15 suites, all runnable from the command line with
 no emulator:
 
 ```bash
@@ -329,6 +329,7 @@ no emulator:
 | `DateTimeUtilsTest` | Relative date helpers (today/tomorrow, day & hour offsets) and stable date formatting. |
 | `LoginViewModelTest` | Password-reset flows (mismatch, success) with a fake repository. |
 | `EventDiscoveryRepositoryTest` | Event discovery pipeline: valid future events inserted, missing coordinates rejected, past events rejected, source failures handled gracefully, deduplication by stableId, multi-source merging. |
+| `PublicJsonEventMapperTest` | Public JSON event DTO parsing: Ardent Africa string-location handling, object-location parsing, null-location graceful handling, mapper output validation. |
 
 HTML reports are written to `app/build/reports/tests/testDebugUnitTest/index.html`.
 
@@ -399,7 +400,7 @@ docs/screenshots/                        Real device screenshots
 | External library integration | Room, Retrofit/OkHttp, DataStore, Coil, osmdroid, AndroidX Biometric |
 | Native Android SDK integration | `AlarmManager` + `NotificationManager` reminders, `LocationManager`/location permissions, biometrics |
 | Offline-first / robustness | Room cache + local operation journal, graceful fallbacks, validation on every form |
-| Unit testing | 115 JVM tests + 6 Compose instrumented tests + GitHub Actions CI |
+| Unit testing | 121 JVM tests + 6 Compose instrumented tests + GitHub Actions CI |
 | Logging & comments | `AppLogger` used across data/UI layers; KDoc on every class |
 | Documentation | This README with Mermaid architecture diagrams |
 

@@ -8,11 +8,12 @@ import retrofit2.http.GET
 import retrofit2.http.Query
 
 /**
- * Open-Meteo APIs.
+ * Open-Meteo weather forecast.
  *
  * No API key or token is sent.
  *
  * Free non-commercial usage is supported by Open-Meteo.
+ * Base URL: https://api.open-meteo.com/
  */
 interface OpenMeteoApi {
 
@@ -57,6 +58,16 @@ interface OpenMeteoApi {
         @Query("end_date")
         endDate: String? = null
     ): OmForecastResponse
+}
+
+
+/**
+ * Open-Meteo geocoding and elevation.
+ *
+ * Uses a separate base URL from the weather forecast.
+ * Base URL: https://geocoding-api.open-meteo.com/
+ */
+interface OpenMeteoGeocodingApi {
 
     /**
      * Open-Meteo geocoding.
@@ -93,7 +104,8 @@ interface OpenMeteoApi {
 /**
  * Open-Meteo Air Quality API.
  *
- * This uses a separate Retrofit base URL.
+ * Uses a separate base URL from the weather forecast.
+ * Base URL: https://air-quality-api.open-meteo.com/
  */
 interface OpenMeteoAirQualityApi {
 
