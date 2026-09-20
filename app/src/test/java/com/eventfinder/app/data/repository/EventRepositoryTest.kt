@@ -9,17 +9,10 @@ import com.eventfinder.app.data.local.PendingSyncDao
 import com.eventfinder.app.data.local.PendingSyncEntity
 import com.eventfinder.app.data.local.RsvpDao
 import com.eventfinder.app.data.local.RsvpEntity
-import com.eventfinder.app.data.remote.TicketmasterApi
-import com.eventfinder.app.data.remote.dto.TmDates
-import com.eventfinder.app.data.remote.dto.TmEmbedded
-import com.eventfinder.app.data.remote.dto.TmEvent
-import com.eventfinder.app.data.remote.dto.TmEventsResponse
-import com.eventfinder.app.data.remote.dto.TmStart
 import com.eventfinder.app.domain.model.EventCategory
 import com.eventfinder.app.domain.model.RsvpStatus
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.test.runTest
@@ -34,8 +27,7 @@ import org.junit.Test
  * Repository-level tests for the offline-first event store.
  *
  * In-memory fakes implement the Room DAO interfaces so the tests run on the JVM
- * without an Android device (and without Robolectric). The Ticketmaster API is
- * faked, letting us assert sync behaviour in isolation from the network.
+ * without an Android device (and without Robolectric).
  */
 class EventRepositoryTest {
 
@@ -65,8 +57,11 @@ class EventRepositoryTest {
 
         override fun observeFavoriteEventsForUser(userId: String): Flow<List<EventEntity>> {
             if (favoriteDao == null) return flow
-            return flow.combine(favoriteDao.observeAllForUser(userId)) { events, favorites ->
-                val favIds = favorites.map { it.eventId }.toSet()
+            return flow.map { events ->
+                val favIds = favoriteDao.rows.values
+                    .filter { it.userId == userId }
+                    .map { it.eventId }
+                    .toSet()
                 events.filter { it.id in favIds }
             }
         }
@@ -217,28 +212,6 @@ class EventRepositoryTest {
         }
     }
 
-    private class FakeTicketmasterApi(private val response: TmEventsResponse) : TicketmasterApi {
-        var callCount = 0
-        override suspend fun getEvents(
-            apiKey: String,
-            countryCode: String,
-            size: Int,
-            sort: String,
-            keyword: String?,
-            classificationName: String?
-        ): TmEventsResponse {
-            callCount++
-            return response
-        }
-
-        override suspend fun searchEvents(
-            apiKey: String,
-            countryCode: String,
-            size: Int,
-            keyword: String
-        ): TmEventsResponse = response
-    }
-
     private class TestPreferences : com.eventfinder.app.data.store.SessionProvider {
         private val _sessionId = MutableStateFlow<String?>(null)
         override val sessionUserId: Flow<String?> get() = _sessionId
@@ -261,7 +234,7 @@ class EventRepositoryTest {
     ) : DatabaseTransactionHelper {
         override suspend fun setFavorite(userId: String, eventId: String, favorite: Boolean) {
             if (favorite) {
-                favoriteDao.insert(                FavoriteEntity(userId = userId, eventId = eventId, createdAt = System.currentTimeMillis(), isFlushed = false))
+                favoriteDao.insert(FavoriteEntity(userId = userId, eventId = eventId, createdAt = System.currentTimeMillis(), isFlushed = false))
             } else {
                 favoriteDao.delete(userId, eventId)
             }
@@ -319,25 +292,11 @@ class EventRepositoryTest {
         }
     }
 
-    private fun liveResponse(id: String = "Z1") = TmEventsResponse(
-        embedded = TmEmbedded(
-            events = listOf(
-                TmEvent(
-                    id = id,
-                    name = "Live Music Night",
-                    dates = TmDates(start = TmStart(localDate = "2026-11-20", localTime = "20:00:00"))
-                )
-            )
-        )
-    )
-
     private fun repository(
         favoriteDao: FakeFavoriteDao = FakeFavoriteDao(),
         eventDao: FakeEventDao = FakeEventDao(favoriteDao),
         rsvpDao: FakeRsvpDao = FakeRsvpDao(),
         pendingDao: FakePendingSyncDao = FakePendingSyncDao(),
-        api: TicketmasterApi = FakeTicketmasterApi(liveResponse()),
-        apiKey: String = "test-key",
         preferences: TestPreferences = TestPreferences()
     ): Pair<EventRepositoryImpl, TestPreferences> =
         Pair(
@@ -347,8 +306,6 @@ class EventRepositoryTest {
                 favoriteDao = favoriteDao,
                 rsvpDao = rsvpDao,
                 pendingSyncDao = pendingDao,
-                ticketmasterApi = api,
-                apiKey = apiKey,
                 preferences = preferences
             ),
             preferences
@@ -379,60 +336,7 @@ class EventRepositoryTest {
         assertEquals(afterFirst, dao.count())
     }
 
-    // ------------------------------------------------------------ syncFromApi
-
-    @Test
-    fun `sync without an API key reports NoApiKey in demo mode`() = runTest {
-        val (repo, _) = repository(apiKey = "")
-
-        assertEquals(SyncResult.NoApiKey, repo.syncFromApi().result)
-    }
-
-    @Test
-    fun `sync maps and stores live events`() = runTest {
-        val dao = FakeEventDao()
-        val (repo, _) = repository(eventDao = dao)
-
-        val result = repo.syncFromApi()
-
-        assertEquals(SyncResult.Synced, result.result)
-        assertEquals(1, dao.count())
-        val stored = repo.observeAllEvents().first().first()
-        assertEquals("tm-Z1", stored.id)
-        assertEquals("Live Music Night", stored.title)
-    }
-
-    @Test
-    fun `sync replaces the synced catalogue but keeps user created events`() = runTest {
-        val dao = FakeEventDao()
-        val (repo, prefs) = repository(eventDao = dao)
-        prefs.setTestUserId("user-1")
-        repo.ensureSeeded()
-        repo.syncFromApi()
-        val created = repo.createEvent(
-            NewEventDraft(
-                title = "My Braai",
-                description = "Backyard gathering",
-                category = EventCategory.COMMUNITY,
-                startDate = 1_000L,
-                endDate = 2_000L,
-                venueName = "Home",
-                address = "Pretoria",
-                latitude = -25.7,
-                longitude = 28.2,
-                isPublic = false
-            )
-        ).getOrThrow()
-
-        repo.syncFromApi()
-
-        val all = repo.observeAllEvents().first()
-        assertTrue(all.any { it.id == created })
-        assertTrue(all.any { it.id == "tm-Z1" })
-        assertEquals(2, all.size)
-    }
-
-    // ---------------------------------------------------------- favourites
+    // ------------------------------------------------------------ favourites
 
     @Test
     fun `toggleFavorite adds then removes a favourite and queues offline actions`() = runTest {
@@ -556,15 +460,18 @@ class EventRepositoryTest {
     }
 
     @Test
-    fun `updateEvent refuses to edit an API-synced event`() = runTest {
-        val (repo, _) = repository()
-        repo.syncFromApi()
-        val syncedId = repo.observeAllEvents().first().first().id
+    fun `updateEvent refuses to edit a non-user-created event`() = runTest {
+        val dao = FakeEventDao()
+        val (repo, prefs) = repository(eventDao = dao)
+        prefs.setTestUserId("user-1")
+        repo.ensureSeeded()
+        val nonUserEvent = repo.observeAllEvents().first().first()
+        val originalTitle = nonUserEvent.title
 
-        val result = repo.updateEvent(syncedId, draft(title = "Hacked"))
+        val result = repo.updateEvent(nonUserEvent.id, draft(title = "Hacked"))
 
         assertTrue(result.isFailure)
-        assertEquals("Live Music Night", repo.getEvent(syncedId)!!.title)
+        assertEquals(originalTitle, repo.getEvent(nonUserEvent.id)!!.title)
     }
 
     @Test
@@ -599,15 +506,17 @@ class EventRepositoryTest {
     }
 
     @Test
-    fun `deleteEvent refuses to delete an API-synced event`() = runTest {
-        val (repo, _) = repository()
-        repo.syncFromApi()
-        val syncedId = repo.observeAllEvents().first().first().id
+    fun `deleteEvent refuses to delete a non-user-created event`() = runTest {
+        val dao = FakeEventDao()
+        val (repo, prefs) = repository(eventDao = dao)
+        prefs.setTestUserId("user-1")
+        repo.ensureSeeded()
+        val nonUserEvent = repo.observeAllEvents().first().first()
 
-        val result = repo.deleteEvent(syncedId)
+        val result = repo.deleteEvent(nonUserEvent.id)
 
         assertTrue(result.isFailure)
-        assertNotNull(repo.getEvent(syncedId))
+        assertNotNull(repo.getEvent(nonUserEvent.id))
     }
 
     private fun draft(
@@ -754,7 +663,7 @@ class EventRepositoryTest {
 
         dao.upsert(
             EventEntity(
-                id = "tm-future",
+                id = "ev-future",
                 title = "Future Event",
                 description = "Upcoming",
                 category = "music",
@@ -775,7 +684,7 @@ class EventRepositoryTest {
         )
         dao.upsert(
             EventEntity(
-                id = "tm-past",
+                id = "ev-past",
                 title = "Past Event",
                 description = "Already happened",
                 category = "music",
@@ -798,20 +707,20 @@ class EventRepositoryTest {
         val upcoming = dao.getUpcomingAttendingEventsForUser("user-1", System.currentTimeMillis())
 
         assertEquals(1, upcoming.size)
-        assertEquals("tm-future", upcoming[0].id)
+        assertEquals("ev-future", upcoming[0].id)
         assertEquals("Future Event", upcoming[0].title)
     }
 
     // ------------------------------------------------- flushPendingActions
 
     @Test
-    fun `flushPendingActions marks events as synced and drains the queue`() = runTest {
+    fun `flushPendingActions marks events as external and drains the queue`() = runTest {
         val pending = FakePendingSyncDao()
         val dao = FakeEventDao()
         val (repo, prefs) = repository(eventDao = dao, pendingDao = pending)
         prefs.setTestUserId("user-1")
 
-        val id = repo.createEvent(draft(title = "Sync Me")).getOrThrow()
+        val id = repo.createEvent(draft(title = "Flush Me")).getOrThrow()
         assertEquals(1, pending.rows.size)
         assertFalse(dao.findById(id)!!.isExternal)
 
@@ -823,7 +732,7 @@ class EventRepositoryTest {
     }
 
     @Test
-    fun `flushPendingActions marks favorites as synced`() = runTest {
+    fun `flushPendingActions marks favorites as flushed`() = runTest {
         val pending = FakePendingSyncDao()
         val favorites = FakeFavoriteDao()
         val (repo, prefs) = repository(favoriteDao = favorites, pendingDao = pending)
@@ -841,7 +750,7 @@ class EventRepositoryTest {
     }
 
     @Test
-    fun `flushPendingActions marks rsvps as synced`() = runTest {
+    fun `flushPendingActions marks rsvps as flushed`() = runTest {
         val pending = FakePendingSyncDao()
         val rsvps = FakeRsvpDao()
         val (repo, prefs) = repository(rsvpDao = rsvps, pendingDao = pending)

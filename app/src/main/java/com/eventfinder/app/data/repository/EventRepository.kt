@@ -7,11 +7,8 @@ import com.eventfinder.app.data.local.FavoriteDao
 import com.eventfinder.app.data.local.PendingSyncDao
 import com.eventfinder.app.data.local.RsvpDao
 import com.eventfinder.app.data.local.toDomain
-import com.eventfinder.app.data.remote.TicketmasterApi
-import com.eventfinder.app.data.remote.TicketmasterMapper
 import com.eventfinder.app.data.store.SessionProvider
 import com.eventfinder.app.domain.model.Event
-import com.eventfinder.app.domain.model.EventAlertDetector
 import com.eventfinder.app.domain.model.EventCategory
 import com.eventfinder.app.domain.model.RsvpStatus
 import com.eventfinder.app.utils.AppLogger
@@ -20,27 +17,14 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
-import java.io.IOException
 
 /** Outcome of a background sync or queue flush. */
 sealed interface SyncResult {
     data object Synced : SyncResult
-    /** The Ticketmaster API key is not configured; running in demo mode. */
-    data object NoApiKey : SyncResult
     /** No user session is active; queue flush skipped. */
     data object NoSession : SyncResult
     data object Failed : SyncResult
 }
-
-/**
- * Richer sync outcome carrying the alerts a sync produced so the caller can
- * post local notifications (new events / updated favourites).
- */
-data class SyncOutcome(
-    val result: SyncResult,
-    val newEvents: List<Event> = emptyList(),
-    val updatedFavorites: List<Event> = emptyList()
-)
 
 /** Draft for creating a new community event (FR-06). */
 data class NewEventDraft(
@@ -59,8 +43,8 @@ data class NewEventDraft(
 
 /**
  * Central event catalogue repository. Combines the Room cache (offline-first,
- * FR-09) with the free Ticketmaster REST API for live sync. The pending-action
- * queue is a local operation journal — Room is the only authoritative store.
+ * FR-09) with sample seed data. The pending-action queue is a local operation
+ * journal — Room is the only authoritative store.
  */
 interface EventRepository {
     fun observeAllEvents(): Flow<List<Event>>
@@ -68,7 +52,6 @@ interface EventRepository {
     fun observeFavoriteIds(): Flow<Set<String>>
     fun observeRsvpStatuses(): Flow<Map<String, RsvpStatus>>
     suspend fun ensureSeeded()
-    suspend fun syncFromApi(): SyncOutcome
     suspend fun toggleFavorite(eventId: String): Boolean
     suspend fun setRsvp(eventId: String, status: RsvpStatus)
     suspend fun createEvent(draft: NewEventDraft): Result<String>
@@ -85,13 +68,10 @@ class EventRepositoryImpl(
     private val favoriteDao: FavoriteDao,
     private val rsvpDao: RsvpDao,
     private val pendingSyncDao: PendingSyncDao,
-    private val ticketmasterApi: TicketmasterApi,
-    private val apiKey: String,
     private val preferences: SessionProvider,
     private val context: android.content.Context? = null
 ) : EventRepository {
 
-    private val mapper = TicketmasterMapper()
     private val tag = "EventRepository"
 
     private suspend fun requireCurrentUserId(): Result<String> {
@@ -143,47 +123,6 @@ class EventRepositoryImpl(
             AppLogger.i(tag, "Seeded ${seed.size} sample events into cache")
         } else {
             AppLogger.d(tag, "Cache already contains $count events - no seeding required")
-        }
-    }
-
-    override suspend fun syncFromApi(): SyncOutcome {
-        if (apiKey.isBlank()) {
-            AppLogger.w(tag, "Sync skipped - no Ticketmaster API key configured (demo mode)")
-            return SyncOutcome(SyncResult.NoApiKey)
-        }
-        return try {
-            val previous = eventDao.getSynced().map { it.toDomain() }
-            val userId = preferences.sessionUserId.first()
-            val favoriteIds = if (userId != null) {
-                favoriteDao.observeAllForUser(userId).first().map { it.eventId }.toSet()
-            } else {
-                emptySet()
-            }
-
-            val response = ticketmasterApi.getEvents(apiKey = apiKey, size = 100)
-            val mapped = mapper.mapPage(response)
-            if (mapped.isEmpty()) {
-                AppLogger.w(tag, "Sync returned zero events - keeping existing cache")
-                return SyncOutcome(SyncResult.Synced)
-            }
-
-            val alerts = EventAlertDetector.detect(previous, mapped, favoriteIds)
-
-            eventDao.replaceSyncedEvents(mapped.map { it.toEntity(isExternal = true, isCreatedByUser = false) })
-            AppLogger.i(tag, "Sync complete - ${mapped.size} live events stored")
-            if (!alerts.isEmpty) {
-                AppLogger.i(
-                    tag,
-                    "Alerts ready - ${alerts.newEvents.size} new, ${alerts.updatedFavorites.size} updated favourites"
-                )
-            }
-            SyncOutcome(SyncResult.Synced, alerts.newEvents, alerts.updatedFavorites)
-        } catch (t: IOException) {
-            AppLogger.e(tag, "Sync failed - network unavailable, offline mode", t)
-            SyncOutcome(SyncResult.Failed)
-        } catch (t: Exception) {
-            AppLogger.e(tag, "Sync failed - unexpected error", t)
-            SyncOutcome(SyncResult.Failed)
         }
     }
 
@@ -310,27 +249,46 @@ class EventRepositoryImpl(
 
     override suspend fun clearLocalCache() {
         val userId = preferences.sessionUserId.first()
-        if (userId != null && pendingSyncDao.countForUser(userId) > 0) {
-            AppLogger.w(tag, "Skipping cache clear because pending changes exist for user")
+
+        if (
+            userId != null &&
+            pendingSyncDao.countForUser(userId) > 0
+        ) {
+            AppLogger.w(
+                tag,
+                "Skipping cache clear because pending local changes exist"
+            )
             return
         }
+
         eventDao.deleteSynced()
         ensureSeeded()
-        AppLogger.i(tag, "Remote cache cleared and sample events restored")
+
+        AppLogger.i(
+            tag,
+            "External/local catalogue cache cleared and seed data restored"
+        )
     }
 
-/**
- * Drains the local pending-operation queue.
- *
- * EventFinder has no cloud backend. Room is the authoritative data store.
- * The pending queue is therefore a durable local operation journal. Draining
- * it reconciles local entity flags (marks favorites/RSVPs as flushed and
- * events as external where appropriate) and removes completed journal entries.
- */
+    /**
+     * Drains the local pending-operation queue.
+     *
+     * EventFinder has no cloud backend. Room is the authoritative data store.
+     * The pending queue is therefore a durable local operation journal. Draining
+     * it reconciles local entity flags (marks favorites/RSVPs as flushed and
+     * events as external where appropriate) and removes completed journal entries.
+     */
     override suspend fun flushPendingActions(): SyncResult {
-        val userId = preferences.sessionUserId.first() ?: return SyncResult.NoSession
-        val pending = pendingSyncDao.allForUser(userId)
-        if (pending.isEmpty()) return SyncResult.Synced
+        val userId =
+            preferences.sessionUserId.first()
+                ?: return SyncResult.NoSession
+
+        val pending =
+            pendingSyncDao.allForUser(userId)
+
+        if (pending.isEmpty()) {
+            return SyncResult.Synced
+        }
 
         for (action in pending) {
             try {
@@ -341,22 +299,41 @@ class EventRepositoryImpl(
                         }
                     }
                     "favorite" -> {
-                        favoriteDao.markFlushed(userId, action.entityId)
+                        favoriteDao.markFlushed(
+                            userId,
+                            action.entityId
+                        )
                     }
                     "rsvp" -> {
-                        rsvpDao.markFlushed(userId, action.entityId)
+                        rsvpDao.markFlushed(
+                            userId,
+                            action.entityId
+                        )
                     }
                     else -> {
-                        AppLogger.w(tag, "Removing unknown local queue entry ${action.id}")
+                        AppLogger.w(
+                            tag,
+                            "Removing unknown local journal entry ${action.id}"
+                        )
                     }
                 }
+
                 pendingSyncDao.delete(action.id)
+
             } catch (e: Exception) {
-                AppLogger.e(tag, "Failed to drain local queue entry ${action.id}", e)
+
+                AppLogger.e(
+                    tag,
+                    "Failed to reconcile local journal entry ${action.id}",
+                    e
+                )
+
                 pendingSyncDao.incrementRetry(action.id)
+
                 return SyncResult.Failed
             }
         }
+
         return SyncResult.Synced
     }
 

@@ -1,28 +1,8 @@
-import java.util.Properties
-
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("com.google.devtools.ksp")
 }
-
-// Read the FREE Ticketmaster Discovery API key from (in order of precedence):
-//  1. the TICKETMASTER_API_KEY environment variable (used by GitHub Actions),
-//  2. local.properties (developer machine, git-ignored),
-//  3. a Gradle -P property.
-// There is deliberately NO default: when the key is absent the app runs in
-// offline / demo mode using the local Room copy of the national event directory.
-val localPropertiesFile = rootProject.file("local.properties")
-val localProperties = Properties().apply {
-    if (localPropertiesFile.exists()) {
-        localPropertiesFile.inputStream().use { load(it) }
-    }
-}
-val ticketmasterApiKey: String = listOfNotNull(
-    System.getenv("TICKETMASTER_API_KEY"),
-    localProperties.getProperty("TICKETMASTER_API_KEY"),
-    project.findProperty("TICKETMASTER_API_KEY") as? String
-).firstOrNull { it.isNotBlank() }?.trim().orEmpty()
 
 android {
     namespace = "com.eventfinder.app"
@@ -37,10 +17,6 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary = true }
-
-        // Exposes the free API key to the app code as a BuildConfig constant.
-        // Kept empty when no key has been configured by the developer.
-        buildConfigField("String", "TICKETMASTER_API_KEY", "\"$ticketmasterApiKey\"")
     }
 
     buildTypes {
@@ -62,7 +38,6 @@ android {
     }
     buildFeatures {
         compose = true
-        buildConfig = true
     }
     // Compose compiler 1.5.8 is paired with Kotlin 1.9.22 (see official compatibility map).
     composeOptions {

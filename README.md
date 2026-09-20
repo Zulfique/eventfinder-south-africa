@@ -5,14 +5,14 @@
 ![Jetpack Compose](https://img.shields.io/badge/Jetpack%20Compose-BOM%202024.02-4285F4?logo=jetpackcompose&logoColor=white)
 ![minSdk](https://img.shields.io/badge/minSdk-26-brightgreen)
 ![targetSdk](https://img.shields.io/badge/targetSdk-34-brightgreen)
-![Tests](https://img.shields.io/badge/unit%20tests-168%20passing-success)
+![Tests](https://img.shields.io/badge/unit%20tests-107%20passing-success)
 
 A native **Android (Kotlin + Jetpack Compose)** app that helps people across South Africa
 discover, save and create local events — from Joburg jazz nights to Cape Town food markets
 and Durban festivals.
 
 EventFinder was built as the **Part 2 (final) Portfolio of Evidence** for the module.
-It consumes **100% free, keyless-or-free-tier REST APIs**, requires **no paid infrastructure**,
+It consumes **100% free, keyless REST APIs**, requires **no paid infrastructure**,
 and runs on a physical device or emulator.
 
 ---
@@ -118,8 +118,8 @@ flowchart TB
     subgraph Sources["Data sources"]
         Room[("Room cache<br/>events · favorites · rsvps · users")]
         DS[("DataStore<br/>session & settings")]
-        TM["Ticketmaster API<br/>REST"]
-        OM["Open-Meteo API<br/>REST"]
+        OM["Open-Meteo API<br/>keyless"]
+        OSM["OpenStreetMap / Overpass<br/>keyless"]
     end
 
     Screens --> VMs
@@ -128,32 +128,23 @@ flowchart TB
     Repos --> Domain
     Repos --> Room
     Repos --> DS
-    Repos --> TM
     Repos --> OM
+    Repos --> OSM
 ```
 
-### Event load flow (offline-first)
+### Venue discovery flow
 
 ```mermaid
 sequenceDiagram
     participant H as HomeViewModel
-    participant R as EventRepository
-    participant DB as Room (EventDao)
-    participant API as Ticketmaster Discovery v2
+    participant R as OpenStreetMapRepository
+    participant API as Overpass API
 
-    H->>R: observeAllEvents()
-    R->>DB: SELECT * FROM events
-    DB-->>H: cached events (instant)
-    H->>R: syncFromApi()
-    alt API key configured and online
-        R->>API: GET /discovery/v2/events.json?countryCode=ZA
-        API-->>R: JSON payload
-        R->>R: TicketmasterMapper.mapPage()
-        R->>DB: deleteSynced() + upsertAll(mapped) [preserves user-created events]
-        DB-->>H: Flow re-emits live events
-    else No key / offline
-        R-->>H: demo mode (seeded SA sample events)
-    end
+    H->>R: findNearbyVenues(lat, lng)
+    R->>API: POST /api/interpreter (around query)
+    API-->>R: OsmOverpassResponse
+    R->>R: map to OsmVenue list
+    R-->>H: nearby venues (theatres, stadiums, etc.)
 ```
 
 ### Navigation graph
@@ -182,17 +173,43 @@ flowchart LR
 
 ## External APIs
 
-The app deliberately uses **free** services so it can be marked and demonstrated without cost:
 
-| API | Auth | Used for | Docs |
-| --- | --- | --- | --- |
-| **Ticketmaster Discovery v2** | Free developer key | South African event catalogue (`countryCode=ZA`) | [link](https://developer.ticketmaster.com/products-and-docs/apis/discovery-api/v2/) |
-| **Open-Meteo** | Keyless | Weather forecast at the venue on the event day | [link](https://open-meteo.com/en/docs) |
-| **OpenStreetMap via osmdroid** | Keyless | Interactive event map | [link](https://github.com/osmdroid/osmdroid) |
-| **Picsum Photos** | Keyless | Placeholder imagery | [link](https://picsum.photos/) |
+EventFinder uses public services that do not require API keys or tokens:
 
-> **Demo mode:** if no Ticketmaster key is configured the app still runs — it seeds the local
-> Room cache with a realistic national sample catalogue and clearly logs that sync was skipped.
+| Service | Auth | Used for |
+| --- | --- | --- |
+| **Open-Meteo** | Keyless | Weather forecasts |
+| **OpenStreetMap** | Keyless | Map data |
+| **Overpass API** | Keyless for normal OSM data queries | Nearby venues and event-related places |
+| **Android Location APIs** | Device permission | Current device location |
+| **Room / SQLite** | Local | Events, users, favourites and RSVPs |
+
+### OpenStreetMap / Overpass
+
+Overpass is used to discover nearby event-related places such as:
+
+- theatres
+- cinemas
+- arts centres
+- museums
+- galleries
+- stadiums
+- sports centres
+- community centres
+- conference centres
+- attractions
+- theme parks
+- zoos
+
+Overpass provides OpenStreetMap objects rather than a commercial event calendar.
+Therefore OSM venue discovery does not fabricate event dates or scheduled performances.
+
+Actual scheduled EventFinder events are stored locally in Room and may be created by
+the user.
+
+OpenStreetMap data is © OpenStreetMap contributors.
+
+OpenStreetMap requires appropriate attribution when using its data.
 
 ## Localisation
 
@@ -216,7 +233,7 @@ through `LocaleManager` in `MainActivity.attachBaseContext`.
 
 - Passwords are **never stored in plaintext** — they are salted and hashed with **PBKDF2WithHmacSHA256** (120 000 iterations, 256-bit key) following the OWASP Password Storage Cheat Sheet.
 - **Biometric unlock** uses the AndroidX Biometric SDK and degrades gracefully when hardware is unavailable.
-- Credentials never leave the device in this prototype. `local.properties`, keystores and other secrets are git-ignored, and the API key is injected through `BuildConfig`.
+- Credentials never leave the device. `local.properties` and keystores are git-ignored.
 
 ## Getting started
 
@@ -242,16 +259,17 @@ Create `local.properties` in the project root (git-ignored):
 sdk.dir=C\:\\Users\\<you>\\AppData\\Local\\Android\\Sdk
 ```
 
-### 3. (Optional) Add the free Ticketmaster key
+### 3. No API keys required
 
-Get a free key from [developer.ticketmaster.com](https://developer.ticketmaster.com/) and add it to `local.properties`:
+EventFinder does not require:
 
-```properties
-TICKETMASTER_API_KEY=your_free_key_here
-```
+- API keys
+- API tokens
+- developer accounts
+- cloud backend credentials
+- secrets embedded in the APK
 
-The key is read from, in order of precedence: the `TICKETMASTER_API_KEY` **environment variable**,
-`local.properties`, or a Gradle `-P` property. **Without a key the app runs in demo mode.**
+Open-Meteo and OpenStreetMap/Overpass are accessed directly by the Android app.
 
 ### 4. Build & install
 
@@ -268,7 +286,7 @@ adb install -r app\build\outputs\apk\debug\app-debug.apk
 
 ## Testing
 
-The project has **168 JVM unit tests** across 15 suites, all runnable from the command line with
+The project has **107 JVM unit tests** across 13 suites, all runnable from the command line with
 no emulator:
 
 ```bash
@@ -281,10 +299,9 @@ no emulator:
 | `PasswordHasherTest` | PBKDF2 hashing, salting, verification and fail-closed behaviour on malformed values. |
 | `DistanceCalculatorTest` | Haversine distance, symmetry, rounding and radius checks. |
 | `EventFiltererTest` | Keyword / category / radius filtering (including address and description matching), three sort orders, distance attachment. |
-| `EventCategoryTest` | Ticketmaster segment ↔ local category mapping in both directions. |
-| `TicketmasterMapperTest` | Full payload mapping, malformed-row skipping, coordinate fallback, image selection, date parsing, address construction. |
 | `WeatherRepositoryTest` | WMO weather-code descriptions and Open-Meteo payload handling. |
-| `EventRepositoryTest` | Seeding, sync (network + no-key) including new/updated-favourite alert payloads, favourite/RSVP toggling, event creation, editing/deleting with ownership guard, cache clearing — using in-memory DAO fakes. |
+| `OpenStreetMapRepositoryTest` | Overpass venue query mapping and geographic bounding. |
+| `EventRepositoryTest` | Seeding, favourite/RSVP toggling, event creation, editing/deleting with ownership guard, cache clearing, journal flush — using in-memory DAO fakes. |
 | `SampleEventsProviderTest` | Demo catalogue integrity (unique ids, valid SA coordinates, sane dates). |
 | `CreateEventValidationTest` | Per-step wizard validation (required title/description, future date, venue, coordinate ranges) that drives the inline error messages. |
 | `EventAlertDetectorTest` | Pure new-event / favourite-changed diffing, including quiet first sync and past-event suppression. |
@@ -321,8 +338,7 @@ GitHub Actions runs on every push / PR to `main` (`.github/workflows/android-ci.
 4. `./gradlew assembleDebug`
 5. Upload the test report and the debug APK as build artifacts
 
-CI never depends on a secret to compile — without `TICKETMASTER_API_KEY` the build simply produces
-a demo-mode APK.
+CI never depends on a secret to compile — all external APIs are keyless.
 
 ## Project structure
 
@@ -330,7 +346,7 @@ a demo-mode APK.
 app/src/main/java/com/eventfinder/app/
 ├── data/
 │   ├── local/          Room entities, DAOs, database + entity↔domain mappers
-│   ├── remote/         Retrofit services, DTOs, API client, Ticketmaster mapper
+│   ├── remote/         Retrofit services, DTOs, API client (Open-Meteo + Overpass)
 │   ├── repository/     Event / Auth / Weather repositories + sample seed data
 │   └── store/          DataStore user preferences
 ├── di/                 AppContainer (manual dependency injection)
@@ -352,11 +368,11 @@ docs/screenshots/                        Real device screenshots
 
 | Requirement | Where it is implemented |
 | --- | --- |
-| RESTful API integration | Ticketmaster Discovery v2 (`EventRepository`, `TicketmasterMapper`) and Open-Meteo (`WeatherRepository`) |
+| RESTful API integration | Open-Meteo (`WeatherRepository`) and OpenStreetMap/Overpass (`OpenStreetMapRepository`) — all keyless |
 | External library integration | Room, Retrofit/OkHttp, DataStore, Coil, osmdroid, AndroidX Biometric |
 | Native Android SDK integration | `AlarmManager` + `NotificationManager` reminders, `LocationManager`/location permissions, biometrics |
 | Offline-first / robustness | Room cache + local operation journal, graceful fallbacks, validation on every form |
-| Unit testing | 168 JVM tests + 6 Compose instrumented tests + GitHub Actions CI |
+| Unit testing | 107 JVM tests + 6 Compose instrumented tests + GitHub Actions CI |
 | Logging & comments | `AppLogger` used across data/UI layers; KDoc on every class |
 | Documentation | This README with Mermaid architecture diagrams |
 
@@ -376,9 +392,8 @@ features that need a shared server are intentionally out of scope:
 
 ## Attribution & licences
 
-- Ticketmaster Discovery API — © Ticketmaster, used under the free developer terms.
 - Weather data by **Open-Meteo.com** (CC-BY 4.0).
 - Map data © **OpenStreetMap** contributors.
+- Venue discovery powered by the **Overpass API** (ODbL).
 - Haversine formula adapted from [Moveable Type Scripts](https://www.movable-type.co.uk/scripts/latlong.html) by Chris Veness.
 - Password hashing guidance from the [OWASP Password Storage Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html).
-- Placeholder imagery from [Picsum Photos](https://picsum.photos/).

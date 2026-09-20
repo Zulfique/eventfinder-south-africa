@@ -1,16 +1,15 @@
 package com.eventfinder.app.di
 
 import android.content.Context
-import com.eventfinder.app.BuildConfig
 import com.eventfinder.app.data.local.AppDatabase
 import com.eventfinder.app.data.remote.ApiClient
 import com.eventfinder.app.data.repository.AuthRepository
 import com.eventfinder.app.data.repository.AuthRepositoryImpl
 import com.eventfinder.app.data.repository.EventRepository
 import com.eventfinder.app.data.repository.EventRepositoryImpl
+import com.eventfinder.app.data.repository.OpenStreetMapRepository
 import com.eventfinder.app.data.repository.WeatherRepository
 import com.eventfinder.app.data.repository.WeatherRepositoryImpl
-import com.eventfinder.app.data.repository.FreeLocationRepository
 import com.eventfinder.app.data.store.UserPreferences
 import com.eventfinder.app.utils.AppLogger
 import com.eventfinder.app.utils.NetworkMonitor
@@ -47,8 +46,6 @@ class AppContainer(context: Context) {
             favoriteDao = database.favoriteDao(),
             rsvpDao = database.rsvpDao(),
             pendingSyncDao = database.pendingSyncDao(),
-            ticketmasterApi = ApiClient.ticketmasterApi(appContext.cacheDir),
-            apiKey = BuildConfig.TICKETMASTER_API_KEY,
             preferences = preferences,
             context = appContext
         )
@@ -58,13 +55,11 @@ class AppContainer(context: Context) {
         WeatherRepositoryImpl(ApiClient.openMeteoApi(appContext.cacheDir))
     }
 
-    val freeLocationRepository: FreeLocationRepository by lazy {
-        FreeLocationRepository(
-            openMeteoApi = ApiClient.openMeteoApi(appContext.cacheDir),
-            openMeteoGeocodingApi = ApiClient.openMeteoGeocodingApi(appContext.cacheDir),
-            airQualityApi = ApiClient.openMeteoAirQualityApi(appContext.cacheDir),
-            nominatimApi = ApiClient.nominatimApi(appContext.cacheDir),
-            overpassApi = ApiClient.overpassApi(appContext.cacheDir)
+    val openStreetMapRepository: OpenStreetMapRepository by lazy {
+        OpenStreetMapRepository(
+            ApiClient.openStreetMapApi(
+                appContext.cacheDir
+            )
         )
     }
 

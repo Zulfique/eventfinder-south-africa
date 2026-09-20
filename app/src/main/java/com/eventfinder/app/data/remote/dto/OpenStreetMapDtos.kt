@@ -2,89 +2,12 @@ package com.eventfinder.app.data.remote.dto
 
 import com.google.gson.annotations.SerializedName
 
-
-data class NominatimPlace(
-    @SerializedName("place_id")
-    val placeId: Long? = null,
-
-    @SerializedName("osm_type")
-    val osmType: String? = null,
-
-    @SerializedName("osm_id")
-    val osmId: Long? = null,
-
-    @SerializedName("display_name")
-    val displayName: String? = null,
-
-    @SerializedName("lat")
-    val latitude: String? = null,
-
-    @SerializedName("lon")
-    val longitude: String? = null,
-
-    @SerializedName("type")
-    val type: String? = null,
-
-    @SerializedName("category")
-    val category: String? = null,
-
-    @SerializedName("name")
-    val name: String? = null,
-
-    @SerializedName("address")
-    val address: NominatimAddress? = null
-)
-
-
-data class NominatimAddress(
-    @SerializedName("road")
-    val road: String? = null,
-
-    @SerializedName("house_number")
-    val houseNumber: String? = null,
-
-    @SerializedName("suburb")
-    val suburb: String? = null,
-
-    @SerializedName("city")
-    val city: String? = null,
-
-    @SerializedName("town")
-    val town: String? = null,
-
-    @SerializedName("village")
-    val village: String? = null,
-
-    @SerializedName("municipality")
-    val municipality: String? = null,
-
-    @SerializedName("state")
-    val state: String? = null,
-
-    @SerializedName("postcode")
-    val postcode: String? = null,
-
-    @SerializedName("country")
-    val country: String? = null,
-
-    @SerializedName("country_code")
-    val countryCode: String? = null
-)
-
-
-data class OverpassResponse(
-    @SerializedName("version")
-    val version: Double? = null,
-
-    @SerializedName("generator")
-    val generator: String? = null,
-
+data class OsmOverpassResponse(
     @SerializedName("elements")
-    val elements: List<OverpassElement> = emptyList()
+    val elements: List<OsmElement> = emptyList()
 )
 
-
-data class OverpassElement(
+data class OsmElement(
     @SerializedName("type")
     val type: String? = null,
 
@@ -92,23 +15,22 @@ data class OverpassElement(
     val id: Long? = null,
 
     @SerializedName("lat")
-    val latitude: Double? = null,
+    val lat: Double? = null,
 
     @SerializedName("lon")
-    val longitude: Double? = null,
+    val lon: Double? = null,
 
     @SerializedName("center")
-    val center: OverpassCenter? = null,
+    val center: OsmCenter? = null,
 
     @SerializedName("tags")
     val tags: Map<String, String>? = null
 )
 
-
-data class OverpassCenter(
+data class OsmCenter(
     @SerializedName("lat")
-    val latitude: Double? = null,
+    val lat: Double? = null,
 
     @SerializedName("lon")
-    val longitude: Double? = null
+    val lon: Double? = null
 )

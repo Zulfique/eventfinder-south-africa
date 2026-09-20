@@ -93,9 +93,8 @@ class HomeViewModel(
                     val wasOffline = _uiState.value.isOffline
                     _uiState.value = _uiState.value.copy(isOffline = !online)
                     if (online && wasOffline) {
-                        AppLogger.i("HomeViewModel", "Internet available - refreshing external data")
+                        AppLogger.i("HomeViewModel", "Internet available - refreshing local journal")
                         flushPendingActions()
-                        syncFromApi()
                     }
                 }
         }
@@ -104,7 +103,6 @@ class HomeViewModel(
         viewModelScope.launch {
             eventRepository.ensureSeeded()
             flushPendingActions()
-            syncFromApi()
         }
 
         // Combine catalog + favourites + RSVPs, then apply current controls.
@@ -242,39 +240,26 @@ class HomeViewModel(
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
             flushPendingActions()
-            syncFromApi()
         }
     }
 
     private suspend fun flushPendingActions() {
         when (eventRepository.flushPendingActions()) {
             com.eventfinder.app.data.repository.SyncResult.Synced ->
-                AppLogger.i("HomeViewModel", "Local pending queue drained")
-            com.eventfinder.app.data.repository.SyncResult.NoApiKey ->
-                AppLogger.d("HomeViewModel", "No active session - local queue was not drained")
+                AppLogger.i(
+                    "HomeViewModel",
+                    "Local pending journal reconciled"
+                )
             com.eventfinder.app.data.repository.SyncResult.NoSession ->
-                AppLogger.d("HomeViewModel", "No active session - local queue was not drained")
+                AppLogger.d(
+                    "HomeViewModel",
+                    "No active session - local journal not processed"
+                )
             com.eventfinder.app.data.repository.SyncResult.Failed ->
-                AppLogger.w("HomeViewModel", "Some local pending operations remain queued")
-        }
-    }
-
-    private suspend fun syncFromApi() {
-        val outcome = eventRepository.syncFromApi()
-        when (outcome.result) {
-            com.eventfinder.app.data.repository.SyncResult.Synced ->
-                AppLogger.i("HomeViewModel", "Live sync completed")
-            com.eventfinder.app.data.repository.SyncResult.NoApiKey ->
-                AppLogger.w("HomeViewModel", "No API key - running in demo mode with seeded data")
-            com.eventfinder.app.data.repository.SyncResult.NoSession ->
-                AppLogger.w("HomeViewModel", "No API key - running in demo mode with seeded data")
-            com.eventfinder.app.data.repository.SyncResult.Failed ->
-                AppLogger.e("HomeViewModel", "Sync failed - preserving cached events")
-        }
-        if (outcome.newEvents.isNotEmpty() || outcome.updatedFavorites.isNotEmpty()) {
-            if (preferences.newEventAlertsEnabled.first()) {
-                NotificationHelper.postEventAlerts(appContext, outcome.newEvents, outcome.updatedFavorites)
-            }
+                AppLogger.w(
+                    "HomeViewModel",
+                    "Some local journal entries remain"
+                )
         }
     }
 
