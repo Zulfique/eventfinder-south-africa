@@ -135,7 +135,10 @@ object NotificationHelper {
                 )
             )
         }
-        NotificationManagerCompat.from(context).notify(notificationId, builder.build())
+        // Only post notification if permission is granted (lint: MissingPermission)
+        if (hasNotificationPermission(context)) {
+            NotificationManagerCompat.from(context).notify(notificationId, builder.build())
+        }
     }
 
     fun hasNotificationPermission(context: Context): Boolean =
