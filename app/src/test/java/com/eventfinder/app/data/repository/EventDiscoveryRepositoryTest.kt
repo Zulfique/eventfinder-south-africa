@@ -332,4 +332,79 @@ class EventDiscoveryRepositoryTest {
         assertEquals(0, result.inserted)
         assertEquals(0, result.failedSources)
     }
+
+    @Test
+    fun `rejects events outside South Africa bounding box`() = runTest {
+        val dao = FakeEventDao()
+        val event = futureEvent(
+            sourceId = "ghana-1",
+            title = "Accra Event",
+            latitude = 5.6037,
+            longitude = -0.1870
+        )
+        val source = FakeEventSource(eventsToReturn = listOf(event))
+        val repo = EventDiscoveryRepository(dao, listOf(source))
+
+        val result = repo.refresh()
+
+        assertEquals(1, result.fetched)
+        assertEquals(0, result.inserted)
+        assertTrue(dao.rows.isEmpty())
+    }
+
+    @Test
+    fun `accepts events within South Africa bounding box`() = runTest {
+        val dao = FakeEventDao()
+        val event = futureEvent(
+            sourceId = "ct-1",
+            title = "Cape Town Event",
+            latitude = -33.9249,
+            longitude = 18.4241
+        )
+        val source = FakeEventSource(eventsToReturn = listOf(event))
+        val repo = EventDiscoveryRepository(dao, listOf(source))
+
+        val result = repo.refresh()
+
+        assertEquals(1, result.fetched)
+        assertEquals(1, result.inserted)
+        assertEquals(1, dao.rows.size)
+    }
+
+    @Test
+    fun `accepts events at SA bounding box edges`() = runTest {
+        val dao = FakeEventDao()
+        val event = futureEvent(
+            sourceId = "edge-1",
+            title = "Edge Event",
+            latitude = -22.0,
+            longitude = 33.0
+        )
+        val source = FakeEventSource(eventsToReturn = listOf(event))
+        val repo = EventDiscoveryRepository(dao, listOf(source))
+
+        val result = repo.refresh()
+
+        assertEquals(1, result.fetched)
+        assertEquals(1, result.inserted)
+    }
+
+    @Test
+    fun `rejects events just outside SA bounding box`() = runTest {
+        val dao = FakeEventDao()
+        val event = futureEvent(
+            sourceId = "outside-1",
+            title = "Mozambique Event",
+            latitude = -21.9,
+            longitude = 35.0
+        )
+        val source = FakeEventSource(eventsToReturn = listOf(event))
+        val repo = EventDiscoveryRepository(dao, listOf(source))
+
+        val result = repo.refresh()
+
+        assertEquals(1, result.fetched)
+        assertEquals(0, result.inserted)
+        assertTrue(dao.rows.isEmpty())
+    }
 }

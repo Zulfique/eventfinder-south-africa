@@ -48,6 +48,13 @@ class EventDiscoveryRepository(
         if (event.sourceId.isBlank()) return false
         if (event.endDate < System.currentTimeMillis()) return false
         if (event.startDate <= 0L) return false
+
+        val lat = event.latitude
+        val lng = event.longitude
+        if (lat == null || lng == null) return false
+        if (lat !in SA_LAT_MIN..SA_LAT_MAX) return false
+        if (lng !in SA_LNG_MIN..SA_LNG_MAX) return false
+
         return true
     }
 
@@ -100,3 +107,8 @@ data class DiscoveryResult(
     val inserted: Int,
     val failedSources: Int
 )
+
+private const val SA_LAT_MIN = -35.0
+private const val SA_LAT_MAX = -22.0
+private const val SA_LNG_MIN = 16.0
+private const val SA_LNG_MAX = 33.0
