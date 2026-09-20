@@ -13,7 +13,7 @@ class PublicJsonEventSource(
     override suspend fun fetchEvents(): List<RemoteEvent> {
         val rawEvents = client.fetch(url)
         return rawEvents.mapNotNull { dto ->
-            PublicJsonEventMapper.map(sourceId = id, dto = dto, sourceName = displayName)
+            PublicJsonEventMapper.map(sourceId = id, dto = dto)
         }
     }
 }

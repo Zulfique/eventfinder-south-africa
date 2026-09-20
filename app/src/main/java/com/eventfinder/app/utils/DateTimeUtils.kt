@@ -1,6 +1,7 @@
 package com.eventfinder.app.utils
 
 import java.text.SimpleDateFormat
+import java.time.ZoneId
 import java.util.Date
 import java.util.Locale
 import java.util.concurrent.TimeUnit
@@ -8,9 +9,12 @@ import java.util.concurrent.TimeUnit
 /**
  * Date/time formatting helpers. Locale-aware so the bilingual
  * (English / Afrikaans) feature also affects date presentation (FR-08).
+ *
+ * Uses Africa/Johannesburg as the default zone for a South Africa-focused app.
  */
 object DateTimeUtils {
 
+    private val SA_ZONE = ZoneId.of("Africa/Johannesburg")
     private val DAY_MILLIS = TimeUnit.HOURS.toMillis(24)
     private val HOUR_MILLIS = TimeUnit.HOURS.toMillis(1)
 
@@ -26,9 +30,12 @@ object DateTimeUtils {
     fun formatTime(epochMillis: Long, locale: Locale = Locale.getDefault()): String =
         SimpleDateFormat("HH:mm", locale).format(Date(epochMillis))
 
-    /** Date only (used for weather lookup): "2026-10-03". */
-    fun isoDate(epochMillis: Long): String =
-        SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date(epochMillis))
+    /** Date only (used for weather lookup): "2026-10-03" in Africa/Johannesburg. */
+    fun isoDate(epochMillis: Long): String {
+        val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+        sdf.timeZone = java.util.TimeZone.getTimeZone(SA_ZONE)
+        return sdf.format(Date(epochMillis))
+    }
 
     /** True when the timestamp is still in the future. */
     fun isInFuture(epochMillis: Long): Boolean = epochMillis > System.currentTimeMillis()
@@ -45,6 +52,11 @@ object DateTimeUtils {
 
     fun dayBefore(epochMillis: Long): Long = epochMillis - DAY_MILLIS
 
-    /** Local date (yyyy-MM-dd) converted to an epoch timestamp at 00:00. */
-    fun startOfDay(epochMillis: Long): Long = epochMillis - (epochMillis % DAY_MILLIS)
+    /** Local date (yyyy-MM-dd) converted to an epoch timestamp at 00:00 Africa/Johannesburg. */
+    fun startOfDay(epochMillis: Long): Long {
+        val instant = java.time.Instant.ofEpochMilli(epochMillis)
+        val zonedDateTime = instant.atZone(SA_ZONE)
+        val startOfDay = zonedDateTime.toLocalDate().atStartOfDay(SA_ZONE)
+        return startOfDay.toInstant().toEpochMilli()
+    }
 }

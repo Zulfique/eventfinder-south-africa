@@ -6,14 +6,15 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.OffsetDateTime
-import java.time.ZoneOffset
+import java.time.ZoneId
 
 object PublicJsonEventMapper {
 
+    private val SA_ZONE = ZoneId.of("Africa/Johannesburg")
+
     fun map(
         sourceId: String,
-        dto: PublicJsonEventDto,
-        sourceName: String
+        dto: PublicJsonEventDto
     ): RemoteEvent? {
         val id = dto.resolvedId()?.trim()?.takeIf { it.isNotBlank() } ?: return null
         val title = dto.resolvedTitle()?.trim()?.takeIf { it.isNotBlank() } ?: return null
@@ -55,8 +56,8 @@ object PublicJsonEventMapper {
 
         runCatching { return Instant.parse(value).toEpochMilli() }
         runCatching { return OffsetDateTime.parse(value).toInstant().toEpochMilli() }
-        runCatching { return LocalDateTime.parse(value).toInstant(ZoneOffset.UTC).toEpochMilli() }
-        runCatching { return LocalDate.parse(value).atStartOfDay().toInstant(ZoneOffset.UTC).toEpochMilli() }
+        runCatching { return LocalDateTime.parse(value).atZone(SA_ZONE).toInstant().toEpochMilli() }
+        runCatching { return LocalDate.parse(value).atStartOfDay(SA_ZONE).toInstant().toEpochMilli() }
 
         return null
     }

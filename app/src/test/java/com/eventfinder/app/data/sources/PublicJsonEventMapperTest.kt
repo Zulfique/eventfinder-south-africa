@@ -160,7 +160,7 @@ class PublicJsonEventMapperTest {
             imageUrl = "https://example.com/img.jpg"
         )
 
-        val event = PublicJsonEventMapper.map("ardent-africa", dto, "Ardent Africa")
+        val event = PublicJsonEventMapper.map("ardent-africa", dto)
 
         assertNotNull(event)
         assertEquals("ardent-1", event?.sourceId)
