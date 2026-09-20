@@ -45,8 +45,8 @@ android {
 
     buildTypes {
         release {
-            // Prototype: shrinking disabled for simpler debugging on physical devices.
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
