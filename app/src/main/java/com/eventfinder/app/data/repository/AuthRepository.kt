@@ -23,12 +23,9 @@ import kotlinx.coroutines.flow.map
 import java.util.UUID
 
 /**
- * Authentication boundary. The prototype performs local registration/login with
- * PBKDF2-hashed passwords (see [PasswordHasher]); Firebase Authentication and
- * real password-reset emailing are explicitly deferred to the final POE phase.
- *
- * References:
- *  - Firebase (2026a) Firebase Authentication: https://firebase.google.com/docs/auth
+ * Authentication boundary. Performs local registration/login with PBKDF2-hashed
+ * passwords (see [PasswordHasher]). Password reset is a local email-lookup that
+ * updates the Room hash — no cloud backend is required.
  */
 interface AuthRepository {
     val currentUser: Flow<User?>
@@ -40,10 +37,9 @@ interface AuthRepository {
     suspend fun setBiometricEnabled(enabled: Boolean)
 
     /**
-     * Password reset is intentionally unavailable in the local-only prototype.
-     *
-     * A real password reset must be performed by a trusted backend that verifies
-     * ownership of the email address using a one-time token.
+     * Resets a password by looking up the account by email, validating the new
+     * password, and updating the Room hash. Returns an error if the email is
+     * unknown, the password is weak, or it matches the current password.
      */
     suspend fun resetPassword(email: String, newPassword: String): Result<Unit>
 

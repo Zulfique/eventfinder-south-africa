@@ -76,8 +76,11 @@ data class RsvpEntity(
 )
 
 /**
- * Offline action queue (FR-09). Actions are stored locally when the device is
- * offline and replayed against the API once connectivity returns.
+ * Local durable operation journal. Each row records a mutation (event create /
+ * update / delete, favourite toggle, RSVP toggle) that has not yet been
+ * reconciled with the local sync flags. The queue is drained on startup by
+ * [EventRepositoryImpl.flushPendingActions], which marks the corresponding
+ * entity as `isSynced` and removes the journal entry.
  */
 @Entity(tableName = "pending_sync")
 data class PendingSyncEntity(
