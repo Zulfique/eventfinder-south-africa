@@ -37,7 +37,6 @@ import androidx.navigation.navArgument
 import com.eventfinder.app.R
 import com.eventfinder.app.di.AppContainer
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.map
 import com.eventfinder.app.ui.screens.auth.LoginScreen
 import com.eventfinder.app.ui.screens.auth.RegisterScreen
 import com.eventfinder.app.ui.screens.create.CreateEventScreen
@@ -247,26 +246,18 @@ private fun EventFinderBottomBar(
 /** Scaffold hosting the five primary tabs. */
 @Composable
 private fun MainScreen(container: AppContainer, navController: NavHostController) {
-    val currentRoute by navController.currentBackStackEntryFlow
-        .map { it.destination.route }
-        .collectAsState(initial = navController.currentBackStackEntry?.destination?.route)
+    var selectedTab by rememberSaveable { mutableStateOf(EventFinderDestination.HOME.route) }
 
     Scaffold(
         bottomBar = {
             EventFinderBottomBar(
-                currentRoute = currentRoute,
-                onNavigate = { route ->
-                    navController.navigate(route) {
-                        popUpTo(AppDestinations.MAIN) { saveState = true }
-                        launchSingleTop = true
-                        restoreState = true
-                    }
-                }
+                currentRoute = selectedTab,
+                onNavigate = { route -> selectedTab = route }
             )
         }
     ) { innerPadding ->
         Box(Modifier.fillMaxSize().padding(innerPadding)) {
-            when (currentRoute) {
+            when (selectedTab) {
                 EventFinderDestination.HOME.route -> HomeScreen(
                     container = container,
                     onEventClick = { navController.navigate(AppDestinations.eventDetail(it)) }
@@ -277,13 +268,7 @@ private fun MainScreen(container: AppContainer, navController: NavHostController
                 )
                 EventFinderDestination.CREATE.route -> CreateEventScreen(
                     container = container,
-                    onClose = {
-                        navController.navigate(EventFinderDestination.HOME.route) {
-                            popUpTo(AppDestinations.MAIN) { saveState = true }
-                            launchSingleTop = true
-                            restoreState = true
-                        }
-                    }
+                    onClose = { selectedTab = EventFinderDestination.HOME.route }
                 )
                 EventFinderDestination.FAVORITES.route -> FavoritesScreen(
                     container = container,
