@@ -71,6 +71,7 @@ class IcsEventSource(
 
         for (block in blocks) {
             val props = mutableMapOf<String, String>()
+            val propParams = mutableMapOf<String, Map<String, String>>()
             val geoLine = StringBuilder()
             var inGeo = false
             val exdates = mutableListOf<Long>()
@@ -97,9 +98,11 @@ class IcsEventSource(
                         inGeo = false
                         val colonIndex = trimmed.indexOf(':')
                         if (colonIndex > 0) {
-                            val key = trimmed.substring(0, colonIndex).substringBefore(';')
+                            val fullKey = trimmed.substring(0, colonIndex)
                             val value = trimmed.substring(colonIndex + 1)
-                            props[key] = props.getOrDefault(key, "") + value
+                            val baseKey = fullKey.substringBefore(';')
+                            props[baseKey] = props.getOrDefault(baseKey, "") + value
+                            propParams[baseKey] = extractParamsFromKey(fullKey)
                         }
                     }
                 }
@@ -116,9 +119,9 @@ class IcsEventSource(
             val dtEndRaw = props["DTEND"]?.trim()
             val rrule = props["RRULE"]?.trim()
 
-            val dtstartParams = extractParams(props, "DTSTART")
+            val dtstartParams = propParams["DTSTART"] ?: emptyMap()
             val startDate = parseIcsDateFlexible(dtStartRaw, dtstartParams)
-            val endDate = dtEndRaw?.let { parseIcsDateFlexible(it) }
+            val endDate = dtEndRaw?.let { parseIcsDateFlexible(it, propParams["DTEND"] ?: emptyMap()) }
 
             if (startDate == null) continue
 
@@ -144,10 +147,11 @@ class IcsEventSource(
                 for (occurrence in occurrences) {
                     if (occurrence < now) continue
                     if (exdateSet.contains(occurrence)) continue
+                    val occSourceId = if (occurrences.size > 1) "$uid-${occurrence.hashCode()}" else uid
                     events.add(
                         RemoteEvent(
                             source = id,
-                            sourceId = "$uid-${occurrence.hashCode()}",
+                            sourceId = occSourceId,
                             title = summary,
                             description = description,
                             category = categories.ifBlank { "OTHER" },
@@ -169,7 +173,7 @@ class IcsEventSource(
                 events.add(
                     RemoteEvent(
                         source = id,
-                        sourceId = uid.hashCode().toString(),
+                        sourceId = uid,
                         title = summary,
                         description = description,
                         category = categories.ifBlank { "OTHER" },
@@ -260,11 +264,11 @@ class IcsEventSource(
         return params
     }
 
-    private fun extractParams(props: Map<String, String>, key: String): Map<String, String> {
+    private fun extractParamsFromKey(fullKey: String): Map<String, String> {
         val params = mutableMapOf<String, String>()
-        val fullKey = props.keys.find { it.startsWith("$key;") } ?: return params
-        val paramPart = fullKey.substringAfter(";")
-        paramPart.split(";").forEach { p ->
+        val paramPart = fullKey.substringAfter(';', "")
+        if (paramPart.isBlank()) return params
+        paramPart.split(';').forEach { p ->
             val eq = p.indexOf('=')
             if (eq > 0) {
                 params[p.substring(0, eq).uppercase()] = p.substring(eq + 1)
@@ -319,16 +323,19 @@ class IcsEventSource(
     }
 
     private fun unfoldIcs(text: String): String {
+        val lines = text.lines()
         val sb = StringBuilder()
-        var prevWasContinuation = false
-        for (line in text.lines()) {
-            if (prevWasContinuation) {
+        var i = 0
+        while (i < lines.size) {
+            val line = lines[i]
+            val isContinuation = line.startsWith(" ") || line.startsWith("\t")
+            if (isContinuation && sb.isNotEmpty()) {
                 sb.append(line.removePrefix(" ").removePrefix("\t"))
             } else {
                 if (sb.isNotEmpty()) sb.append("\n")
                 sb.append(line)
             }
-            prevWasContinuation = line.endsWith("\r") || line.endsWith(" ") || line.endsWith("\t")
+            i++
         }
         return sb.toString()
     }

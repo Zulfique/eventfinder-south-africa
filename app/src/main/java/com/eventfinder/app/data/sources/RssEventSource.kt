@@ -202,14 +202,12 @@ class RssEventSource(
                                     startDate + 3 * 60 * 60 * 1000L
                                 }
 
-                                val venueName = eventLocation.ifBlank {
-                                    locationFromDescription(description)
-                                }
+                                val venueName = eventLocation.ifBlank { title.trim() }
 
                                 events.add(
                                     RemoteEvent(
                                         source = id,
-                                        sourceId = eventId.hashCode().toString(),
+                                        sourceId = eventId,
                                         title = title.trim(),
                                         description = description.trim().take(2000),
                                         category = category.ifBlank { "OTHER" },
@@ -242,12 +240,6 @@ class RssEventSource(
         }
 
         return events
-    }
-
-    private fun locationFromDescription(html: String): String {
-        val text = html.replace(Regex("<[^>]+>"), "").trim()
-        val parts = text.split(",", limit = 2)
-        return if (parts.size > 1) parts[1].trim() else ""
     }
 
     private fun parseRssDate(raw: String): Long? {

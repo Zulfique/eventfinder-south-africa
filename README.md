@@ -48,10 +48,9 @@ and runs on a physical device or emulator.
 | **Create event** | A 3-step wizard (details → date/time → location) with an optional photo picked from the system photo picker. |
 | **My events** | Organisers can edit or delete the events they created from the detail screen's overflow menu. |
 | **Favourites** | Save events offline; favourites survive app restarts and are stored in the local Room catalogue. |
-| **Profile** | Account header, activity stats (created / attending / favourites), My Events and Attending lists. |
+| **Profile** | Activity stats (created / attending / favourites), My Events and Attending lists. |
 | **Edit profile** | Update display name and email with validation. |
-| **Settings** | Language switch (English / Afrikaans), biometric login toggle, event reminders, new-event alerts, plus account tools (change password, clear local cache, delete account). |
-| **Auth** | Local email + password registration and login (PBKDF2-hashed), plus biometric unlock. Forgot password performs a local email-lookup and password change is available in Settings. |
+| **Settings** | Language switch (English / Afrikaans), event reminders, new-event alerts, plus account tools (clear local cache, delete account). |
 | **Reminders** | `AlarmManager` + `NotificationChannel` reminders **24 hours and 1 hour** before an attended event, cancelled when the RSVP is declined. |
 | **Event alerts** | On-device notifications flag newly added or changed events in the local Room catalogue — computed by a pure diff, no push service required. |
 
@@ -103,7 +102,7 @@ Retrofit or Room directly — everything flows through repositories that hide th
 ```mermaid
 flowchart TB
     subgraph UI["UI layer (Jetpack Compose)"]
-        Screens["Screens + Navigation<br/>Splash · Login · Register · Home · Detail<br/>Search · Create · Favourites · Profile · Settings"]
+        Screens["Screens + Navigation<br/>Splash · Home · Detail<br/>Search · Create · Favourites · Profile · Settings"]
         VMs["ViewModels<br/>StateFlow&lt;UiState&gt;"]
     end
 
@@ -112,7 +111,7 @@ flowchart TB
     end
 
     subgraph Data["Data layer (repositories)"]
-        Repos["EventRepository · AuthRepository · WeatherRepository · EventDiscoveryRepository"]
+        Repos["EventRepository · WeatherRepository · EventDiscoveryRepository"]
     end
 
     subgraph Sources["Data sources"]
@@ -151,11 +150,7 @@ sequenceDiagram
 
 ```mermaid
 flowchart LR
-    Splash -->|logged out| Login
-    Splash -->|logged in| Main
-    Login --> Register
-    Login -->|success| Main
-    Register -->|success| Main
+    Splash --> Main
 
     subgraph Main["Main (bottom navigation)"]
         direction LR
@@ -168,7 +163,6 @@ flowchart LR
 
     Profile --> EditProfile
     Profile --> Settings
-    Profile -->|log out| Login
 ```
 
 ## External APIs
@@ -226,11 +220,14 @@ Currently configured sources:
 
 | Source | URL | Key required |
 | --- | --- | --- |
-| **Ardent Africa** | `https://api.ardent.africa/public/v1/events` | No |
+| **Aticket South Africa** | `https://za.aticket.net/feed/featured-events` (RSS) | No |
+| **Motorsport South Africa** | `https://www.motorsport.co.za/events/list/?ical=1` (ICS) | No |
+| **Ardent Africa** | `https://api.ardent.africa/public/v1/events` (JSON) | No |
 
 New sources can be added in `SouthAfricaEventSources.kt` without changing any other code.
 The `PublicJsonEventClient` handles `{ "events": [...] }`, `{ "data": [...] }`, `{ "results": [...] }`,
-and bare JSON array formats automatically.
+and bare JSON array formats automatically. RSS and ICS sources are parsed by `RssEventSource` and
+`IcsEventSource` respectively.
 
 ## Localisation
 
@@ -252,8 +249,6 @@ through `LocaleManager` in `MainActivity.attachBaseContext`.
 
 ## Security
 
-- Passwords are **never stored in plaintext** — they are salted and hashed with **PBKDF2WithHmacSHA256** (120 000 iterations, 256-bit key) following the OWASP Password Storage Cheat Sheet.
-- **Biometric unlock** uses the AndroidX Biometric SDK and degrades gracefully when hardware is unavailable.
 - Credentials never leave the device. `local.properties` and keystores are git-ignored.
 
 ## Getting started
@@ -416,7 +411,7 @@ features that need a shared server are intentionally out of scope:
 - **Push notifications** are replaced by on-device notifications (`AlarmManager` +
   `NotificationManager`); true push would need Firebase Cloud Messaging.
 - **Default city / radius** preferences exist in the data layer but have no settings UI yet.
-- **Public event feeds** — the architecture supports keyless public JSON event sources via `EventDiscoveryRepository`. Ardent Africa (`https://api.ardent.africa/public/v1/events`) is configured as a verified source. Events without valid coordinates are correctly rejected since they cannot be plotted on the map. Additional sources can be added to `SouthAfricaEventSources.kt`.
+- **Public event feeds** — the architecture supports keyless public JSON, RSS and ICS event sources via `EventDiscoveryRepository`. Aticket South Africa (RSS), Motorsport South Africa (ICS) and Ardent Africa (JSON) are configured as verified sources. Events without valid coordinates are correctly rejected since they cannot be plotted on the map. Additional sources can be added to `SouthAfricaEventSources.kt`.
 - **isPublic** means "visible in this device's local catalogue only" — there is no cross-device sharing.
 
 ## Attribution & licences

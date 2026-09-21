@@ -75,6 +75,13 @@ class EventDiscoveryRepositoryTest {
             emit()
         }
 
+        override suspend fun findIdsByOrganizerId(organizerId: String): List<String> =
+            rows.values.filter { it.organizerId == organizerId && !it.isCreatedByUser }
+                .map { it.id }
+
+        override suspend fun deleteOrphanFavorites(eventIds: List<String>) {}
+        override suspend fun deleteOrphanRsvps(eventIds: List<String>) {}
+
         override suspend fun getUpcomingAttendingEventsForUser(userId: String, now: Long): List<EventEntity> =
             rows.values.filter { it.startDate > now }
 

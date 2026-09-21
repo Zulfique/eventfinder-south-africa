@@ -97,6 +97,13 @@ class EventRepositoryTest {
             emit()
         }
 
+        override suspend fun findIdsByOrganizerId(organizerId: String): List<String> =
+            rows.values.filter { it.organizerId == organizerId && !it.isCreatedByUser }
+                .map { it.id }
+
+        override suspend fun deleteOrphanFavorites(eventIds: List<String>) {}
+        override suspend fun deleteOrphanRsvps(eventIds: List<String>) {}
+
         override suspend fun getUpcomingAttendingEventsForUser(userId: String, now: Long): List<EventEntity> =
             rows.values.filter { event ->
                 event.startDate > now
@@ -133,6 +140,11 @@ class EventRepositoryTest {
             emit()
         }
 
+        override suspend fun deleteAllForEvent(eventId: String) {
+            rows.keys.removeAll { it.endsWith(":$eventId") }
+            emit()
+        }
+
         override fun observeAllForUser(userId: String): Flow<List<FavoriteEntity>> =
             flow.map { list -> list.filter { it.userId == userId } }
 
@@ -162,6 +174,11 @@ class EventRepositoryTest {
 
         override suspend fun delete(userId: String, eventId: String) {
             rows.remove("$userId:$eventId")
+            emit()
+        }
+
+        override suspend fun deleteAllForEvent(eventId: String) {
+            rows.keys.removeAll { it.endsWith(":$eventId") }
             emit()
         }
 

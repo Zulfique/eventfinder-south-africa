@@ -81,6 +81,9 @@ interface EventDao {
     @Query("DELETE FROM events WHERE organizerId = :organizerId AND isCreatedByUser = 0")
     suspend fun deleteByOrganizerId(organizerId: String)
 
+    @Query("SELECT id FROM events WHERE organizerId = :organizerId AND isCreatedByUser = 0")
+    suspend fun findIdsByOrganizerId(organizerId: String): List<String>
+
     @Query("""
         SELECT e.* FROM events e
         INNER JOIN rsvps r ON r.eventId = e.id
@@ -97,11 +100,22 @@ interface EventDao {
 
     @Transaction
     suspend fun replaceEventsForSource(organizerId: String, events: List<EventEntity>) {
+        val existingIds = findIdsByOrganizerId(organizerId)
+        if (existingIds.isNotEmpty()) {
+            deleteOrphanFavorites(existingIds)
+            deleteOrphanRsvps(existingIds)
+        }
         deleteByOrganizerId(organizerId)
         if (events.isNotEmpty()) {
             upsertAll(events)
         }
     }
+
+    @Query("DELETE FROM favorites WHERE eventId IN (:eventIds)")
+    suspend fun deleteOrphanFavorites(eventIds: List<String>)
+
+    @Query("DELETE FROM rsvps WHERE eventId IN (:eventIds)")
+    suspend fun deleteOrphanRsvps(eventIds: List<String>)
 }
 
 /** Data access for favourites. */
@@ -113,6 +127,9 @@ interface FavoriteDao {
 
     @Query("DELETE FROM favorites WHERE userId = :userId AND eventId = :eventId")
     suspend fun delete(userId: String, eventId: String)
+
+    @Query("DELETE FROM favorites WHERE eventId = :eventId")
+    suspend fun deleteAllForEvent(eventId: String)
 
     @Query("SELECT * FROM favorites WHERE userId = :userId")
     fun observeAllForUser(userId: String): Flow<List<FavoriteEntity>>
@@ -136,6 +153,9 @@ interface RsvpDao {
 
     @Query("DELETE FROM rsvps WHERE userId = :userId AND eventId = :eventId")
     suspend fun delete(userId: String, eventId: String)
+
+    @Query("DELETE FROM rsvps WHERE eventId = :eventId")
+    suspend fun deleteAllForEvent(eventId: String)
 
     @Query("SELECT * FROM rsvps WHERE userId = :userId")
     fun observeAllForUser(userId: String): Flow<List<RsvpEntity>>

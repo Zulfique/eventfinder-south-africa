@@ -181,9 +181,9 @@ abstract class AppDatabase : RoomDatabase(), DatabaseTransactionHelper {
 
     @Transaction
     override suspend fun deleteEventAtomically(eventId: String, userId: String) {
+        favoriteDao().deleteAllForEvent(eventId)
+        rsvpDao().deleteAllForEvent(eventId)
         eventDao().deleteById(eventId)
-        favoriteDao().delete(userId, eventId)
-        rsvpDao().delete(userId, eventId)
     }
 
     companion object {
