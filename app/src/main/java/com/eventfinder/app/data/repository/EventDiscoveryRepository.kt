@@ -2,6 +2,7 @@ package com.eventfinder.app.data.repository
 
 import com.eventfinder.app.data.local.EventDao
 import com.eventfinder.app.data.local.EventEntity
+import com.eventfinder.app.data.remote.EventGeocoder
 import com.eventfinder.app.data.remote.model.RemoteEvent
 import com.eventfinder.app.data.sources.EventSource
 import com.eventfinder.app.domain.model.EventCategory
@@ -9,7 +10,8 @@ import com.eventfinder.app.utils.AppLogger
 
 class EventDiscoveryRepository(
     private val eventDao: EventDao,
-    private val sources: List<EventSource>
+    private val sources: List<EventSource>,
+    private val geocoder: EventGeocoder? = null
 ) {
     private val tag = "EventDiscoveryRepository"
 
@@ -21,8 +23,16 @@ class EventDiscoveryRepository(
         for (source in sources) {
             try {
                 AppLogger.i(tag, "Fetching events from ${source.displayName}")
-                val events = source.fetchEvents()
-                totalFetched += events.size
+                val rawEvents = source.fetchEvents()
+                totalFetched += rawEvents.size
+
+                val events = rawEvents.map { event ->
+                    if (event.latitude == null || event.longitude == null) {
+                        geocodeIfNeeded(event)
+                    } else {
+                        event
+                    }
+                }
 
                 val validEvents = events.filter { isValid(it) }.distinctBy { it.stableId }
 
@@ -62,6 +72,14 @@ class EventDiscoveryRepository(
             inserted = totalInserted,
             failedSources = failedSources
         )
+    }
+
+    private suspend fun geocodeIfNeeded(event: RemoteEvent): RemoteEvent {
+        val locationName = event.venueName.ifBlank { event.address }
+        if (locationName.isBlank()) return event
+
+        val coords = geocoder?.geocode(locationName) ?: return event
+        return event.copy(latitude = coords.first, longitude = coords.second)
     }
 
     private fun isValid(event: RemoteEvent): Boolean {

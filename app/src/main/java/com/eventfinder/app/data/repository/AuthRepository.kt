@@ -93,7 +93,7 @@ class AuthRepositoryImpl(
             email = normalizedEmail,
             passwordHash = PasswordHasher.hash(password),
             preferredLanguage = language,
-            defaultCity = "Johannesburg",
+            defaultCity = "South Africa",
             defaultRadiusKm = 50,
             biometricEnabled = false,
             createdAt = System.currentTimeMillis()

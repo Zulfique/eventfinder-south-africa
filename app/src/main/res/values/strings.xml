@@ -47,10 +47,11 @@
     <string name="register_success">Account created</string>
     <string name="login_failed">Invalid email or password</string>
     <string name="biometric_hint">Confirm with your fingerprint</string>
-    <string name="forgot_password_hint">Enter your email and a new password below. Your password will be updated locally.</string>
+    <string name="forgot_password_hint">Enter your email and a new password below. This is a local reset — no email verification is performed.</string>
     <string name="reset_password_title">Reset password</string>
     <string name="reset_password_action">Reset password</string>
     <string name="reset_not_available">Password reset is not available in this prototype. Use Change Password in Settings instead.</string>
+    <string name="reset_local_warning">This is a local password reset. No email verification is performed.</string>
     <string name="reset_success">Password reset — sign in with your new password</string>
     <string name="unknown_email">No account found for that email</string>
     <string name="reset_failed">Could not reset the password</string>

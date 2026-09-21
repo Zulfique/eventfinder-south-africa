@@ -3,6 +3,7 @@ package com.eventfinder.app.di
 import android.content.Context
 import com.eventfinder.app.data.local.AppDatabase
 import com.eventfinder.app.data.remote.ApiClient
+import com.eventfinder.app.data.remote.EventGeocoder
 import com.eventfinder.app.data.remote.PublicJsonEventClient
 import com.eventfinder.app.data.repository.AuthRepository
 import com.eventfinder.app.data.repository.AuthRepositoryImpl
@@ -68,10 +69,19 @@ class AppContainer(context: Context) {
         ApiClient.publicJsonEventClient(appContext.cacheDir)
     }
 
+    private val eventGeocoder: EventGeocoder by lazy {
+        EventGeocoder(ApiClient.openMeteoGeocodingApi(appContext.cacheDir))
+    }
+
+    private val httpClient by lazy {
+        ApiClient.httpClient(appContext.cacheDir)
+    }
+
     val eventDiscoveryRepository: EventDiscoveryRepository by lazy {
         EventDiscoveryRepository(
             eventDao = database.eventDao(),
-            sources = SouthAfricaEventSources.create(publicJsonEventClient)
+            sources = SouthAfricaEventSources.create(publicJsonEventClient, httpClient),
+            geocoder = eventGeocoder
         )
     }
 

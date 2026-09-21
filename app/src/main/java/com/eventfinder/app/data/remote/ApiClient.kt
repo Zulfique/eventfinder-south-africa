@@ -22,7 +22,7 @@ object ApiClient {
         .setLenient()
         .create()
 
-    private fun httpClient(cacheDir: File?): OkHttpClient {
+    fun httpClient(cacheDir: File?): OkHttpClient {
         val builder = OkHttpClient.Builder()
             .connectTimeout(20, TimeUnit.SECONDS)
             .readTimeout(60, TimeUnit.SECONDS)
