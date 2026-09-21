@@ -21,3 +21,13 @@ captures/
 # JVM crash logs
 app/hs_err_*.log
 *.log
+
+# Build output logs
+build.txt
+build_output.txt
+compile_output.txt
+lint.txt
+lint_output.txt
+temp_compile.txt
+test.txt
+test_output.txt
