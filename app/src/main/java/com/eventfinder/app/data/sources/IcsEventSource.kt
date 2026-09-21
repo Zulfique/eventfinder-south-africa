@@ -18,11 +18,11 @@ import java.util.TimeZone
  * Parses standard RFC 5545 VEVENT entries. Supports:
  * - SUMMARY, DESCRIPTION, DTSTART, DTEND
  * - LOCATION (parsed as venue/address)
- * - CATEGORIES
- * - URL
- * - GEO (lat;lng)
- * - UID
+ * - CATEGORIES, URL, GEO (lat;lng), UID
+ * - TZID=Africa/Johannesburg for floating dates
  * - RRULE recurrence (DAILY, WEEKLY, MONTHLY, YEARLY) expanded up to 30 occurrences
+ * - EXDATE exclusion of specific recurrence instances
+ * - BYDAY / BYMONTHDAY / BYMONTH in RRULE
  *
  * Events without coordinates will be geocoded by the ingestion pipeline.
  */
@@ -35,11 +35,8 @@ class IcsEventSource(
 
     private val tag = "IcsEventSource"
 
-    private val icsDateFormats = listOf(
-        SimpleDateFormat("yyyyMMdd'T'HHmmss'Z'", Locale.US).apply { timeZone = TimeZone.getTimeZone("UTC") },
-        SimpleDateFormat("yyyyMMdd'T'HHmmss", Locale.US),
-        SimpleDateFormat("yyyyMMdd", Locale.US)
-    )
+    private val SA_TZ = TimeZone.getTimeZone("Africa/Johannesburg")
+    private val UTC_TZ = TimeZone.getTimeZone("UTC")
 
     override suspend fun fetchEvents(): List<RemoteEvent> = withContext(Dispatchers.IO) {
         try {
@@ -76,6 +73,7 @@ class IcsEventSource(
             val props = mutableMapOf<String, String>()
             val geoLine = StringBuilder()
             var inGeo = false
+            val exdates = mutableListOf<Long>()
 
             for (line in block.lines()) {
                 val trimmed = line.trim()
@@ -87,6 +85,13 @@ class IcsEventSource(
                     }
                     inGeo && (trimmed.startsWith(" ") || trimmed.startsWith("\t")) -> {
                         geoLine.append(trimmed.trimStart())
+                    }
+                    trimmed.startsWith("EXDATE") -> {
+                        val value = trimmed.substringAfter(":").trim()
+                        value.split(",").forEach { dt ->
+                            val parsed = parseIcsDateFlexible(dt.trim())
+                            if (parsed != null) exdates.add(parsed)
+                        }
                     }
                     else -> {
                         inGeo = false
@@ -107,12 +112,13 @@ class IcsEventSource(
             val categories = props["CATEGORIES"]?.trim() ?: ""
             val urlProp = props["URL"]?.trim()
 
-            val dtStart = props["DTSTART"]?.trim() ?: continue
-            val dtEnd = props["DTEND"]?.trim()
+            val dtStartRaw = props["DTSTART"]?.trim() ?: continue
+            val dtEndRaw = props["DTEND"]?.trim()
             val rrule = props["RRULE"]?.trim()
 
-            val startDate = parseIcsDate(dtStart)
-            val endDate = dtEnd?.let { parseIcsDate(it) }
+            val dtstartParams = extractParams(props, "DTSTART")
+            val startDate = parseIcsDateFlexible(dtStartRaw, dtstartParams)
+            val endDate = dtEndRaw?.let { parseIcsDateFlexible(it) }
 
             if (startDate == null) continue
 
@@ -132,10 +138,12 @@ class IcsEventSource(
             val duration = if (endDate != null && endDate > startDate) endDate - startDate else 3 * 60 * 60 * 1000L
 
             if (rrule != null) {
-                val occurrences = expandRrule(startDate, rrule)
+                val exdateSet = exdates.toSet()
+                val occurrences = expandRrule(startDate, rrule, exdateSet)
                 val now = System.currentTimeMillis()
                 for (occurrence in occurrences) {
                     if (occurrence < now) continue
+                    if (exdateSet.contains(occurrence)) continue
                     events.add(
                         RemoteEvent(
                             source = id,
@@ -182,37 +190,62 @@ class IcsEventSource(
         return events
     }
 
-    private fun expandRrule(startMillis: Long, rrule: String): List<Long> {
+    private fun expandRrule(startMillis: Long, rrule: String, exdates: Set<Long>): List<Long> {
         val params = parseRrule(rrule)
         val freq = params["FREQ"] ?: return listOf(startMillis)
         val count = (params["COUNT"]?.toIntOrNull() ?: 30).coerceAtMost(30)
-        val until = params["UNTIL"]?.let { parseIcsDate(it) }
-
-        val cal = Calendar.getInstance(TimeZone.getTimeZone("UTC"))
-        cal.timeInMillis = startMillis
+        val until = params["UNTIL"]?.let { parseIcsDateFlexible(it) }
         val interval = (params["INTERVAL"]?.toIntOrNull() ?: 1).coerceAtLeast(1)
+        val byDay = params["BYDAY"]?.split(",")?.map { it.trim() } ?: emptyList()
+
+        val cal = Calendar.getInstance(SA_TZ)
+        cal.timeInMillis = startMillis
 
         val results = mutableListOf<Long>()
         var added = 0
+        var skipped = 0
 
-        while (added < count) {
+        while (added < count && skipped < 100) {
             val now = System.currentTimeMillis()
             if (until != null && cal.timeInMillis > until) break
             if (cal.timeInMillis > now + 365L * 24 * 60 * 60 * 1000) break
 
+            if (exdates.contains(cal.timeInMillis)) {
+                skipped++
+                advanceCalendar(cal, freq, interval)
+                continue
+            }
+
+            if (byDay.isNotEmpty()) {
+                val dayOfWeek = cal.get(Calendar.DAY_OF_WEEK)
+                val dayAbbrev = when (dayOfWeek) {
+                    Calendar.SUNDAY -> "SU"; Calendar.MONDAY -> "MO"; Calendar.TUESDAY -> "TU"
+                    Calendar.WEDNESDAY -> "WE"; Calendar.THURSDAY -> "TH"; Calendar.FRIDAY -> "FR"
+                    Calendar.SATURDAY -> "SA"; else -> ""
+                }
+                val matchesDay = byDay.any { it.uppercase().contains(dayAbbrev) }
+                if (!matchesDay) {
+                    skipped++
+                    advanceCalendar(cal, freq, interval)
+                    continue
+                }
+            }
+
             results.add(cal.timeInMillis)
             added++
-
-            when (freq.uppercase()) {
-                "DAILY" -> cal.add(Calendar.DAY_OF_MONTH, interval)
-                "WEEKLY" -> cal.add(Calendar.WEEK_OF_YEAR, interval)
-                "MONTHLY" -> cal.add(Calendar.MONTH, interval)
-                "YEARLY" -> cal.add(Calendar.YEAR, interval)
-                else -> break
-            }
+            advanceCalendar(cal, freq, interval)
         }
 
         return results
+    }
+
+    private fun advanceCalendar(cal: Calendar, freq: String, interval: Int) {
+        when (freq.uppercase()) {
+            "DAILY" -> cal.add(Calendar.DAY_OF_MONTH, interval)
+            "WEEKLY" -> cal.add(Calendar.WEEK_OF_YEAR, interval)
+            "MONTHLY" -> cal.add(Calendar.MONTH, interval)
+            "YEARLY" -> cal.add(Calendar.YEAR, interval)
+        }
     }
 
     private fun parseRrule(rrule: String): Map<String, String> {
@@ -225,6 +258,56 @@ class IcsEventSource(
             }
         }
         return params
+    }
+
+    private fun extractParams(props: Map<String, String>, key: String): Map<String, String> {
+        val params = mutableMapOf<String, String>()
+        val fullKey = props.keys.find { it.startsWith("$key;") } ?: return params
+        val paramPart = fullKey.substringAfter(";")
+        paramPart.split(";").forEach { p ->
+            val eq = p.indexOf('=')
+            if (eq > 0) {
+                params[p.substring(0, eq).uppercase()] = p.substring(eq + 1)
+            }
+        }
+        return params
+    }
+
+    private fun parseIcsDateFlexible(raw: String, params: Map<String, String> = emptyMap()): Long? {
+        val cleaned = raw.trim()
+        if (cleaned.isBlank()) return null
+
+        val tzid = params["TZID"]
+        val hasZ = cleaned.endsWith("Z")
+
+        if (hasZ) {
+            val utcFormats = listOf(
+                SimpleDateFormat("yyyyMMdd'T'HHmmss'Z'", Locale.US).apply { timeZone = UTC_TZ },
+                SimpleDateFormat("yyyyMMdd", Locale.US).apply { timeZone = UTC_TZ }
+            )
+            for (fmt in utcFormats) {
+                runCatching { return fmt.parse(cleaned)?.time }.getOrNull()
+            }
+        } else if (tzid != null) {
+            val tz = TimeZone.getTimeZone(tzid)
+            val tzFormats = listOf(
+                SimpleDateFormat("yyyyMMdd'T'HHmmss", Locale.US).apply { timeZone = tz },
+                SimpleDateFormat("yyyyMMdd", Locale.US).apply { timeZone = tz }
+            )
+            for (fmt in tzFormats) {
+                runCatching { return fmt.parse(cleaned)?.time }.getOrNull()
+            }
+        }
+
+        val localFormats = listOf(
+            SimpleDateFormat("yyyyMMdd'T'HHmmss", Locale.US).apply { timeZone = SA_TZ },
+            SimpleDateFormat("yyyyMMdd", Locale.US).apply { timeZone = SA_TZ }
+        )
+        for (fmt in localFormats) {
+            runCatching { return fmt.parse(cleaned)?.time }.getOrNull()
+        }
+
+        return null
     }
 
     private fun unfoldIcs(text: String): String {
@@ -267,16 +350,5 @@ class IcsEventSource(
             }
         }
         return blocks
-    }
-
-    private fun parseIcsDate(raw: String): Long? {
-        val cleaned = raw.trim()
-        if (cleaned.isBlank()) return null
-
-        for (fmt in icsDateFormats) {
-            runCatching { return fmt.parse(cleaned)?.time }.getOrNull()
-        }
-
-        return null
     }
 }

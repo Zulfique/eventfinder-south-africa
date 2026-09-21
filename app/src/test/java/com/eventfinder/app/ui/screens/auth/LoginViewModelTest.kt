@@ -70,6 +70,7 @@ class LoginViewModelTest {
 
         override suspend fun deleteAccount(): Result<Unit> = error("not used")
         override suspend fun isLoggedIn(): Boolean = false
+        override suspend fun continueAsGuest(): Result<User> = error("not used")
     }
 
     @Test

@@ -16,10 +16,16 @@ import java.util.TimeZone
 /**
  * Fetches events from an RSS/Atom feed.
  *
- * Parses common RSS event structures including:
+ * Only creates events when actual event-specific date fields are present:
+ * - event:start / event:end (RSS events module)
+ * - startDate / endDate (schema.org)
+ * - itunes:start / itunes:end
+ * - Published dates are NOT used as event start times.
+ *
+ * Supports:
  * - Standard RSS 2.0 with <item> elements
  * - Atom feeds with <entry> elements
- * - iTunes podcast namespace for date/time
+ * - geo:lat / geo:long for coordinate extraction
  *
  * Events without coordinates will be geocoded by the ingestion pipeline.
  */
@@ -38,6 +44,8 @@ class RssEventSource(
         SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssZ", Locale.US),
         SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssXXX", Locale.US),
         SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US).apply { timeZone = TimeZone.getTimeZone("UTC") },
+        SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.US).apply { timeZone = TimeZone.getTimeZone("Africa/Johannesburg") },
+        SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).apply { timeZone = TimeZone.getTimeZone("Africa/Johannesburg") },
         SimpleDateFormat("EEE, dd MMM yyyy HH:mm:ss zzz", Locale.US),
         SimpleDateFormat("dd MMM yyyy HH:mm:ss Z", Locale.US)
     )
@@ -81,7 +89,6 @@ class RssEventSource(
         var pubDate = ""
         var guid = ""
         var category = ""
-        var location = ""
         var imageUrl = ""
         var inTitle = false
         var inDescription = false
@@ -89,34 +96,41 @@ class RssEventSource(
         var inPubDate = false
         var inGuid = false
         var inCategory = false
+        var inEventStart = false
+        var inEventEnd = false
+        var inEventLocation = false
+
+        var eventStartDate = ""
+        var eventEndDate = ""
+        var eventLocation = ""
+        var eventLat: Double? = null
+        var eventLng: Double? = null
 
         var eventType = parser.eventType
         while (eventType != XmlPullParser.END_DOCUMENT) {
             when (eventType) {
                 XmlPullParser.START_TAG -> {
                     val name = parser.name
+                    val localName = parser.name
+                    val ns = parser.namespace
                     when {
                         name == "item" || name == "entry" -> {
                             insideItem = true
-                            title = ""
-                            description = ""
-                            link = ""
-                            pubDate = ""
-                            guid = ""
-                            category = ""
-                            location = ""
-                            imageUrl = ""
+                            title = ""; description = ""; link = ""; pubDate = ""
+                            guid = ""; category = ""; imageUrl = ""
+                            eventStartDate = ""; eventEndDate = ""; eventLocation = ""
+                            eventLat = null; eventLng = null
                         }
-                        insideItem -> when (name) {
-                            "title" -> inTitle = true
-                            "description", "summary", "content" -> {
+                        insideItem -> when {
+                            localName == "title" -> inTitle = true
+                            localName == "description" || localName == "summary" || localName == "content" -> {
                                 if (!inDescription) inDescription = true
                             }
-                            "link" -> inLink = true
-                            "pubDate", "published", "updated" -> inPubDate = true
-                            "guid", "id" -> inGuid = true
-                            "category" -> inCategory = true
-                            "enclosure" -> {
+                            localName == "link" -> inLink = true
+                            localName == "pubDate" || localName == "published" || localName == "updated" -> inPubDate = true
+                            localName == "guid" || localName == "id" -> inGuid = true
+                            localName == "category" -> inCategory = true
+                            localName == "enclosure" -> {
                                 val type = parser.getAttributeValue(null, "type") ?: ""
                                 val href = parser.getAttributeValue(null, "url")
                                     ?: parser.getAttributeValue(null, "href")
@@ -124,13 +138,35 @@ class RssEventSource(
                                     imageUrl = href
                                 }
                             }
-                            "media:content", "media:thumbnail" -> {
+                            localName == "media:content" || localName == "media:thumbnail" -> {
                                 val href = parser.getAttributeValue(null, "url")
                                     ?: parser.getAttributeValue(null, "href")
                                 if (href != null) imageUrl = href
                             }
-                            "geo:lat" -> { location = parser.nextText().trim() }
-                            "geo:long" -> { /* handled separately */ }
+                            localName == "lat" && ns?.contains("geo") == true -> {
+                                eventLat = parser.nextText().trim().toDoubleOrNull()
+                            }
+                            localName == "long" && ns?.contains("geo") == true -> {
+                                eventLng = parser.nextText().trim().toDoubleOrNull()
+                            }
+                            localName == "start" && (ns?.contains("event") == true || ns?.contains("ev") == true) -> {
+                                inEventStart = true
+                            }
+                            localName == "end" && (ns?.contains("event") == true || ns?.contains("ev") == true) -> {
+                                inEventEnd = true
+                            }
+                            localName == "location" && (ns?.contains("event") == true || ns?.contains("ev") == true) -> {
+                                inEventLocation = true
+                            }
+                            localName == "startDate" || localName == "event:start" -> {
+                                inEventStart = true
+                            }
+                            localName == "endDate" || localName == "event:end" -> {
+                                inEventEnd = true
+                            }
+                            localName == "event:location" -> {
+                                inEventLocation = true
+                            }
                         }
                     }
                 }
@@ -141,6 +177,9 @@ class RssEventSource(
                     if (inPubDate) pubDate += parser.text?.trim() ?: ""
                     if (inGuid) guid += parser.text?.trim() ?: ""
                     if (inCategory) category += parser.text?.trim() ?: ""
+                    if (inEventStart) eventStartDate += parser.text?.trim() ?: ""
+                    if (inEventEnd) eventEndDate += parser.text?.trim() ?: ""
+                    if (inEventLocation) eventLocation += parser.text?.trim() ?: ""
                 }
                 XmlPullParser.END_TAG -> {
                     val name = parser.name
@@ -148,9 +187,25 @@ class RssEventSource(
                         "item", "entry" -> {
                             insideItem = false
                             val eventId = guid.ifBlank { link }.ifBlank { title }
-                            val startDate = parseRssDate(pubDate)
+
+                            val hasEventDate = eventStartDate.isNotBlank()
+                            val startDate = if (hasEventDate) {
+                                parseRssDate(eventStartDate)
+                            } else {
+                                null
+                            }
 
                             if (title.isNotBlank() && startDate != null && startDate > System.currentTimeMillis()) {
+                                val endDate = if (eventEndDate.isNotBlank()) {
+                                    parseRssDate(eventEndDate) ?: (startDate + 3 * 60 * 60 * 1000L)
+                                } else {
+                                    startDate + 3 * 60 * 60 * 1000L
+                                }
+
+                                val venueName = eventLocation.ifBlank {
+                                    locationFromDescription(description)
+                                }
+
                                 events.add(
                                     RemoteEvent(
                                         source = id,
@@ -159,11 +214,11 @@ class RssEventSource(
                                         description = description.trim().take(2000),
                                         category = category.ifBlank { "OTHER" },
                                         startDate = startDate,
-                                        endDate = startDate + 3 * 60 * 60 * 1000L,
-                                        venueName = location.ifBlank { title.trim() },
-                                        address = location,
-                                        latitude = null,
-                                        longitude = null,
+                                        endDate = endDate,
+                                        venueName = venueName.ifBlank { title.trim() },
+                                        address = eventLocation,
+                                        latitude = eventLat,
+                                        longitude = eventLng,
                                         imageUrl = imageUrl.ifBlank { null },
                                         sourceUrl = link.ifBlank { null },
                                         organizerName = null
@@ -172,13 +227,14 @@ class RssEventSource(
                             }
                         }
                         "title" -> inTitle = false
-                        "description", "summary", "content" -> {
-                            inDescription = false
-                        }
+                        "description", "summary", "content" -> inDescription = false
                         "link" -> inLink = false
                         "pubDate", "published", "updated" -> inPubDate = false
                         "guid", "id" -> inGuid = false
                         "category" -> inCategory = false
+                        "start", "startDate", "event:start" -> inEventStart = false
+                        "end", "endDate", "event:end" -> inEventEnd = false
+                        "location", "event:location" -> inEventLocation = false
                     }
                 }
             }
@@ -186,6 +242,12 @@ class RssEventSource(
         }
 
         return events
+    }
+
+    private fun locationFromDescription(html: String): String {
+        val text = html.replace(Regex("<[^>]+>"), "").trim()
+        val parts = text.split(",", limit = 2)
+        return if (parts.size > 1) parts[1].trim() else ""
     }
 
     private fun parseRssDate(raw: String): Long? {

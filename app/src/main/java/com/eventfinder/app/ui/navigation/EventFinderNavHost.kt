@@ -112,6 +112,17 @@ fun EventFinderNavHost(
         }
 
         composable(AppDestinations.LOGIN) {
+            var requestGuestLogin by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+
+            if (requestGuestLogin) {
+                androidx.compose.runtime.LaunchedEffect(Unit) {
+                    container.authRepository.continueAsGuest()
+                    navController.navigate(AppDestinations.MAIN) {
+                        popUpTo(AppDestinations.LOGIN) { inclusive = true }
+                    }
+                }
+            }
+
             LoginScreen(
                 container = container,
                 onLoggedIn = {
@@ -119,7 +130,8 @@ fun EventFinderNavHost(
                         popUpTo(AppDestinations.LOGIN) { inclusive = true }
                     }
                 },
-                onCreateAccount = { navController.navigate(AppDestinations.REGISTER) }
+                onCreateAccount = { navController.navigate(AppDestinations.REGISTER) },
+                onGuestLogin = { requestGuestLogin = true }
             )
         }
 

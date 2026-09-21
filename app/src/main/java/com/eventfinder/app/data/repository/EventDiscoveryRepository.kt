@@ -167,26 +167,28 @@ class EventDiscoveryRepository(
             .replace(Regex("\\s+"), " ")
             .trim()
 
-        val dateBucket = bucketDate(event.startDate)
+        val cal = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("Africa/Johannesburg"))
+        cal.timeInMillis = event.startDate
+        val dateBucket = "${cal.get(java.util.Calendar.YEAR)}-${cal.get(java.util.Calendar.MONTH)}-${cal.get(java.util.Calendar.DAY_OF_MONTH)}"
+        val timeBucket = "${cal.get(java.util.Calendar.HOUR_OF_DAY)}"
         val venueKey = event.venueName.trim().lowercase(Locale.US)
             .replace(Regex("[^a-z0-9\\s]"), "")
             .replace(Regex("\\s+"), " ")
             .trim()
 
-        return "$normalizedTitle|$dateBucket|$venueKey"
-    }
-
-    private fun bucketDate(timestamp: Long): String {
-        val cal = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("Africa/Johannesburg"))
-        cal.timeInMillis = timestamp
-        return "${cal.get(java.util.Calendar.YEAR)}-${cal.get(java.util.Calendar.MONTH)}-${cal.get(java.util.Calendar.DAY_OF_MONTH)}"
+        return "$normalizedTitle|$dateBucket|$timeBucket|$venueKey"
     }
 
     private fun mergeDuplicate(existing: RemoteEvent, duplicate: RemoteEvent): RemoteEvent {
+        val urls = mutableListOf<String>()
+        existing.sourceUrl?.let { urls.add(it) }
+        duplicate.sourceUrl?.let { urls.add(it) }
+        val mergedUrl = urls.firstOrNull()
+
         return existing.copy(
             description = existing.description.ifBlank { duplicate.description },
             imageUrl = existing.imageUrl ?: duplicate.imageUrl,
-            sourceUrl = existing.sourceUrl ?: duplicate.sourceUrl,
+            sourceUrl = mergedUrl,
             organizerName = existing.organizerName ?: duplicate.organizerName
         )
     }

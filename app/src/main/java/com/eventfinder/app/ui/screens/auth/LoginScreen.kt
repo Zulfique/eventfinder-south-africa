@@ -67,7 +67,8 @@ import com.eventfinder.app.utils.AppLogger
 fun LoginScreen(
     container: AppContainer,
     onLoggedIn: () -> Unit,
-    onCreateAccount: () -> Unit
+    onCreateAccount: () -> Unit,
+    onGuestLogin: () -> Unit = {}
 ) {
     val activity = LocalContext.current as FragmentActivity
     val snackbarHostState = remember { SnackbarHostState() }
@@ -254,6 +255,15 @@ fun LoginScreen(
             }
 
             Spacer(Modifier.height(16.dp))
+
+            OutlinedButton(
+                onClick = onGuestLogin,
+                modifier = Modifier.fillMaxWidth().height(50.dp)
+            ) {
+                Text(stringResource(R.string.continue_as_guest))
+            }
+
+            Spacer(Modifier.height(8.dp))
 
             TextButton(onClick = onCreateAccount) {
                 Text(stringResource(R.string.login_no_account))

@@ -55,6 +55,9 @@ interface AuthRepository {
     suspend fun deleteAccount(): Result<Unit>
 
     suspend fun isLoggedIn(): Boolean
+
+    /** Continues without creating a full account — uses a local device profile. */
+    suspend fun continueAsGuest(): Result<User>
 }
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -230,4 +233,30 @@ class AuthRepositoryImpl(
 
     override suspend fun isLoggedIn(): Boolean =
         preferences.sessionUserId.first() != null
+
+    override suspend fun continueAsGuest(): Result<User> {
+        val guestId = preferences.sessionUserId.first()
+        if (guestId != null) {
+            val existingUser = userDao.findById(guestId)
+            if (existingUser != null) {
+                return Result.success(existingUser.toDomain())
+            }
+        }
+
+        val user = UserEntity(
+            id = UUID.randomUUID().toString(),
+            fullName = "Guest",
+            email = "",
+            passwordHash = "",
+            preferredLanguage = "en",
+            defaultCity = "South Africa",
+            defaultRadiusKm = 50,
+            biometricEnabled = false,
+            createdAt = System.currentTimeMillis()
+        )
+        userDao.upsert(user)
+        preferences.setSessionUserId(user.id)
+        AppLogger.i("AuthRepository", "Guest session created: ${user.id}")
+        return Result.success(user.toDomain())
+    }
 }

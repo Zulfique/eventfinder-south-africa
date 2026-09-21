@@ -9,17 +9,14 @@ import okhttp3.OkHttpClient
  * All URLs are free, keyless, and publicly accessible. If a feed is
  * unavailable, the per-source error handling in EventDiscoveryRepository
  * ensures other sources continue to work and cached events are preserved.
+ *
+ * The RSS and ICS sources only produce events when actual event-specific
+ * date fields are present (not from article publication dates).
  */
 object SouthAfricaEventSources {
 
     private const val ARDENT_AFRICA_BASE =
         "https://api.ardent.africa/public/v1/events?location=South+Africa&limit=50"
-
-    private const val GOV_SA_NEWS_RSS =
-        "https://www.gov.za/rss/sa-government-news-releases.xml"
-
-    private const val SA_HERITAGE_ICS =
-        "https://www.sahra.org.za/ics/events.ics"
 
     fun create(
         client: PublicJsonEventClient,
@@ -31,18 +28,6 @@ object SouthAfricaEventSources {
                 displayName = "Ardent Africa Events (South Africa)",
                 url = ARDENT_AFRICA_BASE,
                 client = client
-            ),
-            RssEventSource(
-                id = "sa-government-news",
-                displayName = "South Africa Government News",
-                url = GOV_SA_NEWS_RSS,
-                httpClient = httpClient
-            ),
-            IcsEventSource(
-                id = "sa-heritage",
-                displayName = "South African Heritage Events",
-                url = SA_HERITAGE_ICS,
-                httpClient = httpClient
             )
         )
     }
