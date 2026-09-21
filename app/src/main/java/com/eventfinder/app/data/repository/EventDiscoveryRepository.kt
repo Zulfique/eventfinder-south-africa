@@ -7,6 +7,7 @@ import com.eventfinder.app.data.remote.model.RemoteEvent
 import com.eventfinder.app.data.sources.EventSource
 import com.eventfinder.app.domain.model.EventCategory
 import com.eventfinder.app.utils.AppLogger
+import java.util.Locale
 
 class EventDiscoveryRepository(
     private val eventDao: EventDao,
@@ -16,62 +17,116 @@ class EventDiscoveryRepository(
     private val tag = "EventDiscoveryRepository"
 
     suspend fun refresh(): DiscoveryResult {
-        var totalFetched = 0
-        var totalInserted = 0
-        var failedSources = 0
+        val sourceResults = mutableListOf<SourceResult>()
 
         for (source in sources) {
-            try {
-                AppLogger.i(tag, "Fetching events from ${source.displayName}")
-                val rawEvents = source.fetchEvents()
-                totalFetched += rawEvents.size
+            val result = fetchSource(source)
+            sourceResults.add(result)
+        }
 
-                val events = rawEvents.map { event ->
-                    if (event.latitude == null || event.longitude == null) {
-                        geocodeIfNeeded(event)
-                    } else {
-                        event
-                    }
-                }
+        val allFetchedEvents = sourceResults
+            .filter { it.inserted > 0 }
+            .flatMap { it.events }
+        val crossSourceDeduped = deduplicateAcrossSources(allFetchedEvents)
 
-                val validEvents = events.filter { isValid(it) }.distinctBy { it.stableId }
+        val dedupByOrganizer = crossSourceDeduped.groupBy { "external:${it.source}" }
 
-                if (validEvents.isEmpty()) {
-                    AppLogger.w(
-                        tag,
-                        "Source ${source.displayName} returned no valid events; keeping cached events"
-                    )
-                    continue
-                }
-
-                val entities = validEvents.mapNotNull { it.toEntity() }
-
-                if (entities.isEmpty()) {
-                    AppLogger.w(
-                        tag,
-                        "Source ${source.displayName} produced no valid entities; keeping cached events"
-                    )
-                    continue
-                }
-
-                val organizerId = "external:${source.id}"
-
+        var totalInserted = 0
+        for ((organizerId, events) in dedupByOrganizer) {
+            val entities = events.mapNotNull { it.toEntity() }
+            if (entities.isNotEmpty()) {
                 eventDao.replaceEventsForSource(organizerId, entities)
                 totalInserted += entities.size
-                AppLogger.i(tag, "Fetched ${validEvents.size} events from ${source.displayName}")
-            } catch (e: Exception) {
-                failedSources++
-                AppLogger.e(tag, "Failed to fetch ${source.displayName}", e)
             }
         }
 
+        val totalFetched = sourceResults.sumOf { it.fetched }
+        val failedSources = sourceResults.count { it.failed }
+
+        for (result in sourceResults) {
+            AppLogger.i(
+                tag,
+                "${result.sourceName}: ${result.fetched} fetched / ${result.inserted} valid" +
+                    if (result.failed) " [FAILED]" else ""
+            )
+        }
+        AppLogger.i(
+            tag,
+            "Geocoding: ${sourceResults.sumOf { it.geocoded }} resolved / " +
+                "${sourceResults.sumOf { it.geocodeFailed }} failed"
+        )
         AppLogger.i(tag, "Discovery complete: $totalInserted inserted, $failedSources failed sources")
 
         return DiscoveryResult(
             fetched = totalFetched,
             inserted = totalInserted,
-            failedSources = failedSources
+            failedSources = failedSources,
+            sourceResults = sourceResults
         )
+    }
+
+    private suspend fun fetchSource(source: EventSource): SourceResult {
+        return try {
+            AppLogger.i(tag, "Fetching events from ${source.displayName}")
+            val rawEvents = source.fetchEvents()
+
+            var geocoded = 0
+            var geocodeFailed = 0
+            val events = rawEvents.map { event ->
+                if (event.latitude == null || event.longitude == null) {
+                    val result = geocodeIfNeeded(event)
+                    if (result.latitude != null && event.latitude == null) {
+                        geocoded++
+                    } else if (event.latitude == null) {
+                        geocodeFailed++
+                    }
+                    result
+                } else {
+                    event
+                }
+            }
+
+            val validEvents = events.filter { isValid(it) }.distinctBy { it.stableId }
+
+            if (validEvents.isEmpty()) {
+                AppLogger.w(
+                    tag,
+                    "Source ${source.displayName} returned no valid events; keeping cached events"
+                )
+                return SourceResult(
+                    sourceName = source.displayName,
+                    fetched = rawEvents.size,
+                    inserted = 0,
+                    failed = false,
+                    geocoded = geocoded,
+                    geocodeFailed = geocodeFailed
+                )
+            }
+
+            val organizerId = "external:${source.id}"
+            AppLogger.i(tag, "Fetched ${validEvents.size} valid events from ${source.displayName}")
+
+            SourceResult(
+                sourceName = source.displayName,
+                fetched = rawEvents.size,
+                inserted = validEvents.size,
+                failed = false,
+                geocoded = geocoded,
+                geocodeFailed = geocodeFailed,
+                events = validEvents,
+                organizerId = organizerId
+            )
+        } catch (e: Exception) {
+            AppLogger.e(tag, "Failed to fetch ${source.displayName}", e)
+            SourceResult(
+                sourceName = source.displayName,
+                fetched = 0,
+                inserted = 0,
+                failed = true,
+                geocoded = 0,
+                geocodeFailed = 0
+            )
+        }
     }
 
     private suspend fun geocodeIfNeeded(event: RemoteEvent): RemoteEvent {
@@ -80,6 +135,60 @@ class EventDiscoveryRepository(
 
         val coords = geocoder?.geocode(locationName) ?: return event
         return event.copy(latitude = coords.first, longitude = coords.second)
+    }
+
+    private fun deduplicateAcrossSources(events: List<RemoteEvent>): List<RemoteEvent> {
+        if (events.size <= 1) return events
+
+        val dedupMap = linkedMapOf<String, RemoteEvent>()
+
+        for (event in events) {
+            val key = buildDeduplicationKey(event)
+            val existing = dedupMap[key]
+            if (existing == null) {
+                dedupMap[key] = event
+            } else {
+                val merged = mergeDuplicate(existing, event)
+                dedupMap[key] = merged
+            }
+        }
+
+        val deduplicated = dedupMap.values.toList()
+        if (deduplicated.size < events.size) {
+            AppLogger.i(tag, "Cross-source dedup: ${events.size} → ${deduplicated.size} (removed ${events.size - deduplicated.size} duplicates)")
+        }
+
+        return deduplicated
+    }
+
+    private fun buildDeduplicationKey(event: RemoteEvent): String {
+        val normalizedTitle = event.title.trim().lowercase(Locale.US)
+            .replace(Regex("[^a-z0-9\\s]"), "")
+            .replace(Regex("\\s+"), " ")
+            .trim()
+
+        val dateBucket = bucketDate(event.startDate)
+        val venueKey = event.venueName.trim().lowercase(Locale.US)
+            .replace(Regex("[^a-z0-9\\s]"), "")
+            .replace(Regex("\\s+"), " ")
+            .trim()
+
+        return "$normalizedTitle|$dateBucket|$venueKey"
+    }
+
+    private fun bucketDate(timestamp: Long): String {
+        val cal = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("Africa/Johannesburg"))
+        cal.timeInMillis = timestamp
+        return "${cal.get(java.util.Calendar.YEAR)}-${cal.get(java.util.Calendar.MONTH)}-${cal.get(java.util.Calendar.DAY_OF_MONTH)}"
+    }
+
+    private fun mergeDuplicate(existing: RemoteEvent, duplicate: RemoteEvent): RemoteEvent {
+        return existing.copy(
+            description = existing.description.ifBlank { duplicate.description },
+            imageUrl = existing.imageUrl ?: duplicate.imageUrl,
+            sourceUrl = existing.sourceUrl ?: duplicate.sourceUrl,
+            organizerName = existing.organizerName ?: duplicate.organizerName
+        )
     }
 
     private fun isValid(event: RemoteEvent): Boolean {
@@ -144,7 +253,19 @@ class EventDiscoveryRepository(
 data class DiscoveryResult(
     val fetched: Int,
     val inserted: Int,
-    val failedSources: Int
+    val failedSources: Int,
+    val sourceResults: List<SourceResult> = emptyList()
+)
+
+data class SourceResult(
+    val sourceName: String,
+    val fetched: Int,
+    val inserted: Int,
+    val failed: Boolean,
+    val geocoded: Int = 0,
+    val geocodeFailed: Int = 0,
+    val events: List<RemoteEvent> = emptyList(),
+    val organizerId: String = ""
 )
 
 private const val SA_LAT_MIN = -35.0

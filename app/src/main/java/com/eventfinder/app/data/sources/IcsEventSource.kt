@@ -8,6 +8,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.StringReader
 import java.text.SimpleDateFormat
+import java.util.Calendar
 import java.util.Locale
 import java.util.TimeZone
 
@@ -21,6 +22,7 @@ import java.util.TimeZone
  * - URL
  * - GEO (lat;lng)
  * - UID
+ * - RRULE recurrence (DAILY, WEEKLY, MONTHLY, YEARLY) expanded up to 30 occurrences
  *
  * Events without coordinates will be geocoded by the ingestion pipeline.
  */
@@ -103,17 +105,16 @@ class IcsEventSource(
             val description = props["DESCRIPTION"]?.trim()?.take(2000) ?: ""
             val location = props["LOCATION"]?.trim() ?: ""
             val categories = props["CATEGORIES"]?.trim() ?: ""
-            val url = props["URL"]?.trim()
+            val urlProp = props["URL"]?.trim()
 
             val dtStart = props["DTSTART"]?.trim() ?: continue
             val dtEnd = props["DTEND"]?.trim()
+            val rrule = props["RRULE"]?.trim()
 
             val startDate = parseIcsDate(dtStart)
             val endDate = dtEnd?.let { parseIcsDate(it) }
 
-            if (startDate == null || startDate < System.currentTimeMillis()) continue
-
-            val finalEnd = if (endDate != null && endDate > startDate) endDate else startDate + 3 * 60 * 60 * 1000L
+            if (startDate == null) continue
 
             var latitude: Double? = null
             var longitude: Double? = null
@@ -128,28 +129,102 @@ class IcsEventSource(
 
             val venueName = location.ifBlank { summary }
             val address = location
+            val duration = if (endDate != null && endDate > startDate) endDate - startDate else 3 * 60 * 60 * 1000L
 
-            events.add(
-                RemoteEvent(
-                    source = id,
-                    sourceId = uid.hashCode().toString(),
-                    title = summary,
-                    description = description,
-                    category = categories.ifBlank { "OTHER" },
-                    startDate = startDate,
-                    endDate = finalEnd,
-                    venueName = venueName,
-                    address = address,
-                    latitude = latitude,
-                    longitude = longitude,
-                    imageUrl = null,
-                    sourceUrl = url,
-                    organizerName = null
+            if (rrule != null) {
+                val occurrences = expandRrule(startDate, rrule)
+                val now = System.currentTimeMillis()
+                for (occurrence in occurrences) {
+                    if (occurrence < now) continue
+                    events.add(
+                        RemoteEvent(
+                            source = id,
+                            sourceId = "$uid-${occurrence.hashCode()}",
+                            title = summary,
+                            description = description,
+                            category = categories.ifBlank { "OTHER" },
+                            startDate = occurrence,
+                            endDate = occurrence + duration,
+                            venueName = venueName,
+                            address = address,
+                            latitude = latitude,
+                            longitude = longitude,
+                            imageUrl = null,
+                            sourceUrl = urlProp,
+                            organizerName = null
+                        )
+                    )
+                }
+            } else {
+                if (startDate < System.currentTimeMillis()) continue
+
+                events.add(
+                    RemoteEvent(
+                        source = id,
+                        sourceId = uid.hashCode().toString(),
+                        title = summary,
+                        description = description,
+                        category = categories.ifBlank { "OTHER" },
+                        startDate = startDate,
+                        endDate = startDate + duration,
+                        venueName = venueName,
+                        address = address,
+                        latitude = latitude,
+                        longitude = longitude,
+                        imageUrl = null,
+                        sourceUrl = urlProp,
+                        organizerName = null
+                    )
                 )
-            )
+            }
         }
 
         return events
+    }
+
+    private fun expandRrule(startMillis: Long, rrule: String): List<Long> {
+        val params = parseRrule(rrule)
+        val freq = params["FREQ"] ?: return listOf(startMillis)
+        val count = (params["COUNT"]?.toIntOrNull() ?: 30).coerceAtMost(30)
+        val until = params["UNTIL"]?.let { parseIcsDate(it) }
+
+        val cal = Calendar.getInstance(TimeZone.getTimeZone("UTC"))
+        cal.timeInMillis = startMillis
+        val interval = (params["INTERVAL"]?.toIntOrNull() ?: 1).coerceAtLeast(1)
+
+        val results = mutableListOf<Long>()
+        var added = 0
+
+        while (added < count) {
+            val now = System.currentTimeMillis()
+            if (until != null && cal.timeInMillis > until) break
+            if (cal.timeInMillis > now + 365L * 24 * 60 * 60 * 1000) break
+
+            results.add(cal.timeInMillis)
+            added++
+
+            when (freq.uppercase()) {
+                "DAILY" -> cal.add(Calendar.DAY_OF_MONTH, interval)
+                "WEEKLY" -> cal.add(Calendar.WEEK_OF_YEAR, interval)
+                "MONTHLY" -> cal.add(Calendar.MONTH, interval)
+                "YEARLY" -> cal.add(Calendar.YEAR, interval)
+                else -> break
+            }
+        }
+
+        return results
+    }
+
+    private fun parseRrule(rrule: String): Map<String, String> {
+        val params = mutableMapOf<String, String>()
+        val parts = rrule.split(";")
+        for (part in parts) {
+            val eq = part.indexOf('=')
+            if (eq > 0) {
+                params[part.substring(0, eq).uppercase()] = part.substring(eq + 1)
+            }
+        }
+        return params
     }
 
     private fun unfoldIcs(text: String): String {

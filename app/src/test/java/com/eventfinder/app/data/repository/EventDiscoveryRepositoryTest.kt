@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -475,7 +476,7 @@ class EventDiscoveryRepositoryTest {
         assertEquals(1, result.inserted)
         assertTrue(dao.rows.containsKey("remote:fake-source:new-1"))
         assertTrue(dao.rows.containsKey("user:my-event"))
-        org.junit.Assert.assertFalse(dao.rows.containsKey("remote:old-1"))
+        assertFalse(dao.rows.containsKey("remote:old-1"))
     }
 
     @Test
@@ -614,7 +615,7 @@ class EventDiscoveryRepositoryTest {
 
         assertTrue(dao.rows.containsKey("remote:sourceA:evt-new"))
         assertTrue(dao.rows.containsKey("remote:sourceB:evt-1"))
-        org.junit.Assert.assertFalse(dao.rows.containsKey("remote:sourceA:evt-1"))
+        assertFalse(dao.rows.containsKey("remote:sourceA:evt-1"))
     }
 
     @Test
@@ -678,7 +679,7 @@ class EventDiscoveryRepositoryTest {
         assertEquals(0, result.failedSources)
 
         assertTrue(dao.rows.containsKey("remote:sourceA:evt-1"))
-        org.junit.Assert.assertFalse(dao.rows.containsKey("remote:sourceB:evt-1"))
+        assertFalse(dao.rows.containsKey("remote:sourceB:evt-1"))
         assertTrue(dao.rows.containsKey("remote:sourceB:evt-new"))
     }
 
@@ -748,5 +749,99 @@ class EventDiscoveryRepositoryTest {
         assertEquals(0, result.inserted)
         assertEquals(0, result.failedSources)
         assertTrue(dao.rows.containsKey("remote:sourceA:old"))
+    }
+
+    @Test
+    fun `cross-source dedup merges same event from multiple sources`() = runTest {
+        val dao = FakeEventDao()
+        val eventFromA = futureEvent(source = "ardent", sourceId = "jazz-1", title = "Cape Town Jazz Festival")
+        val eventFromB = futureEvent(source = "rss", sourceId = "jazz-rss", title = "Cape Town Jazz Festival")
+        val sourceA = FakeEventSource(id = "ardent", displayName = "Ardent", eventsToReturn = listOf(eventFromA))
+        val sourceB = FakeEventSource(id = "rss", displayName = "RSS", eventsToReturn = listOf(eventFromB))
+        val repo = EventDiscoveryRepository(dao, listOf(sourceA, sourceB))
+
+        val result = repo.refresh()
+
+        assertEquals(2, result.fetched)
+        assertEquals(1, result.inserted)
+        assertEquals(1, dao.rows.size)
+    }
+
+    @Test
+    fun `cross-source dedup keeps different events`() = runTest {
+        val dao = FakeEventDao()
+        val event1 = futureEvent(source = "ardent", sourceId = "evt-1", title = "Jazz Festival")
+        val event2 = futureEvent(source = "rss", sourceId = "evt-2", title = "Food Market")
+        val sourceA = FakeEventSource(id = "ardent", displayName = "Ardent", eventsToReturn = listOf(event1))
+        val sourceB = FakeEventSource(id = "rss", displayName = "RSS", eventsToReturn = listOf(event2))
+        val repo = EventDiscoveryRepository(dao, listOf(sourceA, sourceB))
+
+        val result = repo.refresh()
+
+        assertEquals(2, result.fetched)
+        assertEquals(2, result.inserted)
+        assertEquals(2, dao.rows.size)
+    }
+
+    @Test
+    fun `geocoder fallback for events without coordinates`() = runTest {
+        val dao = FakeEventDao()
+        val eventNoCoords = futureEvent(latitude = null, longitude = null, title = "Locationless Event")
+        val source = FakeEventSource(eventsToReturn = listOf(eventNoCoords))
+        val repo = EventDiscoveryRepository(dao, listOf(source), geocoder = null)
+
+        val result = repo.refresh()
+
+        assertEquals(1, result.fetched)
+        assertEquals(0, result.inserted)
+        assertEquals(0, dao.rows.size)
+    }
+
+    @Test
+    fun `result includes per-source observability data`() = runTest {
+        val dao = FakeEventDao()
+        val event = futureEvent()
+        val source = FakeEventSource(eventsToReturn = listOf(event))
+        val repo = EventDiscoveryRepository(dao, listOf(source))
+
+        val result = repo.refresh()
+
+        assertEquals(1, result.sourceResults.size)
+        assertEquals("Fake Source", result.sourceResults[0].sourceName)
+        assertEquals(1, result.sourceResults[0].fetched)
+        assertEquals(1, result.sourceResults[0].inserted)
+        assertFalse(result.sourceResults[0].failed)
+    }
+
+    @Test
+    fun `failed source shows failed in source results`() = runTest {
+        val dao = FakeEventDao()
+        val source = FakeEventSource(exceptionToThrow = RuntimeException("down"))
+        val repo = EventDiscoveryRepository(dao, listOf(source))
+
+        val result = repo.refresh()
+
+        assertEquals(1, result.failedSources)
+        assertTrue(result.sourceResults[0].failed)
+    }
+
+    @Test
+    fun `three sources with one failure preserves two successful caches`() = runTest {
+        val dao = FakeEventDao()
+        val eventA = futureEvent(source = "srcA", sourceId = "a-1", title = "Event A")
+        val eventB = futureEvent(source = "srcB", sourceId = "b-1", title = "Event B")
+        val sourceA = FakeEventSource(id = "srcA", displayName = "Source A", eventsToReturn = listOf(eventA))
+        val sourceB = FakeEventSource(id = "srcB", displayName = "Source B", eventsToReturn = listOf(eventB))
+        val sourceC = FakeEventSource(id = "srcC", displayName = "Source C", exceptionToThrow = RuntimeException("down"))
+        val repo = EventDiscoveryRepository(dao, listOf(sourceA, sourceB, sourceC))
+
+        val result = repo.refresh()
+
+        assertEquals(2, result.fetched)
+        assertEquals(2, result.inserted)
+        assertEquals(1, result.failedSources)
+        assertEquals(2, dao.rows.size)
+        assertTrue(dao.rows.containsKey("remote:srcA:a-1"))
+        assertTrue(dao.rows.containsKey("remote:srcB:b-1"))
     }
 }

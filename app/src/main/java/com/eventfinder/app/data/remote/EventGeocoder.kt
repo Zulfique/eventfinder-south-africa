@@ -19,50 +19,53 @@ class EventGeocoder(
     private val tag = "EventGeocoder"
     private val cache = ConcurrentHashMap<String, Pair<Double, Double>?>()
 
+    private val countryContexts = listOf(
+        "south africa", "cape town", "johannesburg", "durban",
+        "pretoria", "cape town", "stellenbosch", "port elizabeth",
+        "bloemfontein", "polokwane", "mbombela", "east london",
+        "kimberley", "richards bay", "george", "hermanus"
+    )
+
     /**
      * Attempts to resolve [locationName] to coordinates.
      *
-     * The query is sanitised to extract the most meaningful part of the
-     * location string (e.g. "Events at Cape Town Convention Centre" → "Cape Town").
+     * The query is sanitised and appended with ", South Africa" if not already
+     * present, to avoid ambiguous matches to other countries.
      *
      * @return lat/lng pair if found, or null if the location cannot be resolved.
      */
     suspend fun geocode(locationName: String): Pair<Double, Double>? {
-        val query = extractQuery(locationName)
+        val query = buildGeocodingQuery(locationName)
         if (query.isBlank()) return null
 
-        cache[query.lowercase()]?.let { return it }
+        val cacheKey = locationName.trim().lowercase()
+        cache[cacheKey]?.let { return it }
 
         return try {
-            val response = geocodingApi.geocode(name = query, count = 3)
-            val result = response.results?.firstOrNull()
+            val response = geocodingApi.geocode(name = query, count = 5)
+
+            val result = response.results?.firstOrNull { res ->
+                val country = res.countryCode?.lowercase()
+                country == "za" || country == "south africa"
+            } ?: response.results?.firstOrNull()
 
             if (result?.latitude != null && result.longitude != null) {
                 val coords = result.latitude to result.longitude
-                cache[query.lowercase()] = coords
-                AppLogger.d(tag, "Geocoded '$query' → ${coords.first}, ${coords.second}")
+                cache[cacheKey] = coords
+                AppLogger.d(tag, "Geocoded '$locationName' → ${coords.first}, ${coords.second}")
                 coords
             } else {
-                cache[query.lowercase()] = null
-                AppLogger.d(tag, "No geocoding result for '$query'")
+                cache[cacheKey] = null
+                AppLogger.d(tag, "No geocoding result for '$locationName'")
                 null
             }
         } catch (e: Exception) {
-            AppLogger.w(tag, "Geocoding failed for '$query': ${e.message}")
+            AppLogger.w(tag, "Geocoding failed for '$locationName': ${e.message}")
             null
         }
     }
 
-    /**
-     * Extracts the most meaningful search term from a location string.
-     *
-     * Examples:
-     * - "Cape Town" → "Cape Town"
-     * - "Sandton City, Johannesburg" → "Sandton City"
-     * - "Events at Cape Town Convention Centre" → "Cape Town"
-     * - "123 Main St, Pretoria" → "Pretoria"
-     */
-    private fun extractQuery(raw: String): String {
+    private fun buildGeocodingQuery(raw: String): String {
         val cleaned = raw.trim()
             .replace(Regex("\\s+"), " ")
             .removePrefix("at ")
@@ -70,16 +73,30 @@ class EventGeocoder(
 
         if (cleaned.isBlank()) return ""
 
+        if (cleaned.lowercase().contains("south africa") || cleaned.lowercase().contains(", za")) {
+            return cleaned
+        }
+
         val parts = cleaned.split(",").map { it.trim() }.filter { it.isNotBlank() }
-
-        if (parts.size == 1) return parts[0]
-
-        val lastPart = parts.last()
-        val numericPrefix = lastPart.contains(Regex("\\d"))
-        return if (numericPrefix && parts.size > 1) {
-            parts[parts.size - 2]
+        val mainPart = if (parts.size == 1) {
+            parts[0]
         } else {
-            lastPart
+            val lastPart = parts.last()
+            val numericPrefix = lastPart.contains(Regex("\\d"))
+            if (numericPrefix && parts.size > 1) {
+                parts[parts.size - 2]
+            } else {
+                lastPart
+            }
+        }
+
+        if (mainPart.isBlank()) return ""
+
+        val alreadyHasCountry = countryContexts.any { mainPart.lowercase().contains(it) }
+        return if (alreadyHasCountry) {
+            mainPart
+        } else {
+            "$mainPart, South Africa"
         }
     }
 

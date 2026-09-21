@@ -139,9 +139,13 @@ object LocationUtils {
     }
 
     /**
-     * Starts continuous location updates (every 5 s / 10 m) on all enabled
-     * providers. Returns a [LocationUpdatesHandle] whose [stop][LocationUpdatesHandle.stop]
+     * Starts location updates every 30 s / 50 m on all enabled providers.
+     * Returns a [LocationUpdatesHandle] whose [stop][LocationUpdatesHandle.stop]
      * method removes the exact listener that was registered.
+     *
+     * The 30-second interval balances battery life with reasonable freshness
+     * for an event-finding app. The map's Locate Me button uses a one-shot
+     * [requestCurrentLocation] instead.
      */
     @SuppressLint("MissingPermission")
     fun requestLocationUpdates(
@@ -177,8 +181,8 @@ object LocationUtils {
             providers.forEach { provider ->
                 manager.requestLocationUpdates(
                     provider,
-                    5_000L,
-                    10f,
+                    30_000L,
+                    50f,
                     listener,
                     Looper.getMainLooper()
                 )
