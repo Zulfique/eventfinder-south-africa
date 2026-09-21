@@ -2,7 +2,10 @@ package com.eventfinder.app.ui.screens.home
 
 import android.Manifest
 import android.annotation.SuppressLint
+import android.content.Context
+import android.content.pm.PackageManager
 import android.location.Location
+import android.location.LocationManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -42,6 +45,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.Switch
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -56,6 +60,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.eventfinder.app.R
 import com.eventfinder.app.di.AppContainer
@@ -68,6 +73,17 @@ import com.eventfinder.app.ui.components.resolve
 import com.eventfinder.app.utils.AppLogger
 import com.eventfinder.app.utils.LocationUtils
 import org.osmdroid.views.MapView
+
+private fun hasLocationPermission(context: Context): Boolean {
+    return ContextCompat.checkSelfPermission(
+        context,
+        Manifest.permission.ACCESS_FINE_LOCATION
+    ) == PackageManager.PERMISSION_GRANTED ||
+        ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.ACCESS_COARSE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED
+}
 
 /**
  * Screen 4 & 5 (Home): interactive OpenStreetMap view + scrollable event list
@@ -89,6 +105,7 @@ fun HomeScreen(
 
     var userLocation by rememberSaveable { mutableStateOf<Location?>(null) }
     var mapViewRef by remember { mutableStateOf<MapView?>(null) }
+    var locationManagerRef by remember { mutableStateOf<LocationManager?>(null) }
 
     // Location permission + one-time capture of the last-known position.
     val locationLauncher = rememberLauncherForActivityResult(
@@ -123,14 +140,56 @@ fun HomeScreen(
     }
 
     LaunchedEffect(Unit) {
-        locationLauncher.launch(
-            arrayOf(
-                Manifest.permission.ACCESS_FINE_LOCATION,
-                Manifest.permission.ACCESS_COARSE_LOCATION
+        if (hasLocationPermission(context)) {
+            // Permission already granted — get location directly.
+            LocationUtils.requestCurrentLocation(
+                context = context,
+                onLocation = { lat, lng ->
+                    viewModel.setUserLocation(lat, lng)
+                    userLocation = Location("device").apply {
+                        latitude = lat
+                        longitude = lng
+                    }
+                },
+                onUnavailable = {
+                    LocationUtils.lastKnown(context)?.let { (lat, lng) ->
+                        viewModel.setUserLocation(lat, lng)
+                        userLocation = Location("last_known").apply {
+                            latitude = lat
+                            longitude = lng
+                        }
+                    }
+                }
             )
-        )
+        } else {
+            // Permission not yet granted — request it.
+            locationLauncher.launch(
+                arrayOf(
+                    Manifest.permission.ACCESS_FINE_LOCATION,
+                    Manifest.permission.ACCESS_COARSE_LOCATION
+                )
+            )
+        }
+
         viewModel.messages.collect { msg ->
             msg.resolve(context)?.let { snackbarHostState.showSnackbar(it) }
+        }
+    }
+
+    // Start continuous location updates; stop on dispose.
+    DisposableEffect(Unit) {
+        if (hasLocationPermission(context)) {
+            locationManagerRef = LocationUtils.requestLocationUpdates(context) { lat, lng ->
+                viewModel.setUserLocation(lat, lng)
+                userLocation = Location("continuous").apply {
+                    latitude = lat
+                    longitude = lng
+                }
+            }
+        }
+        onDispose {
+            locationManagerRef?.let { LocationUtils.stopLocationUpdates(it) }
+            locationManagerRef = null
         }
     }
 

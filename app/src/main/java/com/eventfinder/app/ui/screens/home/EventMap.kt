@@ -24,6 +24,7 @@ import org.osmdroid.views.overlay.Marker
  *
  * The camera is centred once after the map has loaded and the first usable
  * location arrives. Subsequent location updates do not move the camera.
+ * Call [recenterMapOnUser] to manually recenter at any time.
  */
 @Composable
 fun EventMap(
@@ -46,18 +47,32 @@ fun EventMap(
         }
     }
 
-    // Resume/pause lifecycle of the map as the composable enters/exits.
+    // User location marker — shows the user's position on the map.
+    val userMarker = remember(mapView) {
+        Marker(mapView).apply {
+            title = "Your location"
+            setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
+        }
+    }
+
+    // Resume/pause/detach lifecycle of the map as the composable enters/exits.
     DisposableEffect(mapView) {
         onMapViewCreated(mapView)
         mapView.onResume()
-        onDispose { mapView.onPause() }
+        onDispose {
+            mapView.onPause()
+            mapView.onDetach()
+        }
     }
 
     // Stable marker state: rebuild overlays only when the event content
     // actually changes, not on unrelated recompositions.
     val eventSignature = remember(events) {
-        events.joinToString("|") {
-            "${it.id}:${it.latitude}:${it.longitude}:${it.title}:${it.venueName}"
+        events.fold(1) { hash, event ->
+            var result = hash * 31 + event.id.hashCode()
+            result = result * 31 + event.latitude.hashCode()
+            result = result * 31 + event.longitude.hashCode()
+            result
         }
     }
 
@@ -77,13 +92,26 @@ fun EventMap(
             }
             mapView.overlays.add(marker)
         }
+
+        // Re-add user marker if it was removed during overlay clear.
+        if (userLocation != null) {
+            userMarker.position = GeoPoint(userLocation.latitude, userLocation.longitude)
+            mapView.overlays.add(userMarker)
+        }
+
         mapView.invalidate()
         AppLogger.d("EventMap", "Rendered ${events.size} markers")
     }
 
-    // Centre on the user once after the map loads and the first location arrives.
+    // Update user marker position and centre on user once.
     LaunchedEffect(userLocation?.latitude, userLocation?.longitude) {
         val location = userLocation ?: return@LaunchedEffect
+
+        userMarker.position = GeoPoint(location.latitude, location.longitude)
+        if (!mapView.overlays.contains(userMarker)) {
+            mapView.overlays.add(userMarker)
+        }
+        mapView.invalidate()
 
         if (!hasCenteredOnUser) {
             mapView.controller.animateTo(

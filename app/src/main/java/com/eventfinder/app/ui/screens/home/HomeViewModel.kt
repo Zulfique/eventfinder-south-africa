@@ -225,25 +225,38 @@ class HomeViewModel(
 
     fun refresh() {
         viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true) }
+            if (!networkMonitor.isCurrentlyOnline()) {
+                _uiState.update { it.copy(isLoading = false, isOffline = true) }
+                return@launch
+            }
+
+            _uiState.update { it.copy(isLoading = true, isOffline = false) }
+
             runCatching { eventDiscoveryRepository.refresh() }.onFailure {
                 AppLogger.e("HomeViewModel", "Event discovery failed on refresh", it)
             }
+
+            _uiState.update { it.copy(isLoading = false) }
         }
     }
 
     fun refreshEvents() {
         viewModelScope.launch {
-            val result = runCatching { eventDiscoveryRepository.refresh() }
-            result.onSuccess {
-                AppLogger.i(
-                    "HomeViewModel",
-                    "Event discovery: fetched=${it.fetched}, inserted=${it.inserted}, failedSources=${it.failedSources}"
-                )
+            if (!networkMonitor.isCurrentlyOnline()) {
+                AppLogger.i("HomeViewModel", "Skipping event refresh: device is offline")
+                return@launch
             }
-            result.onFailure {
-                AppLogger.e("HomeViewModel", "Event discovery failed", it)
-            }
+
+            runCatching { eventDiscoveryRepository.refresh() }
+                .onSuccess {
+                    AppLogger.i(
+                        "HomeViewModel",
+                        "Event discovery: fetched=${it.fetched}, inserted=${it.inserted}, failedSources=${it.failedSources}"
+                    )
+                }
+                .onFailure {
+                    AppLogger.e("HomeViewModel", "Event discovery failed", it)
+                }
         }
     }
 
