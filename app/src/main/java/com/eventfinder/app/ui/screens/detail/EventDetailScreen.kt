@@ -231,7 +231,19 @@ fun EventDetailScreen(
 
                         Column(Modifier.padding(16.dp)) {
                             Text(event.title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                            Spacer(Modifier.height(4.dp))
+                            Spacer(Modifier.height(6.dp))
+                            Text(
+                                stringResource(categoryLabel(event.category)),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                modifier = Modifier
+                                    .background(
+                                        MaterialTheme.colorScheme.secondaryContainer,
+                                        RoundedCornerShape(6.dp)
+                                    )
+                                    .padding(horizontal = 8.dp, vertical = 3.dp)
+                            )
+                            Spacer(Modifier.height(8.dp))
 
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Icon(Icons.Outlined.CalendarMonth, contentDescription = null, modifier = Modifier.size(18.dp))
@@ -247,6 +259,17 @@ fun EventDetailScreen(
                                             stringResource(R.string.distance_away),
                                         color = MaterialTheme.colorScheme.primary,
                                         style = MaterialTheme.typography.bodyMedium
+                                    )
+                                }
+                            }
+                            if (event.endDate > event.startDate) {
+                                Spacer(Modifier.height(2.dp))
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Spacer(Modifier.size(24.dp))
+                                    Text(
+                                        "${stringResource(R.string.ends)} ${DateTimeUtils.formatFullDateTime(event.endDate)}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
                             }

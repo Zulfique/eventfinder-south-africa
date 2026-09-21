@@ -238,6 +238,18 @@ fun EventCard(
                         color = MaterialTheme.colorScheme.primary
                     )
                 }
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    stringResource(categoryLabel(event.category)),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                    modifier = Modifier
+                        .background(
+                            MaterialTheme.colorScheme.secondaryContainer,
+                            RoundedCornerShape(6.dp)
+                        )
+                        .padding(horizontal = 8.dp, vertical = 2.dp)
+                )
             }
             if (onFavoriteToggle != null) {
                 Spacer(Modifier.width(8.dp))

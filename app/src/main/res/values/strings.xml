@@ -97,7 +97,9 @@
     <string name="date_time">Date &amp; time</string>
     <string name="venue">Venue</string>
     <string name="organizer">Organizer</string>
+    <string name="ends">Ends</string>
     <string name="attendees">Attendees</string>
+    <string name="category_label">Category</string>
     <string name="attend">Attend</string>
     <string name="attend_maybe">Maybe</string>
     <string name="declined">Declined</string>
@@ -133,7 +135,6 @@
     <string name="step_x_of_y">Step %1$d of %2$d</string>
     <string name="event_title">Event title</string>
     <string name="event_description">Description</string>
-    <string name="category_label">Category</string>
     <string name="date_label">Date</string>
     <string name="time_label">Time</string>
     <string name="duration_hours">Duration (hours)</string>

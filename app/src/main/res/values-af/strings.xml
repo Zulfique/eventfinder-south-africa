@@ -92,6 +92,7 @@
     <string name="date_time">Datum &amp; tyd</string>
     <string name="venue">Lokaal</string>
     <string name="organizer">Organiseerder</string>
+    <string name="ends">Eindig</string>
     <string name="attendees">Bywoners</string>
     <string name="attend">Woon by</string>
     <string name="attend_maybe">Miskien</string>
