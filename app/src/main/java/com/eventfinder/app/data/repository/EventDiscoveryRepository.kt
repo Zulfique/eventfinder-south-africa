@@ -29,7 +29,7 @@ class EventDiscoveryRepository(
         for (result in sourceResults) {
             if (result.failed || result.inserted == 0) continue
             val organizerId = result.organizerId
-            val entities = result.events.mapNotNull { it.toEntity() }
+            val entities = result.events.map { it.toEntity() }
             if (entities.isNotEmpty()) {
                 eventDao.replaceEventsForSource(organizerId, entities)
                 totalInserted += entities.size
@@ -105,6 +105,25 @@ class EventDiscoveryRepository(
             }
 
             val organizerId = "external:${source.id}"
+
+            val existingCount = eventDao.findIdsByOrganizerId(organizerId).size
+            if (existingCount >= 20 && validEvents.size < existingCount * 0.25) {
+                AppLogger.w(
+                    tag,
+                    "Suspiciously small update from ${source.displayName}: " +
+                        "${validEvents.size} new vs $existingCount cached — keeping cached events"
+                )
+                return SourceResult(
+                    sourceName = source.displayName,
+                    fetched = rawEvents.size,
+                    inserted = 0,
+                    failed = false,
+                    geocoded = geocoded,
+                    geocodeFailed = geocodeFailed,
+                    status = SourceStatus.EMPTY
+                )
+            }
+
             AppLogger.i(tag, "Fetched ${validEvents.size} valid events from ${source.displayName}")
 
             SourceResult(
@@ -148,16 +167,15 @@ class EventDiscoveryRepository(
 
         val lat = event.latitude
         val lng = event.longitude
-        if (lat == null || lng == null) return false
-        if (lat !in SA_LAT_MIN..SA_LAT_MAX) return false
-        if (lng !in SA_LNG_MIN..SA_LNG_MAX) return false
+        if (lat != null && (lat !in SA_LAT_MIN..SA_LAT_MAX)) return false
+        if (lng != null && (lng !in SA_LNG_MIN..SA_LNG_MAX)) return false
 
         return true
     }
 
-    private fun RemoteEvent.toEntity(): EventEntity? {
-        val latitude = latitude?.takeIf { it in -90.0..90.0 } ?: return null
-        val longitude = longitude?.takeIf { it in -180.0..180.0 } ?: return null
+    private fun RemoteEvent.toEntity(): EventEntity {
+        val latitude = latitude?.takeIf { it in -90.0..90.0 } ?: 0.0
+        val longitude = longitude?.takeIf { it in -180.0..180.0 } ?: 0.0
 
         return EventEntity(
             id = "remote:$stableId",

@@ -45,6 +45,12 @@ class EventDiscoveryRepositoryTest {
 
         override suspend fun count(): Int = rows.size
 
+        override suspend fun countNonUserCreated(): Int =
+            rows.values.count { !it.isCreatedByUser }
+
+        override suspend fun findNonUserCreatedIds(): List<String> =
+            rows.values.filter { !it.isCreatedByUser }.map { it.id }
+
         override suspend fun getNonUserCreated(): List<EventEntity> =
             rows.values.filter { !it.isCreatedByUser }
 
@@ -164,7 +170,7 @@ class EventDiscoveryRepositoryTest {
     }
 
     @Test
-    fun `rejects events without valid coordinates`() = runTest {
+    fun `events without coordinates are accepted with default values`() = runTest {
         val dao = FakeEventDao()
         val event = futureEvent(latitude = null, longitude = null)
         val source = FakeEventSource(eventsToReturn = listOf(event))
@@ -173,8 +179,11 @@ class EventDiscoveryRepositoryTest {
         val result = repo.refresh()
 
         assertEquals(1, result.fetched)
-        assertEquals(0, result.inserted)
-        assertTrue(dao.rows.isEmpty())
+        assertEquals(1, result.inserted)
+        assertEquals(1, dao.rows.size)
+        val saved = dao.rows.values.first()
+        assertEquals(0.0, saved.latitude, 0.001)
+        assertEquals(0.0, saved.longitude, 0.001)
     }
 
     @Test
@@ -361,7 +370,7 @@ class EventDiscoveryRepositoryTest {
         val result = repo.refresh()
 
         assertEquals(1, result.fetched)
-        assertEquals(0, result.inserted)
+        assertEquals(1, result.inserted)
         assertEquals(0, result.failedSources)
     }
 
@@ -745,8 +754,8 @@ class EventDiscoveryRepositoryTest {
         val noCoordsEvent = RemoteEvent(
             source = "sourceA",
             sourceId = "nocoords-1",
-            title = "No Coords Event",
-            description = "Has no coordinates",
+            title = "",
+            description = "Blank title fails validation",
             category = "food",
             startDate = now + 86_400_000L,
             endDate = now + 172_800_000L,
@@ -804,7 +813,7 @@ class EventDiscoveryRepositoryTest {
     }
 
     @Test
-    fun `geocoder fallback for events without coordinates`() = runTest {
+    fun `events without coordinates are saved with default coordinates`() = runTest {
         val dao = FakeEventDao()
         val eventNoCoords = futureEvent(latitude = null, longitude = null, title = "Locationless Event")
         val source = FakeEventSource(eventsToReturn = listOf(eventNoCoords))
@@ -813,8 +822,11 @@ class EventDiscoveryRepositoryTest {
         val result = repo.refresh()
 
         assertEquals(1, result.fetched)
-        assertEquals(0, result.inserted)
-        assertEquals(0, dao.rows.size)
+        assertEquals(1, result.inserted)
+        assertEquals(1, dao.rows.size)
+        val saved = dao.rows.values.first()
+        assertEquals(0.0, saved.latitude, 0.001)
+        assertEquals(0.0, saved.longitude, 0.001)
     }
 
     @Test

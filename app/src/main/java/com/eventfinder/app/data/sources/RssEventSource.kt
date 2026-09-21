@@ -126,7 +126,14 @@ class RssEventSource(
                             localName == "description" || localName == "summary" || localName == "content" -> {
                                 if (!inDescription) inDescription = true
                             }
-                            localName == "link" -> inLink = true
+                            localName == "link" -> {
+                                val href = parser.getAttributeValue(null, "href")?.trim()
+                                if (!href.isNullOrBlank()) {
+                                    link = href
+                                } else {
+                                    inLink = true
+                                }
+                            }
                             localName == "pubDate" || localName == "published" || localName == "updated" -> inPubDate = true
                             localName == "guid" || localName == "id" -> inGuid = true
                             localName == "category" -> inCategory = true

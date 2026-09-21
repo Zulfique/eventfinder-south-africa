@@ -63,11 +63,27 @@ interface EventDao {
     @Query("SELECT COUNT(*) FROM events")
     suspend fun count(): Int
 
+    @Query("SELECT COUNT(*) FROM events WHERE isCreatedByUser = 0")
+    suspend fun countNonUserCreated(): Int
+
     @Query("SELECT * FROM events WHERE isCreatedByUser = 0")
     suspend fun getNonUserCreated(): List<EventEntity>
 
     @Query("DELETE FROM events WHERE isCreatedByUser = 0")
     suspend fun deleteNonUserCreated()
+
+    @Query("SELECT id FROM events WHERE isCreatedByUser = 0")
+    suspend fun findNonUserCreatedIds(): List<String>
+
+    @Transaction
+    suspend fun clearNonUserCreatedAtomically() {
+        val ids = findNonUserCreatedIds()
+        if (ids.isNotEmpty()) {
+            deleteOrphanFavorites(ids)
+            deleteOrphanRsvps(ids)
+            deleteNonUserCreated()
+        }
+    }
 
     @Query("DELETE FROM events WHERE isCreatedByUser = 1")
     suspend fun deleteCreatedByUser()
@@ -172,6 +188,9 @@ interface RsvpDao {
 
     @Query("SELECT COUNT(*) FROM rsvps WHERE status = 'attending'")
     suspend fun attendingCount(): Int
+
+    @Query("SELECT COUNT(*) FROM rsvps WHERE userId = :userId AND status = 'attending'")
+    suspend fun attendingCountForUser(userId: String): Int
 
     @Query("DELETE FROM rsvps WHERE userId = :userId")
     suspend fun deleteAllForUser(userId: String)

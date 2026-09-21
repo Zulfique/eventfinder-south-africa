@@ -69,6 +69,12 @@ class EventRepositoryTest {
 
         override suspend fun count(): Int = rows.size
 
+        override suspend fun countNonUserCreated(): Int =
+            rows.values.count { !it.isCreatedByUser }
+
+        override suspend fun findNonUserCreatedIds(): List<String> =
+            rows.values.filter { !it.isCreatedByUser }.map { it.id }
+
         override suspend fun getNonUserCreated(): List<EventEntity> =
             rows.values.filter { !it.isCreatedByUser }
 
@@ -193,6 +199,9 @@ class EventRepositoryTest {
             rows["$userId:$eventId"]?.status
 
         override suspend fun attendingCount(): Int = rows.values.count { it.status == "attending" }
+
+        override suspend fun attendingCountForUser(userId: String): Int =
+            rows.values.count { it.userId == userId && it.status == "attending" }
 
         override suspend fun deleteAllForUser(userId: String) {
             rows.keys.removeAll { it.startsWith("$userId:") }

@@ -112,13 +112,13 @@ class EventRepositoryImpl(
         }
 
     override suspend fun ensureSeeded() {
-        val count = eventDao.count()
+        val count = eventDao.countNonUserCreated()
         if (count == 0) {
             val seed = SampleEventsProvider.johannesburgAndCapeTown()
             eventDao.upsertAll(seed.map { it.toEntity(isCreatedByUser = false) })
             AppLogger.i(tag, "Seeded ${seed.size} sample events into cache")
         } else {
-            AppLogger.d(tag, "Cache already contains $count events - no seeding required")
+            AppLogger.d(tag, "Non-user event catalogue already contains $count events")
         }
     }
 
@@ -240,12 +240,13 @@ class EventRepositoryImpl(
     override suspend fun clearLocalCache() {
         val userId = preferences.sessionUserId.first()
 
-        if (userId != null && rsvpDao.attendingCount() > 0) {
+        val activeRsvps = userId?.let { rsvpDao.attendingCountForUser(it) } ?: 0
+        if (activeRsvps > 0) {
             AppLogger.w(tag, "Skipping cache clear because user has active RSVPs")
             return
         }
 
-        eventDao.deleteNonUserCreated()
+        eventDao.clearNonUserCreatedAtomically()
         ensureSeeded()
         AppLogger.i(tag, "External/local catalogue cache cleared and seed data restored")
     }

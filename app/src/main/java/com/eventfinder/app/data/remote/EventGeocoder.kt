@@ -17,7 +17,8 @@ class EventGeocoder(
     private val geocodingApi: OpenMeteoGeocodingApi
 ) {
     private val tag = "EventGeocoder"
-    private val cache = ConcurrentHashMap<String, Pair<Double, Double>?>()
+    private val cache = ConcurrentHashMap<String, Pair<Double, Double>>()
+    private val failedQueries = ConcurrentHashMap.newKeySet<String>()
 
     private val countryContexts = listOf(
         "south africa", "cape town", "johannesburg", "durban",
@@ -40,6 +41,7 @@ class EventGeocoder(
 
         val cacheKey = locationName.trim().lowercase()
         cache[cacheKey]?.let { return it }
+        if (failedQueries.contains(cacheKey)) return null
 
         return try {
             val response = geocodingApi.geocode(name = query, count = 5)
@@ -52,14 +54,16 @@ class EventGeocoder(
             if (result?.latitude != null && result.longitude != null) {
                 val coords = result.latitude to result.longitude
                 cache[cacheKey] = coords
+                failedQueries.remove(cacheKey)
                 AppLogger.d(tag, "Geocoded '$locationName' → ${coords.first}, ${coords.second}")
                 coords
             } else {
-                cache[cacheKey] = null
+                failedQueries.add(cacheKey)
                 AppLogger.d(tag, "No geocoding result for '$locationName'")
                 null
             }
         } catch (e: Exception) {
+            failedQueries.add(cacheKey)
             AppLogger.w(tag, "Geocoding failed for '$locationName': ${e.message}")
             null
         }
@@ -102,5 +106,6 @@ class EventGeocoder(
 
     fun clearCache() {
         cache.clear()
+        failedQueries.clear()
     }
 }

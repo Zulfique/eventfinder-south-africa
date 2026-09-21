@@ -143,7 +143,6 @@ fun HomeScreen(
 
     LaunchedEffect(Unit) {
         if (hasLocationPermission(context)) {
-            // Permission already granted — get location directly.
             LocationUtils.requestCurrentLocation(
                 context = context,
                 onLocation = { lat, lng ->
@@ -162,14 +161,6 @@ fun HomeScreen(
                         }
                     }
                 }
-            )
-        } else {
-            // Permission not yet granted — request it.
-            locationLauncher.launch(
-                arrayOf(
-                    Manifest.permission.ACCESS_FINE_LOCATION,
-                    Manifest.permission.ACCESS_COARSE_LOCATION
-                )
             )
         }
 

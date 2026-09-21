@@ -89,8 +89,12 @@ class HomeViewModel(
 
         // Seed demo events, then attempt to discover public JSON feeds when online.
         viewModelScope.launch {
+            val online = networkMonitor.isCurrentlyOnline()
+            _uiState.update { it.copy(isOffline = !online) }
+
             eventRepository.ensureSeeded()
-            if (networkMonitor.isCurrentlyOnline()) {
+
+            if (online) {
                 runCatching { eventDiscoveryRepository.refresh() }.onFailure {
                     AppLogger.e("HomeViewModel", "Event discovery failed", it)
                 }

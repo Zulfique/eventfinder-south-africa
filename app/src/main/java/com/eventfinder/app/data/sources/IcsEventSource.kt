@@ -26,9 +26,7 @@ import java.util.TimeZone
  *
  * Limitations:
  * - BYMONTHDAY and BYMONTH in RRULE are not supported
- * - BYDAY combined with COUNT may produce fewer matches than expected
- *   (e.g. FREQ=WEEKLY;BYDAY=MO,WE,FR only fires on the first matching
- *   day per interval step, not all three days per week)
+ * - BYDAY with non-WEEKLY frequency may produce fewer matches than expected
  *
  * Events without coordinates will be geocoded by the ingestion pipeline.
  */
@@ -219,7 +217,7 @@ class IcsEventSource(
         var added = 0
         var skipped = 0
 
-        while (added < count && skipped < 100) {
+        while (added < count && skipped < 200) {
             val now = System.currentTimeMillis()
             if (until != null && cal.timeInMillis > until) break
             if (cal.timeInMillis > now + 365L * 24 * 60 * 60 * 1000) break
@@ -230,7 +228,34 @@ class IcsEventSource(
                 continue
             }
 
-            if (byDay.isNotEmpty()) {
+            if (byDay.isNotEmpty() && freq.uppercase() == "WEEKLY") {
+                val weekStart = cal.clone() as Calendar
+                var dayAdded = false
+
+                for (dayOffset in 0..6) {
+                    val dayCal = weekStart.clone() as Calendar
+                    dayCal.add(Calendar.DAY_OF_MONTH, dayOffset)
+
+                    if (until != null && dayCal.timeInMillis > until) continue
+                    if (exdates.contains(dayCal.timeInMillis)) continue
+                    if (results.contains(dayCal.timeInMillis)) continue
+
+                    val dayOfWeek = dayCal.get(Calendar.DAY_OF_WEEK)
+                    val dayAbbrev = when (dayOfWeek) {
+                        Calendar.SUNDAY -> "SU"; Calendar.MONDAY -> "MO"; Calendar.TUESDAY -> "TU"
+                        Calendar.WEDNESDAY -> "WE"; Calendar.THURSDAY -> "TH"; Calendar.FRIDAY -> "FR"
+                        Calendar.SATURDAY -> "SA"; else -> ""
+                    }
+                    val matchesDay = byDay.any { it.uppercase().contains(dayAbbrev) }
+                    if (matchesDay && added < count) {
+                        results.add(dayCal.timeInMillis)
+                        added++
+                        dayAdded = true
+                    }
+                }
+                if (!dayAdded) skipped++
+                advanceCalendar(cal, freq, interval)
+            } else if (byDay.isNotEmpty()) {
                 val dayOfWeek = cal.get(Calendar.DAY_OF_WEEK)
                 val dayAbbrev = when (dayOfWeek) {
                     Calendar.SUNDAY -> "SU"; Calendar.MONDAY -> "MO"; Calendar.TUESDAY -> "TU"
@@ -243,11 +268,14 @@ class IcsEventSource(
                     advanceCalendar(cal, freq, interval)
                     continue
                 }
+                results.add(cal.timeInMillis)
+                added++
+                advanceCalendar(cal, freq, interval)
+            } else {
+                results.add(cal.timeInMillis)
+                added++
+                advanceCalendar(cal, freq, interval)
             }
-
-            results.add(cal.timeInMillis)
-            added++
-            advanceCalendar(cal, freq, interval)
         }
 
         return results
@@ -303,14 +331,16 @@ class IcsEventSource(
                 runCatching { return fmt.parse(cleaned)?.time }.getOrNull()
             }
         } else if (tzid != null) {
-            // For SA event sources, treat any non-SA TZID as Africa/Johannesburg
-            // (servers like Motorsport SA incorrectly use Europe/Helsinki)
-            val tz = if (tzid.contains("Johannesburg") || tzid.contains("SAST") || tzid.contains("Africa/Johannesburg")) {
-                SA_TZ
-            } else if (tzid.contains("UTC") || tzid.contains("GMT")) {
-                UTC_TZ
-            } else {
-                SA_TZ // Default to SA timezone for SA event sources
+            val tz = when {
+                tzid.contains("SAST", ignoreCase = true) ||
+                tzid.equals("Africa/Johannesburg", ignoreCase = true) -> SA_TZ
+
+                tzid.contains("UTC", ignoreCase = true) ||
+                tzid.contains("GMT", ignoreCase = true) -> UTC_TZ
+
+                else -> runCatching {
+                    TimeZone.getTimeZone(tzid)
+                }.getOrDefault(SA_TZ)
             }
             val tzFormats = listOf(
                 SimpleDateFormat("yyyyMMdd'T'HHmmss", Locale.US).apply { timeZone = tz },
