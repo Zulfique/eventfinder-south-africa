@@ -19,12 +19,10 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.eventfinder.app.EventFinderApp
 import com.eventfinder.app.R
 import com.eventfinder.app.utils.AppLogger
 import kotlinx.coroutines.delay
@@ -35,14 +33,10 @@ import kotlinx.coroutines.delay
  */
 @Composable
 fun SplashScreen(onFinished: (loggedIn: Boolean) -> Unit) {
-    val context = LocalContext.current
-
     LaunchedEffect(Unit) {
-        val loggedIn = (context.applicationContext as EventFinderApp)
-            .container.authRepository.isLoggedIn()
-        AppLogger.i("SplashScreen", "Auth state resolved: loggedIn=$loggedIn")
+        AppLogger.i("SplashScreen", "No-account mode: skipping auth check")
         delay(1400)
-        onFinished(loggedIn)
+        onFinished(true)
     }
 
     Box(

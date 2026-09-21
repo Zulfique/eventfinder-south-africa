@@ -20,7 +20,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Edit
-import androidx.compose.material.icons.automirrored.outlined.Logout
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -39,11 +38,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -51,7 +48,6 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.eventfinder.app.R
 import com.eventfinder.app.di.AppContainer
 import com.eventfinder.app.ui.components.EventCard
-import kotlinx.coroutines.launch
 
 /**
  * Screen 4 (Profile): account header, stats, My Events / Attending and
@@ -64,13 +60,11 @@ fun ProfileScreen(
     onEditProfile: () -> Unit,
     onSettings: () -> Unit,
     onEventClick: (String) -> Unit,
-    onLoggedOut: () -> Unit
+    @Suppress("UNUSED_PARAMETER") onLoggedOut: () -> Unit = {}
 ) {
     val viewModel: ProfileViewModel = viewModel(factory = ProfileViewModel.factory(container))
     val state by viewModel.uiState.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
 
     Scaffold(
         topBar = {
@@ -170,19 +164,7 @@ fun ProfileScreen(
             }
 
             item {
-                TextButton(
-                    onClick = {
-                        scope.launch {
-                            snackbarHostState.showSnackbar(context.getString(R.string.logged_out))
-                            viewModel.logout(onLoggedOut)
-                        }
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Icon(Icons.AutoMirrored.Outlined.Logout, contentDescription = null)
-                    Spacer(Modifier.size(6.dp))
-                    Text(stringResource(R.string.logout))
-                }
+                Spacer(Modifier.height(24.dp))
             }
         }
     }

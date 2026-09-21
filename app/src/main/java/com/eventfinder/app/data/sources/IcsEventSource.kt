@@ -289,7 +289,15 @@ class IcsEventSource(
                 runCatching { return fmt.parse(cleaned)?.time }.getOrNull()
             }
         } else if (tzid != null) {
-            val tz = TimeZone.getTimeZone(tzid)
+            // For SA event sources, treat any non-SA TZID as Africa/Johannesburg
+            // (servers like Motorsport SA incorrectly use Europe/Helsinki)
+            val tz = if (tzid.contains("Johannesburg") || tzid.contains("SAST") || tzid.contains("Africa/Johannesburg")) {
+                SA_TZ
+            } else if (tzid.contains("UTC") || tzid.contains("GMT")) {
+                UTC_TZ
+            } else {
+                SA_TZ // Default to SA timezone for SA event sources
+            }
             val tzFormats = listOf(
                 SimpleDateFormat("yyyyMMdd'T'HHmmss", Locale.US).apply { timeZone = tz },
                 SimpleDateFormat("yyyyMMdd", Locale.US).apply { timeZone = tz }

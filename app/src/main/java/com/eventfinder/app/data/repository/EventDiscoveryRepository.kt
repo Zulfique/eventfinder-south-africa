@@ -99,7 +99,8 @@ class EventDiscoveryRepository(
                     inserted = 0,
                     failed = false,
                     geocoded = geocoded,
-                    geocodeFailed = geocodeFailed
+                    geocodeFailed = geocodeFailed,
+                    status = SourceStatus.EMPTY
                 )
             }
 
@@ -114,7 +115,8 @@ class EventDiscoveryRepository(
                 geocoded = geocoded,
                 geocodeFailed = geocodeFailed,
                 events = validEvents,
-                organizerId = organizerId
+                organizerId = organizerId,
+                status = SourceStatus.SUCCESS
             )
         } catch (e: Exception) {
             AppLogger.e(tag, "Failed to fetch ${source.displayName}", e)
@@ -124,7 +126,8 @@ class EventDiscoveryRepository(
                 inserted = 0,
                 failed = true,
                 geocoded = 0,
-                geocodeFailed = 0
+                geocodeFailed = 0,
+                status = SourceStatus.FAILED
             )
         }
     }
@@ -267,8 +270,18 @@ data class SourceResult(
     val geocoded: Int = 0,
     val geocodeFailed: Int = 0,
     val events: List<RemoteEvent> = emptyList(),
-    val organizerId: String = ""
+    val organizerId: String = "",
+    val status: SourceStatus = SourceStatus.SUCCESS
 )
+
+enum class SourceStatus {
+    /** Source returned events that were inserted into the DB. */
+    SUCCESS,
+    /** Source returned 0 valid events (feed empty or no upcoming events). */
+    EMPTY,
+    /** Source threw an exception (network error, parse error, HTTP error). */
+    FAILED
+}
 
 private const val SA_LAT_MIN = -35.0
 private const val SA_LAT_MAX = -22.0

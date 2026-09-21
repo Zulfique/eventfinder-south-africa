@@ -158,13 +158,13 @@ class RssEventSource(
                             localName == "location" && (ns?.contains("event") == true || ns?.contains("ev") == true) -> {
                                 inEventLocation = true
                             }
-                            localName == "startDate" || localName == "event:start" -> {
+                            localName == "startDate" || localName == "event:start" || localName == "eventStartDate" -> {
                                 inEventStart = true
                             }
-                            localName == "endDate" || localName == "event:end" -> {
+                            localName == "endDate" || localName == "event:end" || localName == "eventEndDate" -> {
                                 inEventEnd = true
                             }
-                            localName == "event:location" -> {
+                            localName == "event:location" || localName == "eventVenue" -> {
                                 inEventLocation = true
                             }
                         }
@@ -232,9 +232,9 @@ class RssEventSource(
                         "pubDate", "published", "updated" -> inPubDate = false
                         "guid", "id" -> inGuid = false
                         "category" -> inCategory = false
-                        "start", "startDate", "event:start" -> inEventStart = false
-                        "end", "endDate", "event:end" -> inEventEnd = false
-                        "location", "event:location" -> inEventLocation = false
+                        "start", "startDate", "event:start", "eventStartDate" -> inEventStart = false
+                        "end", "endDate", "event:end", "eventEndDate" -> inEventEnd = false
+                        "location", "event:location", "eventVenue" -> inEventLocation = false
                     }
                 }
             }
