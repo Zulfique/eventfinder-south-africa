@@ -90,7 +90,15 @@ class EventDetailViewModel(
                 return@launch
             }
             eventFlow.value = event
-            loadWeather(event.latitude ?: 0.0, event.longitude ?: 0.0, event.startDate)
+            val latitude = event.latitude
+            val longitude = event.longitude
+            if (latitude != null && longitude != null) {
+                loadWeather(latitude, longitude, event.startDate)
+            } else {
+                _uiState.update {
+                    it.copy(weatherUnavailable = true)
+                }
+            }
         }
     }
 

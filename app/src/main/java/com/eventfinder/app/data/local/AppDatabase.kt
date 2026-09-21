@@ -150,7 +150,7 @@ private val MIGRATION_5_6 = object : Migration(5, 6) {
         FavoriteEntity::class,
         RsvpEntity::class
     ],
-    version = 5,
+    version = 6,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase(), DatabaseTransactionHelper {
