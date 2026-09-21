@@ -37,6 +37,7 @@ import androidx.navigation.navArgument
 import com.eventfinder.app.R
 import com.eventfinder.app.di.AppContainer
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.map
 import com.eventfinder.app.ui.screens.auth.LoginScreen
 import com.eventfinder.app.ui.screens.auth.RegisterScreen
 import com.eventfinder.app.ui.screens.create.CreateEventScreen
@@ -235,6 +236,7 @@ private fun EventFinderBottomBar(
 @Composable
 private fun MainScreen(container: AppContainer, navController: NavHostController) {
     val currentRoute by navController.currentBackStackEntryFlow
+        .map { it.destination.route }
         .collectAsState(initial = navController.currentBackStackEntry?.destination?.route)
 
     Scaffold(

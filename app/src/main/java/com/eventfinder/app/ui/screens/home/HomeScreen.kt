@@ -277,7 +277,7 @@ fun HomeScreen(
                             containerColor = MaterialTheme.colorScheme.surface
                         ) {
                             Icon(
-                                imageVector = Icons.Default.MyLocation,
+                                imageVector = Icons.Outlined.MyLocation,
                                 contentDescription = stringResource(R.string.locate_me)
                             )
                         }

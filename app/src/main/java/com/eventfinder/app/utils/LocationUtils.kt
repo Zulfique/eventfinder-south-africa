@@ -186,8 +186,10 @@ object LocationUtils {
                 listener = listener
             )
         } catch (_: SecurityException) {
+            runCatching { manager.removeUpdates(listener) }
             null
         } catch (_: Exception) {
+            runCatching { manager.removeUpdates(listener) }
             null
         }
     }
