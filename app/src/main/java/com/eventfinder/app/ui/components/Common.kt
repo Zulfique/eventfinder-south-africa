@@ -241,16 +241,20 @@ fun EventCard(
             }
             if (onFavoriteToggle != null) {
                 Spacer(Modifier.width(8.dp))
-                Icon(
-                    if (event.isFavorite) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
-                    contentDescription = stringResource(
-                        if (event.isFavorite) R.string.favorite_remove else R.string.favorite_add
-                    ),
+                Box(
                     modifier = Modifier
-                        .size(28.dp)
+                        .size(48.dp)
                         .clickable { onFavoriteToggle() },
-                    tint = if (event.isFavorite) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        if (event.isFavorite) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
+                        contentDescription = stringResource(
+                            if (event.isFavorite) R.string.favorite_remove else R.string.favorite_add
+                        ),
+                        tint = if (event.isFavorite) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
         }
     }

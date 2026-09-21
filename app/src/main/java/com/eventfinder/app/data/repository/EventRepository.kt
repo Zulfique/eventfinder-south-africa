@@ -11,6 +11,7 @@ import com.eventfinder.app.domain.model.Event
 import com.eventfinder.app.domain.model.EventCategory
 import com.eventfinder.app.domain.model.RsvpStatus
 import com.eventfinder.app.utils.AppLogger
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
@@ -78,6 +79,7 @@ class EventRepositoryImpl(
     override fun observeAllEvents(): Flow<List<Event>> =
         eventDao.observeAll().map { rows -> rows.map { it.toDomain() } }
 
+    @OptIn(ExperimentalCoroutinesApi::class)
     override fun observeFavoriteIds(): Flow<Set<String>> =
         preferences.sessionUserId.flatMapLatest { userId ->
             if (userId.isNullOrBlank()) {
@@ -87,6 +89,7 @@ class EventRepositoryImpl(
             }
         }
 
+    @OptIn(ExperimentalCoroutinesApi::class)
     override fun observeFavoriteEvents(): Flow<List<Event>> =
         preferences.sessionUserId.flatMapLatest { userId ->
             if (userId.isNullOrBlank()) {
@@ -96,6 +99,7 @@ class EventRepositoryImpl(
             }
         }
 
+    @OptIn(ExperimentalCoroutinesApi::class)
     override fun observeRsvpStatuses(): Flow<Map<String, RsvpStatus>> =
         preferences.sessionUserId.flatMapLatest { userId ->
             if (userId.isNullOrBlank()) {

@@ -12,6 +12,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
+import com.eventfinder.app.R
 import com.eventfinder.app.domain.model.Event
 import com.eventfinder.app.utils.AppLogger
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory
@@ -50,7 +51,7 @@ fun EventMap(
     // User location marker — shows the user's position on the map.
     val userMarker = remember(mapView) {
         Marker(mapView).apply {
-            title = "Your location"
+            title = context.getString(R.string.your_location)
             setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
         }
     }

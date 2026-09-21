@@ -378,7 +378,7 @@ private fun FilterSheet(
                 )
             }
             Text(
-                "${state.radiusKm} km",
+                stringResource(R.string.radius_value, state.radiusKm),
                 style = MaterialTheme.typography.bodyMedium,
                 modifier = Modifier.align(Alignment.End)
             )

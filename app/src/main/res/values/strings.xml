@@ -87,6 +87,8 @@
     <string name="offline_banner">You are offline — showing saved events</string>
     <string name="events_nearby">Events near you</string>
     <string name="locate_me">Locate me</string>
+    <string name="radius_value">%1$d km</string>
+    <string name="your_location">Your location</string>
 
     <!-- Event detail -->
     <string name="about_event">About this event</string>

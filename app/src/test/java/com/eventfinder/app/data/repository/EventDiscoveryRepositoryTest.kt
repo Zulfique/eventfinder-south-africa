@@ -514,13 +514,13 @@ class EventDiscoveryRepositoryTest {
     }
 
     @Test
-    fun `empty source removes all remote events`() = runTest {
+    fun `empty source preserves cached events`() = runTest {
         val dao = FakeEventDao()
         val now = System.currentTimeMillis()
-        val staleEvent = EventEntity(
+        val cachedEvent = EventEntity(
             id = "remote:stale-1",
             title = "Stale",
-            description = "Should be removed",
+            description = "Should be preserved",
             category = "other",
             startDate = now + 86_400_000L,
             endDate = now + 172_800_000L,
@@ -535,7 +535,7 @@ class EventDiscoveryRepositoryTest {
             attendeeCount = 0,
             isCreatedByUser = false
         )
-        dao.rows["remote:stale-1"] = staleEvent
+        dao.rows["remote:stale-1"] = cachedEvent
 
         val source = FakeEventSource(eventsToReturn = emptyList())
         val repo = EventDiscoveryRepository(dao, listOf(source))
@@ -544,7 +544,8 @@ class EventDiscoveryRepositoryTest {
 
         assertEquals(0, result.fetched)
         assertEquals(0, result.inserted)
-        assertTrue(dao.rows.isEmpty())
+        assertTrue(dao.rows.containsKey("remote:stale-1"))
+        assertEquals(1, dao.rows.size)
     }
 
     @Test
@@ -617,7 +618,7 @@ class EventDiscoveryRepositoryTest {
     }
 
     @Test
-    fun `empty source result clears only that sources cache, preserves other sources`() = runTest {
+    fun `empty source preserves own cache while other source updates`() = runTest {
         val dao = FakeEventDao()
         val now = System.currentTimeMillis()
 
@@ -676,13 +677,13 @@ class EventDiscoveryRepositoryTest {
         assertEquals(1, result.inserted)
         assertEquals(0, result.failedSources)
 
-        org.junit.Assert.assertFalse(dao.rows.containsKey("remote:sourceA:evt-1"))
+        assertTrue(dao.rows.containsKey("remote:sourceA:evt-1"))
         org.junit.Assert.assertFalse(dao.rows.containsKey("remote:sourceB:evt-1"))
         assertTrue(dao.rows.containsKey("remote:sourceB:evt-new"))
     }
 
     @Test
-    fun `source returning events that all fail validation clears only that sources cache`() = runTest {
+    fun `source returning events that all fail validation preserves cached events`() = runTest {
         val dao = FakeEventDao()
         val now = System.currentTimeMillis()
 
@@ -746,6 +747,6 @@ class EventDiscoveryRepositoryTest {
         assertEquals(2, result.fetched)
         assertEquals(0, result.inserted)
         assertEquals(0, result.failedSources)
-        org.junit.Assert.assertFalse(dao.rows.containsKey("remote:sourceA:old"))
+        assertTrue(dao.rows.containsKey("remote:sourceA:old"))
     }
 }
