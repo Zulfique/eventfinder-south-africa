@@ -92,14 +92,17 @@ fun HomeScreen(
 
     // Location permission + one-time capture of the last-known position.
     val locationLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { granted ->
-        if (granted) {
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        val fineGranted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true
+        val coarseGranted = permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
+
+        if (fineGranted || coarseGranted) {
             LocationUtils.requestCurrentLocation(
                 context = context,
                 onLocation = { lat, lng ->
                     viewModel.setUserLocation(lat, lng)
-                    userLocation = Location("fused").apply {
+                    userLocation = Location("device").apply {
                         latitude = lat
                         longitude = lng
                     }
@@ -115,12 +118,17 @@ fun HomeScreen(
                 }
             )
         } else {
-            AppLogger.w("HomeScreen", "Location permission denied - using default radius")
+            AppLogger.w("HomeScreen", "Location permission denied")
         }
     }
 
     LaunchedEffect(Unit) {
-        locationLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
+        locationLauncher.launch(
+            arrayOf(
+                Manifest.permission.ACCESS_FINE_LOCATION,
+                Manifest.permission.ACCESS_COARSE_LOCATION
+            )
+        )
         viewModel.messages.collect { msg ->
             msg.resolve(context)?.let { snackbarHostState.showSnackbar(it) }
         }

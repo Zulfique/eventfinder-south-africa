@@ -53,8 +53,9 @@ object LocationUtils {
     }
 
     /**
-     * Requests a single fresh location update. Falls back to [onUnavailable]
-     * if no provider is enabled or the request fails.
+     * Requests a single fresh location update. The 15-second timeout is
+     * cancelled after a successful callback so [onUnavailable] is never
+     * called after [onLocation].
      */
     @SuppressLint("MissingPermission")
     fun requestCurrentLocation(
@@ -78,42 +79,48 @@ object LocationUtils {
             }
         }
 
-        var delivered = false
         val mainHandler = Handler(Looper.getMainLooper())
+        var delivered = false
+
+        lateinit var timeoutRunnable: Runnable
 
         val listener = object : LocationListener {
             override fun onLocationChanged(location: Location) {
                 if (delivered) return
                 delivered = true
-                manager.removeUpdates(this)
+                mainHandler.removeCallbacks(timeoutRunnable)
+                runCatching { manager.removeUpdates(this) }
                 onLocation(location.latitude, location.longitude)
             }
 
             override fun onProviderDisabled(provider: String) {
-                if (!delivered) {
-                    delivered = true
-                    manager.removeUpdates(this)
-                    onUnavailable()
-                }
+                if (delivered) return
+                delivered = true
+                mainHandler.removeCallbacks(timeoutRunnable)
+                runCatching { manager.removeUpdates(this) }
+                onUnavailable()
             }
+        }
+
+        timeoutRunnable = Runnable {
+            if (delivered) return
+            delivered = true
+            runCatching { manager.removeUpdates(listener) }
+            onUnavailable()
         }
 
         try {
             manager.requestSingleUpdate(provider, listener, Looper.getMainLooper())
+            mainHandler.postDelayed(timeoutRunnable, 15_000L)
         } catch (_: SecurityException) {
+            delivered = true
+            mainHandler.removeCallbacks(timeoutRunnable)
             onUnavailable()
         } catch (_: Exception) {
+            delivered = true
+            mainHandler.removeCallbacks(timeoutRunnable)
             onUnavailable()
         }
-
-        // Safety timeout: if Android never delivers a callback, give up after 15s.
-        mainHandler.postDelayed({
-            if (!delivered) {
-                delivered = true
-                manager.removeUpdates(listener)
-                onUnavailable()
-            }
-        }, 15_000L)
     }
 
     private fun selectBest(first: Location?, second: Location?): Location? {

@@ -56,6 +56,7 @@ class HomeViewModel(
     private val eventRepository = container.eventRepository
     private val eventDiscoveryRepository = container.eventDiscoveryRepository
     private val preferences = container.preferences
+    private val networkMonitor = container.networkMonitor
 
     private val _uiState = MutableStateFlow(HomeUiState())
     private val _messages = MutableSharedFlow<UiMessage>()
@@ -89,8 +90,10 @@ class HomeViewModel(
         // Seed demo events, then attempt to discover public JSON feeds when online.
         viewModelScope.launch {
             eventRepository.ensureSeeded()
-            runCatching { eventDiscoveryRepository.refresh() }.onFailure {
-                AppLogger.e("HomeViewModel", "Event discovery failed", it)
+            if (networkMonitor.isCurrentlyOnline()) {
+                runCatching { eventDiscoveryRepository.refresh() }.onFailure {
+                    AppLogger.e("HomeViewModel", "Event discovery failed", it)
+                }
             }
         }
 

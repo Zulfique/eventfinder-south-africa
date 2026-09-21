@@ -53,8 +53,15 @@ fun EventMap(
         onDispose { mapView.onPause() }
     }
 
-    // Stable marker state: rebuild overlays only when the event set changes.
-    LaunchedEffect(events) {
+    // Stable marker state: rebuild overlays only when the event content
+    // actually changes, not on unrelated recompositions.
+    val eventSignature = remember(events) {
+        events.joinToString("|") {
+            "${it.id}:${it.latitude}:${it.longitude}:${it.title}:${it.venueName}"
+        }
+    }
+
+    LaunchedEffect(eventSignature) {
         mapView.overlays.clear()
 
         events.forEach { event ->
@@ -76,9 +83,11 @@ fun EventMap(
 
     // Centre on the user once after the map loads and the first location arrives.
     LaunchedEffect(userLocation?.latitude, userLocation?.longitude) {
-        if (userLocation != null && !hasCenteredOnUser) {
+        val location = userLocation ?: return@LaunchedEffect
+
+        if (!hasCenteredOnUser) {
             mapView.controller.animateTo(
-                GeoPoint(userLocation.latitude, userLocation.longitude),
+                GeoPoint(location.latitude, location.longitude),
                 14.0,
                 700L
             )

@@ -14,9 +14,8 @@ class PublicJsonEventClient(
     private val httpClient: OkHttpClient,
     private val gson: Gson
 ) {
-suspend fun fetch(
-        url: String,
-        timeoutMillis: Long = 30_000L
+    suspend fun fetch(
+        url: String
     ): List<PublicJsonEventDto> = withContext(Dispatchers.IO) {
         val request = Request.Builder()
             .url(url)

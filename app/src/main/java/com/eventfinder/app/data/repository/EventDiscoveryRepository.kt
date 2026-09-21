@@ -23,6 +23,12 @@ class EventDiscoveryRepository(
                 AppLogger.i(tag, "Fetching events from ${source.displayName}")
                 val events = source.fetchEvents()
                 totalFetched += events.size
+
+                if (events.isEmpty()) {
+                    AppLogger.w(tag, "Source ${source.displayName} returned 0 events; keeping cached events")
+                    continue
+                }
+
                 val validEvents = events.filter { isValid(it) }.distinctBy { it.stableId }
                 val entities = validEvents.mapNotNull { it.toEntity() }
                 val organizerId = "external:${source.id}"
