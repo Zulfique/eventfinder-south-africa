@@ -29,8 +29,8 @@ data class Event(
     val endDate: Long,
     val venueName: String,
     val address: String,
-    val latitude: Double,
-    val longitude: Double,
+    val latitude: Double?,
+    val longitude: Double?,
     val imageUrl: String?,
     /** True = visible in this device's local catalogue only. No cross-device semantics. */
     val isPublic: Boolean,

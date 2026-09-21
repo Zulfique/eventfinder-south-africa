@@ -122,11 +122,28 @@ private val MIGRATION_4_5 = object : Migration(4, 5) {
         db.execSQL("DROP TABLE rsvps")
         db.execSQL("ALTER TABLE rsvps_new RENAME TO rsvps")
 
-        db.execSQL("DROP TABLE IF EXISTS pending_sync")
+db.execSQL("DROP TABLE IF EXISTS pending_sync")
     }
 }
 
-@Database(
+ /**
+  * Room database migration from v5 to v6.
+  *
+  * Makes latitude/longitude nullable to properly represent events without
+  * location data (instead of using 0.0 sentinel in Gulf of Guinea).
+  */
+private val MIGRATION_5_6 = object : Migration(5, 6) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("CREATE TABLE IF NOT EXISTS events_new (id TEXT NOT NULL, title TEXT NOT NULL, description TEXT NOT NULL, category TEXT NOT NULL, startDate INTEGER NOT NULL, endDate INTEGER NOT NULL, venueName TEXT NOT NULL, address TEXT NOT NULL, latitude REAL, longitude REAL, imageUrl TEXT, isPublic INTEGER NOT NULL, organizerId TEXT NOT NULL, organizerName TEXT NOT NULL, attendeeCount INTEGER NOT NULL, isCreatedByUser INTEGER NOT NULL, PRIMARY KEY(id))")
+        db.execSQL("INSERT INTO events_new (id, title, description, category, startDate, endDate, venueName, address, latitude, longitude, imageUrl, isPublic, organizerId, organizerName, attendeeCount, isCreatedByUser) SELECT id, title, description, category, startDate, endDate, venueName, address, latitude, longitude, imageUrl, isPublic, organizerId, organizerName, attendeeCount, isCreatedByUser FROM events")
+        db.execSQL("DROP TABLE events")
+        db.execSQL("ALTER TABLE events_new RENAME TO events")
+        db.execSQL("CREATE INDEX IF NOT EXISTS index_events_category ON events(category)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS index_events_startDate ON events(startDate)")
+    }
+}
+
+ @Database(
     entities = [
         UserEntity::class,
         EventEntity::class,
@@ -195,7 +212,7 @@ abstract class AppDatabase : RoomDatabase(), DatabaseTransactionHelper {
                 AppDatabase::class.java,
                 DB_NAME
             )
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
                 .build()
     }
 }

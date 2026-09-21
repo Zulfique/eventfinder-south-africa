@@ -38,8 +38,8 @@ data class EventEntity(
     val endDate: Long,
     val venueName: String,
     val address: String,
-    val latitude: Double,
-    val longitude: Double,
+    val latitude: Double?,
+    val longitude: Double?,
     val imageUrl: String?,
     /** True = visible in this device's local catalogue. Has no cross-device semantics. */
     val isPublic: Boolean,

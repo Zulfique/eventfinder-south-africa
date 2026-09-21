@@ -43,8 +43,8 @@ class SampleEventsProviderTest {
     fun `all coordinates fall within South Africa`() {
         // Generous bounding box covering the whole country.
         events.forEach { event ->
-            assertTrue("latitude out of range for ${event.id}: ${event.latitude}", event.latitude in -35.0..-22.0)
-            assertTrue("longitude out of range for ${event.id}: ${event.longitude}", event.longitude in 16.0..33.0)
+            assertTrue("latitude out of range for ${event.id}", event.latitude != null && event.latitude!! > -35.0 && event.latitude!! < -22.0)
+            assertTrue("longitude out of range for ${event.id}", event.longitude != null && event.longitude!! > 16.0 && event.longitude!! < 33.0)
         }
     }
 

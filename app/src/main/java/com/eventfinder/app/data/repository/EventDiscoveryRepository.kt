@@ -29,7 +29,8 @@ class EventDiscoveryRepository(
         for (result in sourceResults) {
             if (result.failed || result.inserted == 0) continue
             val organizerId = result.organizerId
-            val entities = result.events.map { it.toEntity() }
+
+            val entities = result.events.map { it.toEntity(organizerId) }
             if (entities.isNotEmpty()) {
                 eventDao.replaceEventsForSource(organizerId, entities)
                 totalInserted += entities.size
@@ -173,9 +174,9 @@ class EventDiscoveryRepository(
         return true
     }
 
-    private fun RemoteEvent.toEntity(): EventEntity {
-        val latitude = latitude?.takeIf { it in -90.0..90.0 } ?: 0.0
-        val longitude = longitude?.takeIf { it in -180.0..180.0 } ?: 0.0
+    private fun RemoteEvent.toEntity(organizerId: String): EventEntity {
+        val latitude = latitude?.takeIf { it in -90.0..90.0 }
+        val longitude = longitude?.takeIf { it in -180.0..180.0 }
 
         return EventEntity(
             id = "remote:$stableId",
@@ -190,7 +191,7 @@ class EventDiscoveryRepository(
             longitude = longitude,
             imageUrl = imageUrl,
             isPublic = true,
-            organizerId = "external:$source",
+            organizerId = organizerId,
             organizerName = organizerName ?: source,
             attendeeCount = 0,
             isCreatedByUser = false

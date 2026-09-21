@@ -90,7 +90,7 @@ class EventDetailViewModel(
                 return@launch
             }
             eventFlow.value = event
-            loadWeather(event.latitude, event.longitude, event.startDate)
+            loadWeather(event.latitude ?: 0.0, event.longitude ?: 0.0, event.startDate)
         }
     }
 

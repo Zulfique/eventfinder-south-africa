@@ -85,7 +85,7 @@ fun EventMap(
 
         events.forEach { event ->
             val marker = Marker(mapView).apply {
-                position = GeoPoint(event.latitude, event.longitude)
+                position = GeoPoint(event.latitude ?: 0.0, event.longitude ?: 0.0)
                 title = event.title
                 snippet = event.venueName
                 setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)

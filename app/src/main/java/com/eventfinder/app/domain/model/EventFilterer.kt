@@ -41,7 +41,7 @@ object EventFilterer {
             val matchesCategory = category == null || event.category == category
 
             val matchesRadius = userLat == null || userLng == null || radiusKm <= 0 ||
-                event.latitude == 0.0 || event.longitude == 0.0 ||
+                event.latitude == null || event.longitude == null ||
                 DistanceCalculator.between(
                     userLat, userLng, event.latitude, event.longitude
                 ) <= radiusKm
@@ -62,7 +62,7 @@ object EventFilterer {
         EventSort.DISTANCE -> {
             if (userLat == null || userLng == null) events.sortedBy { it.startDate }
             else events.sortedBy { event ->
-                if (event.latitude == 0.0 || event.longitude == 0.0) Double.MAX_VALUE
+                if (event.latitude == null || event.longitude == null) Double.MAX_VALUE
                 else DistanceCalculator.between(userLat, userLng, event.latitude, event.longitude)
             }
         }
@@ -75,7 +75,7 @@ object EventFilterer {
         userLng: Double?
     ): List<EventView> = events.map { event ->
         val distance = if (userLat != null && userLng != null &&
-            event.latitude != 0.0 && event.longitude != 0.0
+            event.latitude != null && event.longitude != null
         ) {
             DistanceCalculator.between(userLat, userLng, event.latitude, event.longitude)
         } else null

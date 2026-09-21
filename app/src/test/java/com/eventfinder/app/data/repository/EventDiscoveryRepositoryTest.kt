@@ -182,8 +182,8 @@ class EventDiscoveryRepositoryTest {
         assertEquals(1, result.inserted)
         assertEquals(1, dao.rows.size)
         val saved = dao.rows.values.first()
-        assertEquals(0.0, saved.latitude, 0.001)
-        assertEquals(0.0, saved.longitude, 0.001)
+        assertEquals(0.0, (saved.latitude ?: 0.0), 0.001)
+        assertEquals(0.0, (saved.longitude ?: 0.0), 0.001)
     }
 
     @Test
@@ -825,8 +825,8 @@ class EventDiscoveryRepositoryTest {
         assertEquals(1, result.inserted)
         assertEquals(1, dao.rows.size)
         val saved = dao.rows.values.first()
-        assertEquals(0.0, saved.latitude, 0.001)
-        assertEquals(0.0, saved.longitude, 0.001)
+        assertEquals(0.0, (saved.latitude ?: 0.0), 0.001)
+        assertEquals(0.0, (saved.longitude ?: 0.0), 0.001)
     }
 
     @Test
