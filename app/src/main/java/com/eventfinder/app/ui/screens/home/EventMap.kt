@@ -66,8 +66,7 @@ fun EventMap(
         }
     }
 
-    // Single effect responsible for all overlays: event markers + user marker.
-    // Rebuilds only when event content or user position actually changes.
+    // Rebuild event markers only when the event list actually changes.
     val eventSignature = remember(events) {
         events.fold(1) { hash, event ->
             var result = hash * 31 + event.id.hashCode()
@@ -79,7 +78,7 @@ fun EventMap(
         }
     }
 
-    LaunchedEffect(eventSignature, userLocation?.latitude, userLocation?.longitude) {
+    LaunchedEffect(eventSignature) {
         mapView.overlays.clear()
 
         events.forEach { event ->
@@ -105,9 +104,17 @@ fun EventMap(
         AppLogger.d("EventMap", "Rendered ${events.size} markers")
     }
 
-    // Centre on the user once after the map loads and the first location arrives.
+    // Update the user marker position when location changes, without rebuilding event overlays.
+    // Also centres the camera on first location arrival.
     LaunchedEffect(userLocation?.latitude, userLocation?.longitude) {
         val location = userLocation ?: return@LaunchedEffect
+
+        val userAlreadyPresent = mapView.overlays.contains(userMarker)
+        userMarker.position = GeoPoint(location.latitude, location.longitude)
+        if (!userAlreadyPresent) {
+            mapView.overlays.add(userMarker)
+        }
+        mapView.invalidate()
 
         if (!hasCenteredOnUser) {
             mapView.controller.animateTo(

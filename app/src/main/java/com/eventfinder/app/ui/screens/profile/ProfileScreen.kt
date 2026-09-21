@@ -60,10 +60,12 @@ fun ProfileScreen(
     onEditProfile: () -> Unit,
     onSettings: () -> Unit,
     onEventClick: (String) -> Unit,
-    @Suppress("UNUSED_PARAMETER") onLoggedOut: () -> Unit = {}
+    onLogin: () -> Unit = {},
+    onLoggedOut: () -> Unit = {}
 ) {
     val viewModel: ProfileViewModel = viewModel(factory = ProfileViewModel.factory(container))
     val state by viewModel.uiState.collectAsState()
+    val isGuest = state.email.isBlank()
     val snackbarHostState = remember { SnackbarHostState() }
 
     Scaffold(
@@ -160,6 +162,26 @@ fun ProfileScreen(
             } else {
                 items(state.attending, key = { "a_${it.event.id}" }) { eventView ->
                     EventCard(view = eventView, onClick = { onEventClick(eventView.event.id) })
+                }
+            }
+
+            item {
+                if (isGuest) {
+                    TextButton(
+                        onClick = onLogin,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(stringResource(R.string.login))
+                    }
+                } else {
+                    TextButton(
+                        onClick = {
+                            viewModel.logout(onLoggedOut)
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(stringResource(R.string.logout))
+                    }
                 }
             }
 

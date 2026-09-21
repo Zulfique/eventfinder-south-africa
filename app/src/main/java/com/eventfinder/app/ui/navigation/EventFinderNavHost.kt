@@ -294,8 +294,9 @@ private fun MainScreen(container: AppContainer, navController: NavHostController
                     onEditProfile = { navController.navigate(AppDestinations.EDIT_PROFILE) },
                     onSettings = { navController.navigate(AppDestinations.SETTINGS) },
                     onEventClick = { navController.navigate(AppDestinations.eventDetail(it)) },
+                    onLogin = { navController.navigate(AppDestinations.LOGIN) },
                     onLoggedOut = {
-                        navController.navigate(AppDestinations.LOGIN) {
+                        navController.navigate(AppDestinations.MAIN) {
                             popUpTo(AppDestinations.MAIN) { inclusive = true }
                         }
                     }
