@@ -72,6 +72,8 @@ fun EventMap(
             var result = hash * 31 + event.id.hashCode()
             result = result * 31 + event.latitude.hashCode()
             result = result * 31 + event.longitude.hashCode()
+            result = result * 31 + event.title.hashCode()
+            result = result * 31 + event.venueName.hashCode()
             result
         }
     }

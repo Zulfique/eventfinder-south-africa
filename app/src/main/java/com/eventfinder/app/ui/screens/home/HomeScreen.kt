@@ -5,7 +5,6 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.content.pm.PackageManager
 import android.location.Location
-import android.location.LocationManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -105,16 +104,19 @@ fun HomeScreen(
 
     var userLocation by rememberSaveable { mutableStateOf<Location?>(null) }
     var mapViewRef by remember { mutableStateOf<MapView?>(null) }
-    var locationManagerRef by remember { mutableStateOf<LocationManager?>(null) }
+    var locationPermissionGranted by remember { mutableStateOf(hasLocationPermission(context)) }
 
     // Location permission + one-time capture of the last-known position.
     val locationLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
-        val fineGranted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true
-        val coarseGranted = permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
+        val granted =
+            permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
+                permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
 
-        if (fineGranted || coarseGranted) {
+        locationPermissionGranted = granted
+
+        if (granted) {
             LocationUtils.requestCurrentLocation(
                 context = context,
                 onLocation = { lat, lng ->
@@ -176,20 +178,23 @@ fun HomeScreen(
         }
     }
 
-    // Start continuous location updates; stop on dispose.
-    DisposableEffect(Unit) {
-        if (hasLocationPermission(context)) {
-            locationManagerRef = LocationUtils.requestLocationUpdates(context) { lat, lng ->
-                viewModel.setUserLocation(lat, lng)
-                userLocation = Location("continuous").apply {
-                    latitude = lat
-                    longitude = lng
-                }
+    // Start/stop continuous location tracking based on permission state.
+    // Re-runs whenever locationPermissionGranted changes (e.g. after grant).
+    DisposableEffect(locationPermissionGranted) {
+        if (!locationPermissionGranted) {
+            return@DisposableEffect onDispose { }
+        }
+
+        val handle = LocationUtils.requestLocationUpdates(context) { lat, lng ->
+            viewModel.setUserLocation(lat, lng)
+            userLocation = Location("continuous").apply {
+                latitude = lat
+                longitude = lng
             }
         }
+
         onDispose {
-            locationManagerRef?.let { LocationUtils.stopLocationUpdates(it) }
-            locationManagerRef = null
+            handle?.stop()
         }
     }
 

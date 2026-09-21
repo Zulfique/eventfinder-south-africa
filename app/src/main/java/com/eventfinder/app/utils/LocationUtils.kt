@@ -18,6 +18,18 @@ import androidx.core.content.ContextCompat
  */
 object LocationUtils {
 
+    /** Handle returned by [requestLocationUpdates]; call [stop] to unregister. */
+    class LocationUpdatesHandle(
+        private val locationManager: LocationManager,
+        private val listener: LocationListener
+    ) {
+        fun stop() {
+            runCatching {
+                locationManager.removeUpdates(listener)
+            }
+        }
+    }
+
     fun hasPermission(context: Context): Boolean {
         return ContextCompat.checkSelfPermission(
             context,
@@ -126,14 +138,14 @@ object LocationUtils {
 
     /**
      * Starts continuous location updates (every 5 s / 10 m) on all enabled
-     * providers. Returns the [LocationManager] so the caller can call
-     * [stopLocationUpdates] later.
+     * providers. Returns a [LocationUpdatesHandle] whose [stop][LocationUpdatesHandle.stop]
+     * method removes the exact listener that was registered.
      */
     @SuppressLint("MissingPermission")
     fun requestLocationUpdates(
         context: Context,
         onLocation: (Double, Double) -> Unit
-    ): LocationManager? {
+    ): LocationUpdatesHandle? {
         if (!hasPermission(context)) return null
 
         val manager = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
@@ -141,6 +153,10 @@ object LocationUtils {
         val listener = object : LocationListener {
             override fun onLocationChanged(location: Location) {
                 onLocation(location.latitude, location.longitude)
+            }
+
+            override fun onProviderDisabled(provider: String) {
+                // Nothing required here.
             }
         }
 
@@ -165,19 +181,14 @@ object LocationUtils {
                     Looper.getMainLooper()
                 )
             }
-            manager
+            LocationUpdatesHandle(
+                locationManager = manager,
+                listener = listener
+            )
         } catch (_: SecurityException) {
             null
-        }
-    }
-
-    /**
-     * Removes all location updates from the given [manager].
-     * Call this when the composable is disposed or updates are no longer needed.
-     */
-    fun stopLocationUpdates(manager: LocationManager) {
-        runCatching {
-            manager.removeUpdates { }
+        } catch (_: Exception) {
+            null
         }
     }
 
