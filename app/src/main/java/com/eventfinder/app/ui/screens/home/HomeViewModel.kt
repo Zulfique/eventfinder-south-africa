@@ -155,11 +155,14 @@ class HomeViewModel(
     }
 
     fun onRadiusSliderChange(km: Int) {
-        radiusFlow.value = km
+        val value = km.coerceIn(5, 200)
+        radiusFlow.value = value
+        _uiState.value = _uiState.value.copy(radiusKm = value)
     }
 
     fun onToggleRadiusFilter(enabled: Boolean) {
         radiusEnabledFlow.value = enabled
+        _uiState.value = _uiState.value.copy(radiusFilterEnabled = enabled)
     }
 
     fun onToggleMapView() {
@@ -175,10 +178,8 @@ class HomeViewModel(
         locationFlow.value = lat to lng
         _uiState.value = _uiState.value.copy(
             userLat = lat,
-            userLng = lng,
-            radiusFilterEnabled = true
+            userLng = lng
         )
-        radiusEnabledFlow.value = true
         AppLogger.i("HomeViewModel", "User location set ($lat, $lng)")
     }
 

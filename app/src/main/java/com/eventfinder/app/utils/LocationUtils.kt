@@ -116,7 +116,7 @@ object LocationUtils {
         }
 
         timeoutRunnable = Runnable {
-            if (delivered) return
+            if (delivered) return@Runnable
             delivered = true
             runCatching { manager.removeUpdates(listener) }
             onUnavailable()
@@ -128,10 +128,12 @@ object LocationUtils {
         } catch (_: SecurityException) {
             delivered = true
             mainHandler.removeCallbacks(timeoutRunnable)
+            runCatching { manager.removeUpdates(listener) }
             onUnavailable()
         } catch (_: Exception) {
             delivered = true
             mainHandler.removeCallbacks(timeoutRunnable)
+            runCatching { manager.removeUpdates(listener) }
             onUnavailable()
         }
     }
