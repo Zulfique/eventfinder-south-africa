@@ -2,6 +2,7 @@ package com.eventfinder.app.ui.navigation
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AddCircle
@@ -20,12 +21,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextAlign
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -178,57 +180,102 @@ fun EventFinderNavHost(
 }
 
 /** Bottom navigation destinations (Home, Search, Create, Favorites, Profile). */
-private data class BottomTab(val labelRes: Int, val icon: ImageVector)
+private enum class EventFinderDestination(
+    val route: String,
+    val labelRes: Int,
+    val icon: ImageVector
+) {
+    HOME("home", R.string.discover_events, Icons.Outlined.Home),
+    SEARCH("search", R.string.search_title, Icons.Outlined.Search),
+    CREATE("create", R.string.create_event_title, Icons.Filled.AddCircle),
+    FAVORITES("favorites", R.string.favorites_title, Icons.Outlined.Favorite),
+    PROFILE("profile", R.string.profile_title, Icons.Outlined.Person)
+}
 
 @Composable
-private fun bottomTabs(): List<BottomTab> = listOf(
-    BottomTab(R.string.discover_events, Icons.Outlined.Home),
-    BottomTab(R.string.search_title, Icons.Outlined.Search),
-    BottomTab(R.string.create_event_title, Icons.Filled.AddCircle),
-    BottomTab(R.string.favorites_title, Icons.Outlined.Favorite),
-    BottomTab(R.string.profile_title, Icons.Outlined.Person)
-)
+private fun EventFinderBottomBar(
+    currentRoute: String?,
+    onNavigate: (String) -> Unit
+) {
+    NavigationBar(
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        EventFinderDestination.entries.forEach { destination ->
+            NavigationBarItem(
+                selected = currentRoute == destination.route,
+                onClick = {
+                    if (currentRoute != destination.route) {
+                        onNavigate(destination.route)
+                    }
+                },
+                icon = {
+                    Icon(
+                        imageVector = destination.icon,
+                        contentDescription = stringResource(destination.labelRes)
+                    )
+                },
+                label = {
+                    Text(
+                        text = stringResource(destination.labelRes),
+                        textAlign = TextAlign.Center,
+                        maxLines = 1
+                    )
+                },
+                alwaysShowLabel = true,
+                colors = NavigationBarItemDefaults.colors(
+                    indicatorColor = MaterialTheme.colorScheme.primaryContainer,
+                    selectedIconColor = MaterialTheme.colorScheme.primary
+                )
+            )
+        }
+    }
+}
 
 /** Scaffold hosting the five primary tabs. */
 @Composable
 private fun MainScreen(container: AppContainer, navController: NavHostController) {
-    val tabs = bottomTabs()
-    var selectedTab by rememberSaveable { mutableIntStateOf(0) }
+    val currentRoute by navController.currentBackStackEntryFlow
+        .collectAsState(initial = navController.currentBackStackEntry?.destination?.route)
 
     Scaffold(
         bottomBar = {
-            NavigationBar {
-                tabs.forEachIndexed { index, tab ->
-                    NavigationBarItem(
-                        selected = selectedTab == index,
-                        onClick = { selectedTab = index },
-                        icon = { Icon(tab.icon, contentDescription = stringResource(tab.labelRes)) },
-                        label = { Text(stringResource(tab.labelRes)) },
-                        colors = NavigationBarItemDefaults.colors(
-                            indicatorColor = MaterialTheme.colorScheme.primaryContainer,
-                            selectedIconColor = MaterialTheme.colorScheme.primary
-                        )
-                    )
+            EventFinderBottomBar(
+                currentRoute = currentRoute,
+                onNavigate = { route ->
+                    navController.navigate(route) {
+                        popUpTo(AppDestinations.MAIN) { saveState = true }
+                        launchSingleTop = true
+                        restoreState = true
+                    }
                 }
-            }
+            )
         }
     ) { innerPadding ->
         Box(Modifier.fillMaxSize().padding(innerPadding)) {
-            when (selectedTab) {
-                0 -> HomeScreen(
+            when (currentRoute) {
+                EventFinderDestination.HOME.route -> HomeScreen(
                     container = container,
                     onEventClick = { navController.navigate(AppDestinations.eventDetail(it)) }
                 )
-                1 -> SearchScreen(
+                EventFinderDestination.SEARCH.route -> SearchScreen(
                     container = container,
                     onEventClick = { navController.navigate(AppDestinations.eventDetail(it)) }
                 )
-                2 -> CreateEventScreen(container = container, onClose = { selectedTab = 0 })
-                3 -> FavoritesScreen(
+                EventFinderDestination.CREATE.route -> CreateEventScreen(
+                    container = container,
+                    onClose = {
+                        navController.navigate(EventFinderDestination.HOME.route) {
+                            popUpTo(AppDestinations.MAIN) { saveState = true }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    }
+                )
+                EventFinderDestination.FAVORITES.route -> FavoritesScreen(
                     container = container,
                     onEventClick = { navController.navigate(AppDestinations.eventDetail(it)) }
                 )
-                4 -> ProfileScreen(
+                EventFinderDestination.PROFILE.route -> ProfileScreen(
                     container = container,
                     onEditProfile = { navController.navigate(AppDestinations.EDIT_PROFILE) },
                     onSettings = { navController.navigate(AppDestinations.SETTINGS) },
