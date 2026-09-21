@@ -7,6 +7,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -38,6 +39,7 @@ fun EventMap(
 ) {
     val context = LocalContext.current
     var hasCenteredOnUser by rememberSaveable { mutableStateOf(false) }
+    val currentOnEventClick by rememberUpdatedState(onEventClick)
 
     val mapView = remember {
         MapView(context).apply {
@@ -88,7 +90,7 @@ fun EventMap(
                 snippet = event.venueName
                 setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
                 setOnMarkerClickListener { _, _ ->
-                    onEventClick(event.id)
+                    currentOnEventClick(event.id)
                     true
                 }
             }

@@ -138,7 +138,12 @@ class RssEventSource(
                                     imageUrl = href
                                 }
                             }
-                            localName == "media:content" || localName == "media:thumbnail" -> {
+                            localName == "content" && ns?.contains("media") == true -> {
+                                val href = parser.getAttributeValue(null, "url")
+                                    ?: parser.getAttributeValue(null, "href")
+                                if (href != null) imageUrl = href
+                            }
+                            localName == "thumbnail" && ns?.contains("media") == true -> {
                                 val href = parser.getAttributeValue(null, "url")
                                     ?: parser.getAttributeValue(null, "href")
                                 if (href != null) imageUrl = href
@@ -158,13 +163,13 @@ class RssEventSource(
                             localName == "location" && (ns?.contains("event") == true || ns?.contains("ev") == true) -> {
                                 inEventLocation = true
                             }
-                            localName == "startDate" || localName == "event:start" || localName == "eventStartDate" -> {
+                            localName == "startDate" || localName == "eventStartDate" -> {
                                 inEventStart = true
                             }
-                            localName == "endDate" || localName == "event:end" || localName == "eventEndDate" -> {
+                            localName == "endDate" || localName == "eventEndDate" -> {
                                 inEventEnd = true
                             }
-                            localName == "event:location" || localName == "eventVenue" -> {
+                            localName == "eventVenue" -> {
                                 inEventLocation = true
                             }
                         }
@@ -230,9 +235,9 @@ class RssEventSource(
                         "pubDate", "published", "updated" -> inPubDate = false
                         "guid", "id" -> inGuid = false
                         "category" -> inCategory = false
-                        "start", "startDate", "event:start", "eventStartDate" -> inEventStart = false
-                        "end", "endDate", "event:end", "eventEndDate" -> inEventEnd = false
-                        "location", "event:location", "eventVenue" -> inEventLocation = false
+                        "start", "startDate", "eventStartDate" -> inEventStart = false
+                        "end", "endDate", "eventEndDate" -> inEventEnd = false
+                        "location", "eventVenue" -> inEventLocation = false
                     }
                 }
             }

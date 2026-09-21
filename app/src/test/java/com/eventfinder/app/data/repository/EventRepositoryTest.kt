@@ -103,6 +103,10 @@ class EventRepositoryTest {
 
         override suspend fun deleteOrphanFavorites(eventIds: List<String>) {}
         override suspend fun deleteOrphanRsvps(eventIds: List<String>) {}
+        override suspend fun deleteByIds(eventIds: List<String>) {
+            eventIds.forEach { rows.remove(it) }
+            emit()
+        }
 
         override suspend fun getUpcomingAttendingEventsForUser(userId: String, now: Long): List<EventEntity> =
             rows.values.filter { event ->
@@ -241,10 +245,10 @@ class EventRepositoryTest {
             eventDao.deleteCreatedByUserId(userId)
         }
 
-        override suspend fun deleteEventAtomically(eventId: String, userId: String) {
+        override suspend fun deleteEventAtomically(eventId: String) {
+            favoriteDao.deleteAllForEvent(eventId)
+            rsvpDao.deleteAllForEvent(eventId)
             eventDao.deleteById(eventId)
-            favoriteDao.delete(userId, eventId)
-            rsvpDao.delete(userId, eventId)
         }
     }
 

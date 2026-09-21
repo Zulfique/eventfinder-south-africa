@@ -84,6 +84,9 @@ interface EventDao {
     @Query("SELECT id FROM events WHERE organizerId = :organizerId AND isCreatedByUser = 0")
     suspend fun findIdsByOrganizerId(organizerId: String): List<String>
 
+    @Query("DELETE FROM events WHERE id IN (:eventIds)")
+    suspend fun deleteByIds(eventIds: List<String>)
+
     @Query("""
         SELECT e.* FROM events e
         INNER JOIN rsvps r ON r.eventId = e.id
@@ -100,12 +103,16 @@ interface EventDao {
 
     @Transaction
     suspend fun replaceEventsForSource(organizerId: String, events: List<EventEntity>) {
-        val existingIds = findIdsByOrganizerId(organizerId)
-        if (existingIds.isNotEmpty()) {
-            deleteOrphanFavorites(existingIds)
-            deleteOrphanRsvps(existingIds)
+        val existingIds = findIdsByOrganizerId(organizerId).toSet()
+        val incomingIds = events.map { it.id }.toSet()
+        val staleIds = existingIds - incomingIds
+
+        if (staleIds.isNotEmpty()) {
+            deleteOrphanFavorites(staleIds.toList())
+            deleteOrphanRsvps(staleIds.toList())
+            deleteByIds(staleIds.toList())
         }
-        deleteByOrganizerId(organizerId)
+
         if (events.isNotEmpty()) {
             upsertAll(events)
         }

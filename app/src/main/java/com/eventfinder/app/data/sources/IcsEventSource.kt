@@ -20,9 +20,15 @@ import java.util.TimeZone
  * - LOCATION (parsed as venue/address)
  * - CATEGORIES, URL, GEO (lat;lng), UID
  * - TZID=Africa/Johannesburg for floating dates
- * - RRULE recurrence (DAILY, WEEKLY, MONTHLY, YEARLY) expanded up to 30 occurrences
+ * - RRULE recurrence: FREQ=DAILY/WEEKLY/MONTHLY/YEARLY with COUNT, UNTIL, INTERVAL
+ * - RRULE BYDAY filter (matches specified days within the recurrence step)
  * - EXDATE exclusion of specific recurrence instances
- * - BYDAY / BYMONTHDAY / BYMONTH in RRULE
+ *
+ * Limitations:
+ * - BYMONTHDAY and BYMONTH in RRULE are not supported
+ * - BYDAY combined with COUNT may produce fewer matches than expected
+ *   (e.g. FREQ=WEEKLY;BYDAY=MO,WE,FR only fires on the first matching
+ *   day per interval step, not all three days per week)
  *
  * Events without coordinates will be geocoded by the ingestion pipeline.
  */
@@ -88,10 +94,14 @@ class IcsEventSource(
                         geoLine.append(trimmed.trimStart())
                     }
                     trimmed.startsWith("EXDATE") -> {
-                        val value = trimmed.substringAfter(":").trim()
-                        value.split(",").forEach { dt ->
-                            val parsed = parseIcsDateFlexible(dt.trim())
-                            if (parsed != null) exdates.add(parsed)
+                        val colonIndex = trimmed.indexOf(':')
+                        if (colonIndex > 0) {
+                            val exdateParams = extractParamsFromKey(trimmed.substring(0, colonIndex))
+                            val value = trimmed.substring(colonIndex + 1).trim()
+                            value.split(",").forEach { dt ->
+                                val parsed = parseIcsDateFlexible(dt.trim(), exdateParams)
+                                if (parsed != null) exdates.add(parsed)
+                            }
                         }
                     }
                     else -> {
@@ -147,7 +157,7 @@ class IcsEventSource(
                 for (occurrence in occurrences) {
                     if (occurrence < now) continue
                     if (exdateSet.contains(occurrence)) continue
-                    val occSourceId = if (occurrences.size > 1) "$uid-${occurrence.hashCode()}" else uid
+                    val occSourceId = if (occurrences.size > 1) "$uid-$occurrence" else uid
                     events.add(
                         RemoteEvent(
                             source = id,

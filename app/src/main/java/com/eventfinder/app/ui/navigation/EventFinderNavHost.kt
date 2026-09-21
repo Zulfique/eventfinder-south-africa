@@ -179,7 +179,7 @@ fun EventFinderNavHost(
                 container = container,
                 onBack = { navController.popBackStack() },
                 onLoggedOut = {
-                    navController.navigate(AppDestinations.LOGIN) {
+                    navController.navigate(AppDestinations.MAIN) {
                         popUpTo(AppDestinations.MAIN) { inclusive = true }
                     }
                 }

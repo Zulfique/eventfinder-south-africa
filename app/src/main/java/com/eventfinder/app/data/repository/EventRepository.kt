@@ -229,7 +229,7 @@ class EventRepositoryImpl(
             return Result.failure(SecurityException("not_owner"))
         }
         context?.let { com.eventfinder.app.notifications.NotificationHelper.cancelEventReminders(it, eventId) }
-        database.deleteEventAtomically(eventId, userId)
+        database.deleteEventAtomically(eventId)
         AppLogger.i(tag, "Community event deleted locally: $eventId")
         return Result.success(Unit)
     }

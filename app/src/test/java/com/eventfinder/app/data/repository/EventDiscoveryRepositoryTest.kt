@@ -81,6 +81,10 @@ class EventDiscoveryRepositoryTest {
 
         override suspend fun deleteOrphanFavorites(eventIds: List<String>) {}
         override suspend fun deleteOrphanRsvps(eventIds: List<String>) {}
+        override suspend fun deleteByIds(eventIds: List<String>) {
+            eventIds.forEach { rows.remove(it) }
+            emit()
+        }
 
         override suspend fun getUpcomingAttendingEventsForUser(userId: String, now: Long): List<EventEntity> =
             rows.values.filter { it.startDate > now }
@@ -91,7 +95,14 @@ class EventDiscoveryRepositoryTest {
         }
 
         override suspend fun replaceEventsForSource(organizerId: String, events: List<EventEntity>) {
-            deleteByOrganizerId(organizerId)
+            val existingIds = rows.values.filter { it.organizerId == organizerId && !it.isCreatedByUser }
+                .map { it.id }.toSet()
+            val incomingIds = events.map { it.id }.toSet()
+            val staleIds = existingIds - incomingIds
+
+            if (staleIds.isNotEmpty()) {
+                staleIds.forEach { rows.remove(it) }
+            }
             if (events.isNotEmpty()) {
                 upsertAll(events)
             }
@@ -759,7 +770,7 @@ class EventDiscoveryRepositoryTest {
     }
 
     @Test
-    fun `cross-source dedup merges same event from multiple sources`() = runTest {
+    fun `same event from multiple sources syncs independently per source`() = runTest {
         val dao = FakeEventDao()
         val eventFromA = futureEvent(source = "ardent", sourceId = "jazz-1", title = "Cape Town Jazz Festival")
         val eventFromB = futureEvent(source = "rss", sourceId = "jazz-rss", title = "Cape Town Jazz Festival")
@@ -770,8 +781,10 @@ class EventDiscoveryRepositoryTest {
         val result = repo.refresh()
 
         assertEquals(2, result.fetched)
-        assertEquals(1, result.inserted)
-        assertEquals(1, dao.rows.size)
+        assertEquals(2, result.inserted)
+        assertEquals(2, dao.rows.size)
+        assertTrue(dao.rows.containsKey("remote:ardent:jazz-1"))
+        assertTrue(dao.rows.containsKey("remote:rss:jazz-rss"))
     }
 
     @Test

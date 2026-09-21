@@ -24,16 +24,12 @@ class EventDiscoveryRepository(
             sourceResults.add(result)
         }
 
-        val allFetchedEvents = sourceResults
-            .filter { it.inserted > 0 }
-            .flatMap { it.events }
-        val crossSourceDeduped = deduplicateAcrossSources(allFetchedEvents)
-
-        val dedupByOrganizer = crossSourceDeduped.groupBy { "external:${it.source}" }
-
         var totalInserted = 0
-        for ((organizerId, events) in dedupByOrganizer) {
-            val entities = events.mapNotNull { it.toEntity() }
+
+        for (result in sourceResults) {
+            if (result.failed || result.inserted == 0) continue
+            val organizerId = result.organizerId
+            val entities = result.events.mapNotNull { it.toEntity() }
             if (entities.isNotEmpty()) {
                 eventDao.replaceEventsForSource(organizerId, entities)
                 totalInserted += entities.size
@@ -93,6 +89,10 @@ class EventDiscoveryRepository(
                     tag,
                     "Source ${source.displayName} returned no valid events; keeping cached events"
                 )
+                // Policy: empty/failed sources preserve their cached events to avoid
+                // data loss during temporary feed outages. Events that truly disappear
+                // from a feed will be removed on the next successful non-empty sync
+                // when the new event list is a superset of what's in the cache.
                 return SourceResult(
                     sourceName = source.displayName,
                     fetched = rawEvents.size,
@@ -138,62 +138,6 @@ class EventDiscoveryRepository(
 
         val coords = geocoder?.geocode(locationName) ?: return event
         return event.copy(latitude = coords.first, longitude = coords.second)
-    }
-
-    private fun deduplicateAcrossSources(events: List<RemoteEvent>): List<RemoteEvent> {
-        if (events.size <= 1) return events
-
-        val dedupMap = linkedMapOf<String, RemoteEvent>()
-
-        for (event in events) {
-            val key = buildDeduplicationKey(event)
-            val existing = dedupMap[key]
-            if (existing == null) {
-                dedupMap[key] = event
-            } else {
-                val merged = mergeDuplicate(existing, event)
-                dedupMap[key] = merged
-            }
-        }
-
-        val deduplicated = dedupMap.values.toList()
-        if (deduplicated.size < events.size) {
-            AppLogger.i(tag, "Cross-source dedup: ${events.size} → ${deduplicated.size} (removed ${events.size - deduplicated.size} duplicates)")
-        }
-
-        return deduplicated
-    }
-
-    private fun buildDeduplicationKey(event: RemoteEvent): String {
-        val normalizedTitle = event.title.trim().lowercase(Locale.US)
-            .replace(Regex("[^a-z0-9\\s]"), "")
-            .replace(Regex("\\s+"), " ")
-            .trim()
-
-        val cal = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("Africa/Johannesburg"))
-        cal.timeInMillis = event.startDate
-        val dateBucket = "${cal.get(java.util.Calendar.YEAR)}-${cal.get(java.util.Calendar.MONTH)}-${cal.get(java.util.Calendar.DAY_OF_MONTH)}"
-        val timeBucket = "${cal.get(java.util.Calendar.HOUR_OF_DAY)}"
-        val venueKey = event.venueName.trim().lowercase(Locale.US)
-            .replace(Regex("[^a-z0-9\\s]"), "")
-            .replace(Regex("\\s+"), " ")
-            .trim()
-
-        return "$normalizedTitle|$dateBucket|$timeBucket|$venueKey"
-    }
-
-    private fun mergeDuplicate(existing: RemoteEvent, duplicate: RemoteEvent): RemoteEvent {
-        val urls = mutableListOf<String>()
-        existing.sourceUrl?.let { urls.add(it) }
-        duplicate.sourceUrl?.let { urls.add(it) }
-        val mergedUrl = urls.firstOrNull()
-
-        return existing.copy(
-            description = existing.description.ifBlank { duplicate.description },
-            imageUrl = existing.imageUrl ?: duplicate.imageUrl,
-            sourceUrl = mergedUrl,
-            organizerName = existing.organizerName ?: duplicate.organizerName
-        )
     }
 
     private fun isValid(event: RemoteEvent): Boolean {

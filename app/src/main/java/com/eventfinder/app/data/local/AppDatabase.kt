@@ -19,7 +19,7 @@ interface DatabaseTransactionHelper {
     /** Atomically updates an event. */
     suspend fun updateEventAtomically(event: EventEntity)
     /** Atomically deletes an event, its favourite/RSVP links. */
-    suspend fun deleteEventAtomically(eventId: String, userId: String)
+    suspend fun deleteEventAtomically(eventId: String)
     /** Atomically deletes all user data during account deletion. */
     suspend fun deleteAccountData(userId: String)
 }
@@ -180,7 +180,7 @@ abstract class AppDatabase : RoomDatabase(), DatabaseTransactionHelper {
     }
 
     @Transaction
-    override suspend fun deleteEventAtomically(eventId: String, userId: String) {
+    override suspend fun deleteEventAtomically(eventId: String) {
         favoriteDao().deleteAllForEvent(eventId)
         rsvpDao().deleteAllForEvent(eventId)
         eventDao().deleteById(eventId)
