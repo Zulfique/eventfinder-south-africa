@@ -46,8 +46,12 @@ class BootReceiver : BroadcastReceiver() {
                 }
 
                 ReminderHelper.restoreReminders(context, container.database.eventDao(), userId)
-            } catch (t: Throwable) {
-                AppLogger.e("BootReceiver", "Failed to reschedule reminders on boot", t)
+            } catch (e: Exception) {
+                AppLogger.e(
+                    "BootReceiver",
+                    "Failed to reschedule reminders on boot",
+                    e
+                )
             } finally {
                 pendingResult.finish()
             }
