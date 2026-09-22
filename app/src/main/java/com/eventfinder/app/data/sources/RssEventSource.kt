@@ -318,3 +318,5 @@ class RssEventSource(
 
     return null
 }
+}
+

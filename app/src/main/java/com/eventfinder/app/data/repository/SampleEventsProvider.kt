@@ -3,7 +3,6 @@ package com.eventfinder.app.data.repository
 import com.eventfinder.app.domain.model.Event
 import com.eventfinder.app.domain.model.EventCategory
 import java.util.Calendar
-import java.util.TimeUnit
 
 /**
  * Curated demo event catalogue for the South African market. Seeded into Room

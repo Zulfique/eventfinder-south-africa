@@ -5,6 +5,7 @@ import com.eventfinder.app.data.local.EventEntity
 import com.eventfinder.app.data.local.SourceSyncEntity
 import com.eventfinder.app.data.remote.EventGeocoder
 import com.eventfinder.app.data.remote.model.RemoteEvent
+import com.eventfinder.app.data.sources.EventSource
 import com.eventfinder.app.domain.model.EventCategory
 import com.eventfinder.app.utils.AppLogger
 import kotlinx.coroutines.sync.Mutex

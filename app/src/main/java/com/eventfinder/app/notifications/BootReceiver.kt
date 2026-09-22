@@ -3,6 +3,7 @@ package com.eventfinder.app.notifications
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import com.eventfinder.app.EventFinderApp
 import com.eventfinder.app.di.AppContainer
 import com.eventfinder.app.utils.AppLogger
 import kotlinx.coroutines.CoroutineScope
