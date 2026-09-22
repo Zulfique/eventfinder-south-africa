@@ -2,12 +2,14 @@ package com.eventfinder.app.data.repository
 
 import com.eventfinder.app.data.local.EventDao
 import com.eventfinder.app.data.local.EventEntity
+import com.eventfinder.app.data.local.SourceSyncEntity
 import com.eventfinder.app.data.remote.EventGeocoder
 import com.eventfinder.app.data.remote.model.RemoteEvent
 import com.eventfinder.app.data.sources.EventSource
 import com.eventfinder.app.domain.model.EventCategory
 import com.eventfinder.app.utils.AppLogger
 import java.util.Locale
+import java.util.concurrent.TimeUnit
 
 class EventDiscoveryRepository(
     private val eventDao: EventDao,
@@ -84,16 +86,26 @@ class EventDiscoveryRepository(
             }
 
             val validEvents = events.filter { isValid(it) }.distinctBy { it.stableId }
+            val organizerId = "external:${source.id}"
 
             if (validEvents.isEmpty()) {
                 AppLogger.w(
                     tag,
                     "Source ${source.displayName} returned no valid events; keeping cached events"
                 )
-                // Policy: empty/failed sources preserve their cached events to avoid
-                // data loss during temporary feed outages. Events that truly disappear
-                // from a feed will be removed on the next successful non-empty sync
-                // when the new event list is a superset of what's in the cache.
+                // Policy: a temporarily empty source preserves its cached events to
+                // avoid data loss during feed outages. If the source has had no
+                // successful sync for a long time, its stale cached events are
+                // removed so a vanished catalogue does not linger forever.
+                recordSync(source.id, lastSuccessAt = null, lastEmptyAt = System.currentTimeMillis())
+                if (shouldRemoveStaleEvents(source.id)) {
+                    eventDao.deleteByOrganizerId(organizerId)
+                    AppLogger.w(
+                        tag,
+                        "Removing stale cached events for ${source.displayName} after " +
+                            "no successful sync within the staleness window"
+                    )
+                }
                 return SourceResult(
                     sourceName = source.displayName,
                     fetched = rawEvents.size,
@@ -105,15 +117,14 @@ class EventDiscoveryRepository(
                 )
             }
 
-            val organizerId = "external:${source.id}"
-
             val existingCount = eventDao.findIdsByOrganizerId(organizerId).size
-            if (isSuspiciousReduction(existingCount, validEvents.size)) {
+            if (isSuspiciousReduction(source.id, existingCount, validEvents.size)) {
                 AppLogger.w(
                     tag,
                     "Suspiciously small update from ${source.displayName}: " +
                         "${validEvents.size} new vs $existingCount cached — keeping cached events"
                 )
+                recordSync(source.id, lastSuccessAt = null, lastEmptyAt = System.currentTimeMillis())
                 return SourceResult(
                     sourceName = source.displayName,
                     fetched = rawEvents.size,
@@ -126,6 +137,7 @@ class EventDiscoveryRepository(
             }
 
             AppLogger.i(tag, "Fetched ${validEvents.size} valid events from ${source.displayName}")
+            recordSync(source.id, lastSuccessAt = System.currentTimeMillis(), lastEmptyAt = null)
 
             SourceResult(
                 sourceName = source.displayName,
@@ -140,6 +152,7 @@ class EventDiscoveryRepository(
             )
         } catch (e: Exception) {
             AppLogger.e(tag, "Failed to fetch ${source.displayName}", e)
+            recordSync(source.id, lastSuccessAt = null, lastFailedAt = System.currentTimeMillis())
             SourceResult(
                 sourceName = source.displayName,
                 fetched = 0,
@@ -224,8 +237,17 @@ class EventDiscoveryRepository(
      * enough - a 100-event cache would accept a 21-event reply at 20%. Instead
      * we require the new count to be at least half the cached count (with a
      * small hard floor for tiny caches) before allowing a replacement.
+     *
+     * The guard is time-bounded: if the cached events have not been refreshed
+     * by a successful sync within [STALE_REPLACE_AFTER_MILLIS], a smaller but
+     * non-empty feed is accepted. This stops a source that legitimately reduced
+     * its catalogue from being rejected forever.
      */
-    private fun isSuspiciousReduction(existingCount: Int, newCount: Int): Boolean {
+    private suspend fun isSuspiciousReduction(
+        sourceId: String,
+        existingCount: Int,
+        newCount: Int
+    ): Boolean {
         if (existingCount < 10) return false
 
         val minimumExpected = maxOf(
@@ -233,7 +255,42 @@ class EventDiscoveryRepository(
             (existingCount * 0.50).toInt()
         )
 
-        return newCount < minimumExpected
+        if (newCount >= minimumExpected) return false
+
+        val sync = eventDao.getSourceSync(sourceId)
+        val lastSuccess = sync?.lastSuccessAt ?: 0L
+        val cacheAlreadyStale = lastSuccess > 0L &&
+            System.currentTimeMillis() - lastSuccess >= STALE_REPLACE_AFTER_MILLIS
+        return !cacheAlreadyStale
+    }
+
+    /** True when cached events for a source are stale and should be dropped. */
+    private suspend fun shouldRemoveStaleEvents(sourceId: String): Boolean {
+        val sync = eventDao.getSourceSync(sourceId) ?: return false
+        if (sync.lastSuccessAt <= 0L) return false
+        return System.currentTimeMillis() - sync.lastSuccessAt >= STALE_REMOVE_AFTER_MILLIS
+    }
+
+    /**
+     * Merge-updates a source's sync bookkeeping. Omitted fields (null) keep
+     * their previous value so timestamps for the latest event of each kind are
+     * preserved.
+     */
+    private suspend fun recordSync(
+        sourceId: String,
+        lastSuccessAt: Long?,
+        lastEmptyAt: Long? = null,
+        lastFailedAt: Long? = null
+    ) {
+        val previous = eventDao.getSourceSync(sourceId)
+        eventDao.upsertSourceSync(
+            SourceSyncEntity(
+                sourceId = sourceId,
+                lastSuccessAt = lastSuccessAt ?: previous?.lastSuccessAt ?: 0L,
+                lastEmptyAt = lastEmptyAt ?: previous?.lastEmptyAt ?: 0L,
+                lastFailedAt = lastFailedAt ?: previous?.lastFailedAt ?: 0L
+            )
+        )
     }
 }
 
@@ -269,3 +326,17 @@ private const val SA_LAT_MIN = -35.0
 private const val SA_LAT_MAX = -22.0
 private const val SA_LNG_MIN = 16.0
 private const val SA_LNG_MAX = 33.0
+
+/**
+ * After this long without a successful sync, a smaller-but-non-empty feed is
+ * trusted and replaces the cached events (a legitimately reduced catalogue is
+ * no longer rejected forever).
+ */
+val STALE_REPLACE_AFTER_MILLIS = TimeUnit.DAYS.toMillis(7)
+
+/**
+ * After this long without a successful sync, a source that keeps returning no
+ * valid events has its stale cached events removed instead of being preserved
+ * indefinitely.
+ */
+val STALE_REMOVE_AFTER_MILLIS = TimeUnit.DAYS.toMillis(14)

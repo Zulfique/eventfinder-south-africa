@@ -144,7 +144,6 @@
     <string name="latitude">Latitude</string>
     <string name="longitude">Longitude</string>
     <string name="privacy">Privacy</string>
-    <string name="public_event">Public</string>
     <string name="private_event">Private</string>
     <string name="publish">Publish</string>
     <string name="back">Back</string>

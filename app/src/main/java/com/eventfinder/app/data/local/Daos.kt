@@ -100,6 +100,12 @@ interface EventDao {
     @Query("SELECT id FROM events WHERE organizerId = :organizerId AND isCreatedByUser = 0")
     suspend fun findIdsByOrganizerId(organizerId: String): List<String>
 
+    @Query("SELECT * FROM source_sync WHERE sourceId = :sourceId LIMIT 1")
+    suspend fun getSourceSync(sourceId: String): SourceSyncEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertSourceSync(sync: SourceSyncEntity)
+
     @Query("DELETE FROM events WHERE id IN (:eventIds)")
     suspend fun deleteByIds(eventIds: List<String>)
 
@@ -194,4 +200,15 @@ interface RsvpDao {
 
     @Query("DELETE FROM rsvps WHERE userId = :userId")
     suspend fun deleteAllForUser(userId: String)
+}
+
+/** Data access for the persisted geocoding lookup cache. */
+@Dao
+interface GeocodeCacheDao {
+
+    @Query("SELECT * FROM geocode_cache WHERE locationKey = :locationKey LIMIT 1")
+    suspend fun findByKey(locationKey: String): GeocodeCacheEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsert(entry: GeocodeCacheEntity)
 }

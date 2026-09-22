@@ -107,6 +107,10 @@ class EventRepositoryTest {
             rows.values.filter { it.organizerId == organizerId && !it.isCreatedByUser }
                 .map { it.id }
 
+        override suspend fun getSourceSync(sourceId: String): com.eventfinder.app.data.local.SourceSyncEntity? = null
+
+        override suspend fun upsertSourceSync(sync: com.eventfinder.app.data.local.SourceSyncEntity) {}
+
         override suspend fun deleteOrphanFavorites(eventIds: List<String>) {}
         override suspend fun deleteOrphanRsvps(eventIds: List<String>) {}
         override suspend fun deleteByIds(eventIds: List<String>) {

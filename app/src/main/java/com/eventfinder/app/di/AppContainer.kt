@@ -70,7 +70,10 @@ class AppContainer(context: Context) {
     }
 
     private val eventGeocoder: EventGeocoder by lazy {
-        EventGeocoder(ApiClient.openMeteoGeocodingApi(appContext.cacheDir))
+        EventGeocoder(
+            geocodingApi = ApiClient.openMeteoGeocodingApi(appContext.cacheDir),
+            geocodeCacheDao = database.geocodeCacheDao()
+        )
     }
 
     private val httpClient by lazy {

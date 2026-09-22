@@ -2,6 +2,7 @@ package com.eventfinder.app.data.repository
 
 import com.eventfinder.app.data.local.EventDao
 import com.eventfinder.app.data.local.EventEntity
+import com.eventfinder.app.data.local.SourceSyncEntity
 import com.eventfinder.app.data.remote.model.RemoteEvent
 import com.eventfinder.app.data.sources.EventSource
 import kotlinx.coroutines.flow.Flow
@@ -12,11 +13,13 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.util.concurrent.TimeUnit
 
 class EventDiscoveryRepositoryTest {
 
     private class FakeEventDao : EventDao {
         val rows = linkedMapOf<String, EventEntity>()
+        val sourceSync = linkedMapOf<String, SourceSyncEntity>()
         private val flow = MutableStateFlow<List<EventEntity>>(emptyList())
 
         private fun emit() {
@@ -84,6 +87,12 @@ class EventDiscoveryRepositoryTest {
         override suspend fun findIdsByOrganizerId(organizerId: String): List<String> =
             rows.values.filter { it.organizerId == organizerId && !it.isCreatedByUser }
                 .map { it.id }
+
+        override suspend fun getSourceSync(sourceId: String): SourceSyncEntity? = sourceSync[sourceId]
+
+        override suspend fun upsertSourceSync(sync: SourceSyncEntity) {
+            sourceSync[sync.sourceId] = sync
+        }
 
         override suspend fun deleteOrphanFavorites(eventIds: List<String>) {}
         override suspend fun deleteOrphanRsvps(eventIds: List<String>) {}
@@ -875,5 +884,93 @@ class EventDiscoveryRepositoryTest {
         assertEquals(2, dao.rows.size)
         assertTrue(dao.rows.containsKey("remote:srcA:a-1"))
         assertTrue(dao.rows.containsKey("remote:srcB:b-1"))
+    }
+
+    private fun seededCachedEvent(id: String, organizerId: String = "external:fake-source"): EventEntity {
+        val now = System.currentTimeMillis()
+        return EventEntity(
+            id = id,
+            title = "Cached $id",
+            description = "Previously fetched",
+            category = "other",
+            startDate = now + 86_400_000L,
+            endDate = now + 172_800_000L,
+            venueName = "Venue",
+            address = "",
+            latitude = -33.0,
+            longitude = 18.0,
+            imageUrl = null,
+            isPublic = true,
+            organizerId = organizerId,
+            organizerName = "Fake Source",
+            attendeeCount = 0,
+            isCreatedByUser = false
+        )
+    }
+
+    @Test
+    fun `small non-empty feed is rejected while cache is fresh`() = runTest {
+        val dao = FakeEventDao()
+        (1..10).forEach { dao.rows["remote:fake-source:seed-$it"] = seededCachedEvent("remote:fake-source:seed-$it") }
+
+        val smallFeed = (1..3).map { futureEvent(sourceId = "small-$it", title = "Small $it") }
+        val source = FakeEventSource(eventsToReturn = smallFeed)
+        val repo = EventDiscoveryRepository(dao, listOf(source))
+
+        val result = repo.refresh()
+
+        assertEquals(0, result.inserted)
+        assertEquals(10, dao.rows.size)
+        assertTrue(dao.rows.containsKey("remote:fake-source:seed-1"))
+        assertFalse(dao.rows.containsKey("remote:fake-source:small-1"))
+    }
+
+    @Test
+    fun `small non-empty feed is accepted when cache is stale`() = runTest {
+        val dao = FakeEventDao()
+        (1..10).forEach { dao.rows["remote:fake-source:seed-$it"] = seededCachedEvent("remote:fake-source:seed-$it") }
+        val stale = System.currentTimeMillis() - STALE_REPLACE_AFTER_MILLIS - TimeUnit.DAYS.toMillis(1)
+        dao.sourceSync["fake-source"] = SourceSyncEntity(
+            sourceId = "fake-source",
+            lastSuccessAt = stale,
+            lastEmptyAt = 0L,
+            lastFailedAt = 0L
+        )
+
+        val smallFeed = (1..3).map { futureEvent(sourceId = "small-$it", title = "Small $it") }
+        val source = FakeEventSource(eventsToReturn = smallFeed)
+        val repo = EventDiscoveryRepository(dao, listOf(source))
+
+        val result = repo.refresh()
+
+        assertEquals(3, result.inserted)
+        assertEquals(3, dao.rows.size)
+        assertTrue(dao.rows.containsKey("remote:fake-source:small-1"))
+        assertFalse(dao.rows.containsKey("remote:fake-source:seed-1"))
+        assertTrue(
+            (dao.sourceSync["fake-source"]?.lastSuccessAt ?: 0L) >
+                System.currentTimeMillis() - 60_000L
+        )
+    }
+
+    @Test
+    fun `stale source returning empty removes its cached events`() = runTest {
+        val dao = FakeEventDao()
+        (1..5).forEach { dao.rows["remote:fake-source:seed-$it"] = seededCachedEvent("remote:fake-source:seed-$it") }
+        val stale = System.currentTimeMillis() - STALE_REMOVE_AFTER_MILLIS - TimeUnit.DAYS.toMillis(1)
+        dao.sourceSync["fake-source"] = SourceSyncEntity(
+            sourceId = "fake-source",
+            lastSuccessAt = stale,
+            lastEmptyAt = 0L,
+            lastFailedAt = 0L
+        )
+
+        val source = FakeEventSource(id = "fake-source", displayName = "Fake Source", eventsToReturn = emptyList())
+        val repo = EventDiscoveryRepository(dao, listOf(source))
+
+        val result = repo.refresh()
+
+        assertEquals(0, result.inserted)
+        assertTrue(dao.rows.isEmpty())
     }
 }

@@ -1,5 +1,7 @@
 package com.eventfinder.app.data.remote
 
+import com.eventfinder.app.data.local.GeocodeCacheDao
+import com.eventfinder.app.data.local.GeocodeCacheEntity
 import com.eventfinder.app.utils.AppLogger
 import java.util.concurrent.ConcurrentHashMap
 
@@ -8,13 +10,16 @@ import java.util.concurrent.ConcurrentHashMap
  * into latitude/longitude coordinates using the Open-Meteo geocoding API.
  *
  * Results are cached in memory so repeated lookups for the same location string
- * (common when multiple events share a venue city) are instant.
+ * (common when multiple events share a venue city) are instant, and persisted
+ * in Room (via [GeocodeCacheDao]) so the cache survives process restarts and a
+ * multi-event feed does not re-issue Open-Meteo requests for the same places.
  *
  * If geocoding fails or the location string is blank, null is returned and
  * the caller should handle the missing coordinates.
  */
 class EventGeocoder(
-    private val geocodingApi: OpenMeteoGeocodingApi
+    private val geocodingApi: OpenMeteoGeocodingApi,
+    private val geocodeCacheDao: GeocodeCacheDao? = null
 ) {
     private val tag = "EventGeocoder"
     private val cache = ConcurrentHashMap<String, Pair<Double, Double>>()
@@ -43,6 +48,12 @@ class EventGeocoder(
         cache[cacheKey]?.let { return it }
         if (failedQueries.contains(cacheKey)) return null
 
+        geocodeCacheDao?.findByKey(cacheKey)?.let { entry ->
+            val coords = entry.latitude to entry.longitude
+            cache[cacheKey] = coords
+            return coords
+        }
+
         return try {
             val response = geocodingApi.geocode(name = query, count = 5)
 
@@ -55,6 +66,14 @@ class EventGeocoder(
                 val coords = result.latitude to result.longitude
                 cache[cacheKey] = coords
                 failedQueries.remove(cacheKey)
+                geocodeCacheDao?.upsert(
+                    GeocodeCacheEntity(
+                        locationKey = cacheKey,
+                        latitude = coords.first,
+                        longitude = coords.second,
+                        createdAt = System.currentTimeMillis()
+                    )
+                )
                 AppLogger.d(tag, "Geocoded '$locationName' → ${coords.first}, ${coords.second}")
                 coords
             } else {

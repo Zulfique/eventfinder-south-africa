@@ -71,3 +71,31 @@ data class RsvpEntity(
     val status: String,
     val createdAt: Long
 )
+
+/**
+ * Per-source sync bookkeeping for the external event discovery pipeline.
+ * Allows the cache to tell "feed temporarily under-reporting" apart from
+ * "feed legitimately reduced its catalogue": a source whose events have not
+ * refreshed successfully within the staleness window gets replaced (or its
+ * stale events removed) on the next sync instead of being kept forever.
+ */
+@Entity(tableName = "source_sync")
+data class SourceSyncEntity(
+    @PrimaryKey val sourceId: String,
+    val lastSuccessAt: Long,
+    val lastEmptyAt: Long,
+    val lastFailedAt: Long
+)
+
+/**
+ * Persisted geocoding lookup cache, keyed by a normalized location string.
+ * Survives process restarts so a multi-event feed restarting the app does not
+ * re-issue Open-Meteo requests for locations it resolved before.
+ */
+@Entity(tableName = "geocode_cache")
+data class GeocodeCacheEntity(
+    @PrimaryKey val locationKey: String,
+    val latitude: Double,
+    val longitude: Double,
+    val createdAt: Long
+)

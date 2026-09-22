@@ -143,14 +143,44 @@ private val MIGRATION_5_6 = object : Migration(5, 6) {
     }
 }
 
+ /**
+ * Room database migration from v6 to v7.
+ *
+ * Adds two bookkeeping tables that are entirely additive and do not touch the
+ * existing events/favorites/rsvps/users schema:
+ *  - source_sync: per-source discovery timestamps (success/empty/failure) so
+ *    the event-feed cache can expire stale source data instead of keeping it
+ *    forever.
+ *  - geocode_cache: persisted geocoding lookups so feeds restarting the app do
+ *    not re-issue Open-Meteo requests for previously resolved locations.
+ */
+private val MIGRATION_6_7 = object : Migration(6, 7) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS source_sync " +
+                "(sourceId TEXT NOT NULL, lastSuccessAt INTEGER NOT NULL, " +
+                "lastEmptyAt INTEGER NOT NULL, lastFailedAt INTEGER NOT NULL, " +
+                "PRIMARY KEY(sourceId))"
+        )
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS geocode_cache " +
+                "(locationKey TEXT NOT NULL, latitude REAL NOT NULL, " +
+                "longitude REAL NOT NULL, createdAt INTEGER NOT NULL, " +
+                "PRIMARY KEY(locationKey))"
+        )
+    }
+}
+
  @Database(
     entities = [
         UserEntity::class,
         EventEntity::class,
         FavoriteEntity::class,
-        RsvpEntity::class
+        RsvpEntity::class,
+        SourceSyncEntity::class,
+        GeocodeCacheEntity::class
     ],
-    version = 6,
+    version = 7,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase(), DatabaseTransactionHelper {
@@ -159,6 +189,7 @@ abstract class AppDatabase : RoomDatabase(), DatabaseTransactionHelper {
     abstract fun eventDao(): EventDao
     abstract fun favoriteDao(): FavoriteDao
     abstract fun rsvpDao(): RsvpDao
+    abstract fun geocodeCacheDao(): GeocodeCacheDao
 
     @Transaction
     override suspend fun setFavoriteAtomically(userId: String, eventId: String, favorite: Boolean) {
@@ -212,7 +243,7 @@ abstract class AppDatabase : RoomDatabase(), DatabaseTransactionHelper {
                 AppDatabase::class.java,
                 DB_NAME
             )
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
                 .build()
     }
 }
