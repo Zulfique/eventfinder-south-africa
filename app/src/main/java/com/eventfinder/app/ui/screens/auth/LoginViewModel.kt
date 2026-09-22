@@ -125,6 +125,31 @@ class LoginViewModel(
             viewModelScope.launch { _messages.emit(UiMessage.Resource(R.string.passwords_mismatch)) }
             return
         }
+        if (!com.eventfinder.app.utils.EmailValidator.isValid(email)) {
+            viewModelScope.launch {
+                _uiState.update { it.copy(emailError = R.string.invalid_email) }
+                _messages.emit(UiMessage.Resource(R.string.invalid_email))
+            }
+            return
+        }
+        // Surface password-policy failures before hitting the repository so the
+        // dialog gives actionable feedback (the repository only returns a generic
+        // "weak_password" string that was previously swallowed as reset_failed).
+        when (val validation = com.eventfinder.app.utils.PasswordValidator.validate(newPassword)) {
+            is com.eventfinder.app.utils.ValidationResult.Invalid -> {
+                val key = validation.messages.firstOrNull() ?: "weak_password"
+                val resId = when (key) {
+                    "password_too_short" -> R.string.password_too_short
+                    "password_no_upper" -> R.string.password_no_upper
+                    "password_no_digit" -> R.string.password_no_digit
+                    "password_no_special" -> R.string.password_no_special
+                    else -> R.string.weak_password
+                }
+                viewModelScope.launch { _messages.emit(UiMessage.Resource(resId)) }
+                return
+            }
+            else -> Unit
+        }
         viewModelScope.launch {
             authRepository.resetPassword(email, newPassword)
                 .onSuccess {

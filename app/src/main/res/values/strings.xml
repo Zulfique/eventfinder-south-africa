@@ -215,6 +215,7 @@
     <string name="data_management">Data</string>
     <string name="clear_cache">Clear local cache</string>
     <string name="cache_cleared">Cache cleared</string>
+    <string name="cache_clear_blocked">Cache not cleared — you have %1$d active RSVP(s). Decline them first.</string>
     <string name="about">About</string>
     <string name="app_version">Version %1$s</string>
     <string name="privacy_policy">Privacy policy</string>

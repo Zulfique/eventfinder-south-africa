@@ -77,7 +77,11 @@ class HomeViewModel(
     private val radiusEnabledFlow = MutableStateFlow(false)
     private val locationFlow = MutableStateFlow<Pair<Double, Double>?>(null)
 
-    private data class Combined(val events: List<Event>, val rsvps: Map<String, RsvpStatus>)
+    private data class Combined(
+        val events: List<Event>,
+        val rsvps: Map<String, RsvpStatus>,
+        val favoriteIds: Set<String>
+    )
 
     private data class Controls(
         val query: String,
@@ -109,9 +113,10 @@ class HomeViewModel(
 
         val combinedFlow = combine(
             eventRepository.observeAllEvents(),
-            eventRepository.observeRsvpStatuses()
-        ) { events, rsvps ->
-            Combined(events, rsvps)
+            eventRepository.observeRsvpStatuses(),
+            eventRepository.observeFavoriteIds()
+        ) { events, rsvps, favoriteIds ->
+            Combined(events, rsvps, favoriteIds)
         }
 
         val textControlsFlow = combine(queryFlow, categoryFlow, sortFlow) { query, category, sort ->
@@ -187,7 +192,7 @@ class HomeViewModel(
             radiusKm = if (c.radiusEnabled) c.radiusKm else 0
         )
         val sorted = EventFilterer.sort(filtered, c.sort, userLat, userLng)
-        return EventFilterer.attachDistances(sorted, userLat, userLng)
+        return EventFilterer.attachDistances(sorted, userLat, userLng, combined.favoriteIds)
             .map { it.copy(rsvpStatus = combined.rsvps[it.event.id]) }
     }
 
@@ -215,6 +220,11 @@ class HomeViewModel(
     fun onToggleRadiusFilter(enabled: Boolean) {
         radiusEnabledFlow.value = enabled
         _uiState.value = _uiState.value.copy(radiusFilterEnabled = enabled)
+        if (enabled) {
+            // Remember the radius the user settled on so the default is
+            // restored next session (previously the value silently reset).
+            viewModelScope.launch { preferences.setDefaultRadiusKm(radiusFlow.value) }
+        }
     }
 
     fun onToggleMapView() {

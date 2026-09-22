@@ -22,10 +22,11 @@ class FavoritesViewModel(
 
     val uiState = combine(
         eventRepository.observeFavoriteEvents().onStart { emit(emptyList()) },
-        eventRepository.observeRsvpStatuses()
-    ) { favorites, rsvps ->
+        eventRepository.observeRsvpStatuses(),
+        eventRepository.observeFavoriteIds()
+    ) { favorites, rsvps, favoriteIds ->
         val sorted = favorites.sortedBy { it.startDate }
-        EventFilterer.attachDistances(sorted, null, null).map { view ->
+        EventFilterer.attachDistances(sorted, null, null, favoriteIds).map { view ->
             view.copy(rsvpStatus = rsvps[view.event.id])
         }
     }.stateIn(

@@ -69,17 +69,25 @@ object EventFilterer {
         }
     }
 
-    /** Enriches a filtered list with per-event distance in km. */
+    /**
+     * Enriches a filtered list with per-event distance in km and the user's
+     * favourite state so every list/card can render the filled heart.
+     */
     fun attachDistances(
         events: List<Event>,
         userLat: Double?,
-        userLng: Double?
+        userLng: Double?,
+        favoriteIds: Set<String> = emptySet()
     ): List<EventView> = events.map { event ->
         val distance = if (userLat != null && userLng != null &&
             event.latitude != null && event.longitude != null
         ) {
             DistanceCalculator.between(userLat, userLng, event.latitude, event.longitude)
         } else null
-        EventView(event, distanceKm = distance)
+        EventView(
+            event = event,
+            distanceKm = distance,
+            isFavorite = event.id in favoriteIds
+        )
     }
 }

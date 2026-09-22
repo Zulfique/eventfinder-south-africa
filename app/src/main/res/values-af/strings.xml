@@ -215,6 +215,7 @@
     <string name="data_management">Data</string>
     <string name="clear_cache">Vee plaaslike kas uit</string>
     <string name="cache_cleared">Kas uitgevee</string>
+    <string name="cache_clear_blocked">Kas nie uitgevee nie — jy het %1$d aktiewe RSVP(s). Sien hulle eers af.</string>
     <string name="about">Oor</string>
     <string name="app_version">Weergawe %1$s</string>
     <string name="privacy_policy">Privaatheidsbeleid</string>

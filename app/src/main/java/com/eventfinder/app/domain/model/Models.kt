@@ -45,7 +45,9 @@ data class Event(
 data class EventView(
     val event: Event,
     val distanceKm: Double? = null,
-    val rsvpStatus: RsvpStatus? = null
+    val rsvpStatus: RsvpStatus? = null,
+    /** Filled in by the presentation layer from the per-user favourites table. */
+    val isFavorite: Boolean = false
 )
 
 /** Registered EventFinder user. */

@@ -154,7 +154,9 @@ class LoginViewModelTest {
         advanceUntilIdle()
         job.cancel()
 
-        assertTrue(messages.any { it == UiMessage.Resource(R.string.weak_password) })
+        // The ViewModel now surfaces the specific policy failure client-side
+        // instead of the repository's generic weak_password error.
+        assertTrue(messages.any { it == UiMessage.Resource(R.string.password_too_short) })
         assertFalse(viewModel.uiState.value.passwordResetComplete)
     }
 

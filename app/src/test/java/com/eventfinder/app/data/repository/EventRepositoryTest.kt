@@ -527,7 +527,7 @@ class EventRepositoryTest {
         val target = repo.observeAllEvents().first().first().id
         repo.setRsvp(target, RsvpStatus.ATTENDING)
 
-        repo.clearLocalCache()
+        assertEquals(1, repo.clearLocalCache())
 
         assertEquals(SampleEventsProvider.johannesburgAndCapeTown().size, dao.count())
         assertTrue(rsvps.attendingCount() > 0)
@@ -554,7 +554,7 @@ class EventRepositoryTest {
             )
         )
 
-        repo.clearLocalCache()
+        assertEquals(0, repo.clearLocalCache())
 
         val all = repo.observeAllEvents().first()
         assertTrue(all.isNotEmpty())

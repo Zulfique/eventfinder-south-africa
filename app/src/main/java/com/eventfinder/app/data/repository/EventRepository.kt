@@ -53,7 +53,12 @@ interface EventRepository {
     suspend fun updateEvent(eventId: String, draft: NewEventDraft): Result<Unit>
     suspend fun deleteEvent(eventId: String): Result<Unit>
     suspend fun getEvent(eventId: String): Event?
-    suspend fun clearLocalCache()
+
+    /**
+     * Clears non-user-created events and reseeds the sample catalogue.
+     * Returns the number of active RSVPs that blocked the clear (0 = cleared).
+     */
+    suspend fun clearLocalCache(): Int
 }
 
 class EventRepositoryImpl(
@@ -257,18 +262,19 @@ override suspend fun ensureSeeded() {
     override suspend fun getEvent(eventId: String): Event? =
         eventDao.findById(eventId)?.toDomain()
 
-    override suspend fun clearLocalCache() {
+    override suspend fun clearLocalCache(): Int {
         val userId = preferences.sessionUserId.first()
 
         val activeRsvps = userId?.let { rsvpDao.attendingCountForUser(it) } ?: 0
         if (activeRsvps > 0) {
             AppLogger.w(tag, "Skipping cache clear because user has active RSVPs")
-            return
+            return activeRsvps
         }
 
         eventDao.clearNonUserCreatedAtomically()
         ensureSeeded()
         AppLogger.i(tag, "External/local catalogue cache cleared and seed data restored")
+        return 0
     }
 
     private fun Event.toEntity(isCreatedByUser: Boolean): EventEntity =

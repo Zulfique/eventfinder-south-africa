@@ -75,6 +75,18 @@ import com.eventfinder.app.utils.AppLogger
 import com.eventfinder.app.utils.LocationUtils
 import org.osmdroid.views.MapView
 
+/**
+ * Nation-wide default map centre used until the user's location is known.
+ * Cape Town (loc. en) or Johannesburg (loc. af) — a better whole-country
+ * guess than pinning one city regardless of the device language.
+ */
+internal fun defaultSouthAfricaCenter(context: Context): Pair<Double, Double> =
+    if (context.resources.configuration.locales[0].language == "af") {
+        -26.2041 to 28.0473 // Johannesburg
+    } else {
+        -33.9249 to 18.4241 // Cape Town
+    }
+
 private fun hasLocationPermission(context: Context): Boolean {
     return ContextCompat.checkSelfPermission(
         context,
@@ -250,9 +262,11 @@ fun HomeScreen(
                     LoadingView(stringResource(R.string.loading_events))
                 } else if (state.isMapView) {
                     Box(Modifier.fillMaxSize()) {
+                        val defaultCenter = defaultSouthAfricaCenter(context)
                         EventMap(
                             events = state.events.map { it.event },
-                            center = (state.userLat ?: -26.2041) to (state.userLng ?: 28.0473),
+                            center = (state.userLat ?: defaultCenter.first) to
+                                (state.userLng ?: defaultCenter.second),
                             userLocation = userLocation,
                             onEventClick = onEventClick,
                             onMapViewCreated = { mapViewRef = it },

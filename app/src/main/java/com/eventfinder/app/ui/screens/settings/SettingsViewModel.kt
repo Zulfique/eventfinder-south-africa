@@ -118,8 +118,14 @@ class SettingsViewModel(
     /** Wipes the local event cache and reseeds the curated sample set. */
     fun clearCache() {
         viewModelScope.launch {
-            eventRepository.clearLocalCache()
-            _messages.emit(UiMessage.Resource(R.string.cache_cleared))
+            val blockedBy = eventRepository.clearLocalCache()
+            _messages.emit(
+                if (blockedBy > 0) {
+                    UiMessage.Resource(R.string.cache_clear_blocked, listOf(blockedBy))
+                } else {
+                    UiMessage.Resource(R.string.cache_cleared)
+                }
+            )
         }
     }
 

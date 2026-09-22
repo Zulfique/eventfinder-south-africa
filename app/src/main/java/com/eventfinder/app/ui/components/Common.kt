@@ -260,11 +260,11 @@ fun EventCard(
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
-                        if (event.isFavorite) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
+                        if (view.isFavorite) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
                         contentDescription = stringResource(
-                            if (event.isFavorite) R.string.favorite_remove else R.string.favorite_add
+                            if (view.isFavorite) R.string.favorite_remove else R.string.favorite_add
                         ),
-                        tint = if (event.isFavorite) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
+                        tint = if (view.isFavorite) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }

@@ -68,8 +68,9 @@ class EventDetailViewModel(
                             loading = false,
                             notFound = false,
                             eventView = EventView(
-                                event = event.copy(isFavorite = favoriteIds.contains(event.id)),
-                                rsvpStatus = rsvps[event.id]
+                                event = event,
+                                rsvpStatus = rsvps[event.id],
+                                isFavorite = favoriteIds.contains(event.id)
                             )
                         )
                     }

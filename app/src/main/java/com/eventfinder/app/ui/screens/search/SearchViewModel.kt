@@ -41,8 +41,9 @@ class SearchViewModel(
         eventRepository.observeAllEvents(),
         queryFlow,
         queryFlow.debounce(250),
-        preferences.recentSearches
-    ) { events, immediateQuery, searchQuery, recents ->
+        preferences.recentSearches,
+        eventRepository.observeFavoriteIds()
+    ) { events, immediateQuery, searchQuery, recents, favoriteIds ->
         val trimmed = searchQuery.trim()
         val now = System.currentTimeMillis()
         val futureEvents = events.filter { it.endDate > now }
@@ -58,7 +59,7 @@ class SearchViewModel(
         SearchUiState(
             // Display the exact text the user typed; the debounced copy drives results.
             query = immediateQuery,
-            results = EventFilterer.attachDistances(sorted, null, null),
+            results = EventFilterer.attachDistances(sorted, null, null, favoriteIds),
             recentSearches = recents
         )
     }.stateIn(

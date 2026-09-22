@@ -163,13 +163,13 @@ fun EventDetailScreen(
                                         .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.9f))
                                 ) {
                                     Icon(
-                                        if (event.isFavorite) Icons.Outlined.Favorite
+                                        if (view.isFavorite) Icons.Outlined.Favorite
                                         else Icons.Outlined.FavoriteBorder,
                                         contentDescription = stringResource(
-                                            if (event.isFavorite) R.string.favorite_remove
+                                            if (view.isFavorite) R.string.favorite_remove
                                             else R.string.favorite_add
                                         ),
-                                        tint = if (event.isFavorite) MaterialTheme.colorScheme.error
+                                        tint = if (view.isFavorite) MaterialTheme.colorScheme.error
                                         else MaterialTheme.colorScheme.onSurface
                                     )
                                 }

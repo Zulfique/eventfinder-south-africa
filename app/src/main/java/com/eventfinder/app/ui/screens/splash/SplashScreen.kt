@@ -24,19 +24,24 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.eventfinder.app.R
+import com.eventfinder.app.di.AppContainer
 import com.eventfinder.app.utils.AppLogger
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 
 /**
  * Screen 1 (Splash) from the design. Displays branding for a moment, resolves the
  * persisted auth state and hands routing back to the NavHost.
  */
 @Composable
-fun SplashScreen(onFinished: (loggedIn: Boolean) -> Unit) {
+fun SplashScreen(
+    container: AppContainer,
+    onFinished: (loggedIn: Boolean) -> Unit
+) {
     LaunchedEffect(Unit) {
-        AppLogger.i("SplashScreen", "No-account mode: skipping auth check")
+        AppLogger.i("SplashScreen", "Resolving persisted session")
         delay(1400)
-        onFinished(true)
+        onFinished(container.preferences.sessionUserId.first() != null)
     }
 
     Box(

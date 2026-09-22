@@ -103,11 +103,14 @@ fun EventFinderNavHost(
     NavHost(navController = navController, startDestination = AppDestinations.SPLASH) {
 
         composable(AppDestinations.SPLASH) {
-            SplashScreen(onFinished = { loggedIn ->
+            SplashScreen(
+                container = container,
+                onFinished = { loggedIn ->
                 navController.navigate(if (loggedIn) AppDestinations.MAIN else AppDestinations.LOGIN) {
                     popUpTo(AppDestinations.SPLASH) { inclusive = true }
                 }
-            })
+            }
+            )
         }
 
         composable(AppDestinations.LOGIN) {

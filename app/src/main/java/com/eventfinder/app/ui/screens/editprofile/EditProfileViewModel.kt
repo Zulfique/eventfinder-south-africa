@@ -58,7 +58,10 @@ class EditProfileViewModel(
     fun validate(): Boolean {
         val state = _uiState.value
         val nameError = if (state.fullName.isBlank()) R.string.name_required else null
-        val emailError = if (!EmailValidator.isValid(state.email)) R.string.invalid_email else null
+        // Guest sessions have no email by design (see AuthRepository.continueAsGuest),
+        // so the email field is not enforced for them.
+        val isGuest = state.email.isBlank()
+        val emailError = if (!isGuest && !EmailValidator.isValid(state.email)) R.string.invalid_email else null
         _uiState.update { it.copy(nameError = nameError, emailError = emailError) }
         return nameError == null && emailError == null
     }
@@ -72,7 +75,14 @@ class EditProfileViewModel(
             _uiState.update { it.copy(saving = false) }
             result.fold(
                 onSuccess = { _messages.emit(UiMessage.Resource(R.string.profile_updated)); onSaved() },
-                onFailure = { _messages.emit(UiMessage.Resource(R.string.save_failed)) }
+                onFailure = { throwable ->
+                    _messages.emit(
+                        when (throwable.message) {
+                            "email_in_use" -> UiMessage.Resource(R.string.email_in_use)
+                            else -> UiMessage.Resource(R.string.save_failed)
+                        }
+                    )
+                }
             )
         }
     }
