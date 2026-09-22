@@ -57,10 +57,13 @@ class EventGeocoder(
         return try {
             val response = geocodingApi.geocode(name = query, count = 5)
 
+            // Only accept results that are explicitly South African. Without this
+            // guard a query for "George" could silently resolve to a non-South
+            // African location, placing an event in the wrong country.
             val result = response.results?.firstOrNull { res ->
-                val country = res.countryCode?.lowercase()
-                country == "za" || country == "south africa"
-            } ?: response.results?.firstOrNull()
+                res.countryCode?.equals("ZA", ignoreCase = true) == true ||
+                    res.country?.equals("South Africa", ignoreCase = true) == true
+            }
 
             if (result?.latitude != null && result.longitude != null) {
                 val coords = result.latitude to result.longitude
@@ -78,7 +81,7 @@ class EventGeocoder(
                 coords
             } else {
                 failedQueries.add(cacheKey)
-                AppLogger.d(tag, "No geocoding result for '$locationName'")
+                AppLogger.d(tag, "No South African geocoding result for '$locationName'")
                 null
             }
         } catch (e: Exception) {

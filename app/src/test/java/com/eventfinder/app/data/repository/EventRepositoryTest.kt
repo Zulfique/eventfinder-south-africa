@@ -113,6 +113,8 @@ class EventRepositoryTest {
 
         override suspend fun deleteOrphanFavorites(eventIds: List<String>) {}
         override suspend fun deleteOrphanRsvps(eventIds: List<String>) {}
+        override suspend fun findFavoriteEventIds(eventIds: List<String>): List<String> = emptyList()
+        override suspend fun findRsvpEventIds(eventIds: List<String>): List<String> = emptyList()
         override suspend fun deleteByIds(eventIds: List<String>) {
             eventIds.forEach { rows.remove(it) }
             emit()

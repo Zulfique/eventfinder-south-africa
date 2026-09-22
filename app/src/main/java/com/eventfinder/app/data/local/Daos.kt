@@ -130,15 +130,27 @@ interface EventDao {
         val staleIds = existingIds - incomingIds
 
         if (staleIds.isNotEmpty()) {
-            deleteOrphanFavorites(staleIds.toList())
-            deleteOrphanRsvps(staleIds.toList())
-            deleteByIds(staleIds.toList())
+            // Preserve events the user cares about (favourited or RSVP'd) even
+            // when they temporarily disappear from the feed. A feed outage or
+            // truncation must not silently destroy local favourites/RSVPs.
+            val protectedIds = (findFavoriteEventIds(staleIds.toList()) +
+                findRsvpEventIds(staleIds.toList())).toSet()
+            val deletableIds = staleIds - protectedIds
+            if (deletableIds.isNotEmpty()) {
+                deleteByIds(deletableIds.toList())
+            }
         }
 
         if (events.isNotEmpty()) {
             upsertAll(events)
         }
     }
+
+    @Query("SELECT eventId FROM favorites WHERE eventId IN (:eventIds)")
+    suspend fun findFavoriteEventIds(eventIds: List<String>): List<String>
+
+    @Query("SELECT eventId FROM rsvps WHERE eventId IN (:eventIds)")
+    suspend fun findRsvpEventIds(eventIds: List<String>): List<String>
 
     @Query("DELETE FROM favorites WHERE eventId IN (:eventIds)")
     suspend fun deleteOrphanFavorites(eventIds: List<String>)

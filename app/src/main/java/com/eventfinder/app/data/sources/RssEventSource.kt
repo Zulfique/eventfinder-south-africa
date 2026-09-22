@@ -19,8 +19,10 @@ import java.util.TimeZone
  * Only creates events when actual event-specific date fields are present:
  * - event:start / event:end (RSS events module)
  * - startDate / endDate (schema.org)
+ * - start_time / end_time, event_date / event_end_date, eventStartDate / eventEndDate
+ * - dc:date / date and when (xCal style) as the event start
  * - itunes:start / itunes:end
- * - Published dates are NOT used as event start times.
+ * - Published dates (pubDate / published / updated) are NOT used as event times.
  *
  * Supports:
  * - Standard RSS 2.0 with <item> elements
@@ -169,21 +171,20 @@ class RssEventSource(
                             localName == "long" && ns?.contains("geo") == true -> {
                                 eventLng = parser.nextText().trim().toDoubleOrNull()
                             }
-                            localName == "start" && (ns?.contains("event") == true || ns?.contains("ev") == true) -> {
-                                inEventStart = true
-                            }
-                            localName == "end" && (ns?.contains("event") == true || ns?.contains("ev") == true) -> {
-                                inEventEnd = true
-                            }
+                            localName == "start" -> inEventStart = true
+                            localName == "end" -> inEventEnd = true
                             localName == "location" && (ns?.contains("event") == true || ns?.contains("ev") == true) -> {
                                 inEventLocation = true
                             }
-                            localName == "startDate" || localName == "eventStartDate" -> {
+                            localName == "startDate" || localName == "eventStartDate" ||
+                                localName == "start_time" || localName == "event_date" ->
                                 inEventStart = true
-                            }
-                            localName == "endDate" || localName == "eventEndDate" -> {
+                            localName == "endDate" || localName == "eventEndDate" ||
+                                localName == "end_time" ->
                                 inEventEnd = true
-                            }
+                            // xCal-style <when> and Dublin Core <dc:date> (and
+                            // plain <date>) are explicitly event-oriented dates.
+                            localName == "when" || localName == "date" -> inEventStart = true
                             localName == "eventVenue" -> {
                                 inEventLocation = true
                             }
@@ -250,8 +251,8 @@ class RssEventSource(
                         "pubDate", "published", "updated" -> inPubDate = false
                         "guid", "id" -> inGuid = false
                         "category" -> inCategory = false
-                        "start", "startDate", "eventStartDate" -> inEventStart = false
-                        "end", "endDate", "eventEndDate" -> inEventEnd = false
+                        "start", "startDate", "eventStartDate", "start_time", "event_date", "when", "date" -> inEventStart = false
+                        "end", "endDate", "eventEndDate", "end_time" -> inEventEnd = false
                         "location", "eventVenue" -> inEventLocation = false
                     }
                 }

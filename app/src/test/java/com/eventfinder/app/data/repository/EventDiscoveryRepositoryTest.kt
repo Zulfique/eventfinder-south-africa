@@ -20,6 +20,8 @@ class EventDiscoveryRepositoryTest {
     private class FakeEventDao : EventDao {
         val rows = linkedMapOf<String, EventEntity>()
         val sourceSync = linkedMapOf<String, SourceSyncEntity>()
+        val favoriteEventIds = mutableSetOf<String>()
+        val rsvpEventIds = mutableSetOf<String>()
         private val flow = MutableStateFlow<List<EventEntity>>(emptyList())
 
         private fun emit() {
@@ -114,14 +116,22 @@ class EventDiscoveryRepositoryTest {
                 .map { it.id }.toSet()
             val incomingIds = events.map { it.id }.toSet()
             val staleIds = existingIds - incomingIds
+            val protectedIds = staleIds.intersect(favoriteEventIds + rsvpEventIds)
+            val deletableIds = staleIds - protectedIds
 
-            if (staleIds.isNotEmpty()) {
-                staleIds.forEach { rows.remove(it) }
+            if (deletableIds.isNotEmpty()) {
+                deletableIds.forEach { rows.remove(it) }
             }
             if (events.isNotEmpty()) {
                 upsertAll(events)
             }
         }
+
+        override suspend fun findFavoriteEventIds(eventIds: List<String>): List<String> =
+            eventIds.filter { it in favoriteEventIds }
+
+        override suspend fun findRsvpEventIds(eventIds: List<String>): List<String> =
+            eventIds.filter { it in rsvpEventIds }
     }
 
     private class FakeEventSource(
@@ -972,5 +982,35 @@ class EventDiscoveryRepositoryTest {
 
         assertEquals(0, result.inserted)
         assertTrue(dao.rows.isEmpty())
+    }
+
+    @Test
+    fun `favourited and rsvp events survive source prune`() = runTest {
+        val dao = FakeEventDao()
+        (1..10).forEach {
+            dao.rows["remote:fake-source:seed-$it"] = seededCachedEvent("remote:fake-source:seed-$it")
+        }
+        dao.favoriteEventIds.add("remote:fake-source:seed-1")
+        dao.rsvpEventIds.add("remote:fake-source:seed-2")
+        val stale = System.currentTimeMillis() - STALE_REPLACE_AFTER_MILLIS - TimeUnit.DAYS.toMillis(1)
+        dao.sourceSync["fake-source"] = SourceSyncEntity(
+            sourceId = "fake-source",
+            lastSuccessAt = stale,
+            lastEmptyAt = 0L,
+            lastFailedAt = 0L
+        )
+
+        val smallFeed = (1..3).map { futureEvent(sourceId = "small-$it", title = "Small $it") }
+        val source = FakeEventSource(eventsToReturn = smallFeed)
+        val repo = EventDiscoveryRepository(dao, listOf(source))
+
+        val result = repo.refresh()
+
+        assertEquals(3, result.inserted)
+        assertEquals(5, dao.rows.size)
+        assertTrue(dao.rows.containsKey("remote:fake-source:seed-1"))
+        assertTrue(dao.rows.containsKey("remote:fake-source:seed-2"))
+        assertFalse(dao.rows.containsKey("remote:fake-source:seed-3"))
+        assertTrue(dao.rows.containsKey("remote:fake-source:small-1"))
     }
 }

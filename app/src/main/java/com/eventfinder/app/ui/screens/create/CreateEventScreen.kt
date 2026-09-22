@@ -71,6 +71,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import com.eventfinder.app.R
 import com.eventfinder.app.di.AppContainer
+import com.eventfinder.app.data.repository.IMAGE_REMOVED
 import com.eventfinder.app.domain.model.EventCategory
 import com.eventfinder.app.ui.components.categoryLabel
 import com.eventfinder.app.ui.components.resolve
@@ -256,7 +257,7 @@ private fun StepDetails(viewModel: CreateEventViewModel, onPickImage: () -> Unit
     val titleError = state.showErrors && state.title.isBlank()
     val descriptionError = state.showErrors && state.description.length < MIN_DESCRIPTION_LENGTH
 
-    if (state.imageUrl != null) {
+    if (state.imageUrl != null && state.imageUrl != IMAGE_REMOVED) {
         AsyncImage(
             model = state.imageUrl,
             contentDescription = stringResource(R.string.event_image),
@@ -446,7 +447,7 @@ private fun StepDateVenue(
 private fun StepReview(state: CreateEventUiState) {
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            state.imageUrl?.let { image ->
+            state.imageUrl?.takeIf { it != IMAGE_REMOVED }?.let { image ->
                 AsyncImage(
                     model = image,
                     contentDescription = stringResource(R.string.event_image),
