@@ -30,8 +30,8 @@ data class NewEventDraft(
     val endDate: Long,
     val venueName: String,
     val address: String,
-    val latitude: Double,
-    val longitude: Double,
+    val latitude: Double?,
+    val longitude: Double?,
     val isPublic: Boolean,
     /** null = unchanged (edit mode), IMAGE_REMOVED = user removed image, otherwise = new image URL. */
     val imageUrl: String? = null

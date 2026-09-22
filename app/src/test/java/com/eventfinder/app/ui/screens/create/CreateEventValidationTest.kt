@@ -43,8 +43,12 @@ class CreateEventValidationTest {
     @Test
     fun `step one requires a meaningful description`() {
         assertEquals(
-            ValidationError.DESCRIPTION_REQUIRED,
+            ValidationError.DESCRIPTION_TOO_SHORT,
             validateCreateStep(details(description = "too short"))
+        )
+        assertEquals(
+            ValidationError.DESCRIPTION_REQUIRED,
+            validateCreateStep(details(description = " "))
         )
     }
 
@@ -84,11 +88,8 @@ class CreateEventValidationTest {
     }
 
     @Test
-    fun `step two rejects blank coordinates`() {
-        assertEquals(
-            ValidationError.INVALID_COORDINATES,
-            validateCreateStep(dateVenue(latitude = "", longitude = ""))
-        )
+    fun `step two allows blank coordinates`() {
+        assertNull(validateCreateStep(dateVenue(latitude = "", longitude = "")))
     }
 
     @Test
@@ -103,14 +104,14 @@ class CreateEventValidationTest {
     }
 
     @Test
-    fun `coordinate bounds are inclusive and blanks rejected`() {
-        assertFalse(isValidLatitude(""))
+    fun `coordinate bounds are inclusive and blanks allowed`() {
+        assertTrue(isValidLatitude(""))
         assertTrue(isValidLatitude("-90"))
         assertTrue(isValidLatitude("90"))
         assertFalse(isValidLatitude("90.1"))
         assertFalse(isValidLatitude("abc"))
 
-        assertFalse(isValidLongitude(""))
+        assertTrue(isValidLongitude(""))
         assertTrue(isValidLongitude("-180"))
         assertTrue(isValidLongitude("180"))
         assertFalse(isValidLongitude("180.5"))

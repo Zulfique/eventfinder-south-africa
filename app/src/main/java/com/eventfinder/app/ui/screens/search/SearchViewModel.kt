@@ -39,10 +39,11 @@ class SearchViewModel(
 
     val uiState = combine(
         eventRepository.observeAllEvents(),
+        queryFlow,
         queryFlow.debounce(250),
         preferences.recentSearches
-    ) { events, query, recents ->
-        val trimmed = query.trim()
+    ) { events, immediateQuery, searchQuery, recents ->
+        val trimmed = searchQuery.trim()
         val filtered = EventFilterer.filter(events, query = trimmed.ifBlank { null })
         val sorted = if (trimmed.isBlank()) {
             filtered.sortedByDescending { it.attendeeCount }
@@ -50,7 +51,8 @@ class SearchViewModel(
             filtered.sortedBy { it.startDate }
         }
         SearchUiState(
-            query = query,
+            // Display the exact text the user typed; the debounced copy drives results.
+            query = immediateQuery,
             results = EventFilterer.attachDistances(sorted, null, null),
             recentSearches = recents
         )

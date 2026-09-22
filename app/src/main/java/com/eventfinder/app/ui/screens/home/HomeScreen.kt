@@ -50,8 +50,10 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -105,6 +107,7 @@ fun HomeScreen(
     var userLocation by rememberSaveable { mutableStateOf<Location?>(null) }
     var mapViewRef by remember { mutableStateOf<MapView?>(null) }
     var locationPermissionGranted by remember { mutableStateOf(hasLocationPermission(context)) }
+    val scope = rememberCoroutineScope()
 
     // Location permission + one-time capture of the last-known position.
     val locationLauncher = rememberLauncherForActivityResult(
@@ -259,8 +262,42 @@ fun HomeScreen(
                         // Locate Me button
                         FloatingActionButton(
                             onClick = {
-                                val loc = userLocation ?: return@FloatingActionButton
-                                mapViewRef?.let { recenterMapOnUser(it, loc) }
+                                if (!locationPermissionGranted) {
+                                    locationLauncher.launch(
+                                        arrayOf(
+                                            Manifest.permission.ACCESS_FINE_LOCATION,
+                                            Manifest.permission.ACCESS_COARSE_LOCATION
+                                        )
+                                    )
+                                    return@FloatingActionButton
+                                }
+
+                                val known = userLocation
+                                if (known != null) {
+                                    mapViewRef?.let { recenterMapOnUser(it, known) }
+                                    return@FloatingActionButton
+                                }
+
+                                LocationUtils.requestCurrentLocation(
+                                    context = context,
+                                    onLocation = { lat, lng ->
+                                        viewModel.setUserLocation(lat, lng)
+                                        val fresh = Location("device").apply {
+                                            latitude = lat
+                                            longitude = lng
+                                        }
+                                        userLocation = fresh
+                                        mapViewRef?.let { recenterMapOnUser(it, fresh) }
+                                    },
+                                    onUnavailable = {
+                                        AppLogger.w("HomeScreen", "Locate me: location unavailable")
+                                        scope.launch {
+                                            snackbarHostState.showSnackbar(
+                                                context.getString(R.string.location_unavailable)
+                                            )
+                                        }
+                                    }
+                                )
                             },
                             modifier = Modifier
                                 .align(Alignment.BottomEnd)

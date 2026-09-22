@@ -8,6 +8,7 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import android.content.Context
 import android.net.Uri
 import com.eventfinder.app.R
+import com.eventfinder.app.data.repository.AuthRepository
 import com.eventfinder.app.data.repository.EventRepository
 import com.eventfinder.app.data.repository.IMAGE_REMOVED
 import com.eventfinder.app.data.repository.NewEventDraft
@@ -50,6 +51,7 @@ data class CreateEventUiState(
 enum class ValidationError {
     TITLE_REQUIRED,
     DESCRIPTION_REQUIRED,
+    DESCRIPTION_TOO_SHORT,
     DATE_REQUIRED,
     DATE_IN_PAST,
     VENUE_REQUIRED,
@@ -63,7 +65,8 @@ enum class ValidationError {
 internal fun validateCreateStep(state: CreateEventUiState): ValidationError? = when (state.step) {
     1 -> when {
         state.title.isBlank() -> ValidationError.TITLE_REQUIRED
-        state.description.length < MIN_DESCRIPTION_LENGTH -> ValidationError.DESCRIPTION_REQUIRED
+        state.description.isBlank() -> ValidationError.DESCRIPTION_REQUIRED
+        state.description.length < MIN_DESCRIPTION_LENGTH -> ValidationError.DESCRIPTION_TOO_SHORT
         else -> null
     }
     2 -> when {
@@ -82,7 +85,9 @@ internal fun isValidLatitude(raw: String): Boolean = isValidCoordinate(raw, -90.
 internal fun isValidLongitude(raw: String): Boolean = isValidCoordinate(raw, -180.0, 180.0)
 
 internal fun isValidCoordinate(raw: String, min: Double, max: Double): Boolean {
-    if (raw.isBlank()) return false
+    // Blank coordinates are allowed: the event is stored with null latitude/
+    // longitude (see the "leave the coordinates blank" hint on step 2).
+    if (raw.isBlank()) return true
     val value = raw.toDoubleOrNull() ?: return false
     return value in min..max
 }
@@ -96,6 +101,7 @@ internal const val MIN_DESCRIPTION_LENGTH = 20
  */
 class CreateEventViewModel(
     private val eventRepository: EventRepository,
+    private val authRepository: AuthRepository,
     private val eventId: String? = null
 ) : ViewModel() {
 
@@ -190,6 +196,7 @@ class CreateEventViewModel(
     private fun ValidationError.messageRes(): Int = when (this) {
         ValidationError.TITLE_REQUIRED -> R.string.title_required
         ValidationError.DESCRIPTION_REQUIRED -> R.string.description_required
+        ValidationError.DESCRIPTION_TOO_SHORT -> R.string.description_too_short
         ValidationError.DATE_REQUIRED -> R.string.date_required
         ValidationError.DATE_IN_PAST -> R.string.date_in_past
         ValidationError.VENUE_REQUIRED -> R.string.venue_required
@@ -203,7 +210,8 @@ class CreateEventViewModel(
 
         val step1Error = when {
             state.title.isBlank() -> ValidationError.TITLE_REQUIRED
-            state.description.length < MIN_DESCRIPTION_LENGTH -> ValidationError.DESCRIPTION_REQUIRED
+            state.description.isBlank() -> ValidationError.DESCRIPTION_REQUIRED
+            state.description.length < MIN_DESCRIPTION_LENGTH -> ValidationError.DESCRIPTION_TOO_SHORT
             else -> null
         }
         if (step1Error != null) {
@@ -226,14 +234,9 @@ class CreateEventViewModel(
 
         viewModelScope.launch {
             _uiState.update { it.copy(isSubmitting = true) }
-            val lat = state.latitude.toDoubleOrNull()
-                ?: return@launch _uiState.update { it.copy(isSubmitting = false) }.also {
-                    _messages.tryEmit(UiMessage.Resource(R.string.invalid_coordinates))
-                }
-            val lng = state.longitude.toDoubleOrNull()
-                ?: return@launch _uiState.update { it.copy(isSubmitting = false) }.also {
-                    _messages.tryEmit(UiMessage.Resource(R.string.invalid_coordinates))
-                }
+            // Blank or omitted coordinates are stored as null (see isValidCoordinate).
+            val lat = state.latitude.trim().toDoubleOrNull()
+            val lng = state.longitude.trim().toDoubleOrNull()
             val draft = NewEventDraft(
                 title = state.title.trim(),
                 description = state.description.trim(),
@@ -250,6 +253,9 @@ class CreateEventViewModel(
             val result: Result<*> = if (eventId != null) {
                 eventRepository.updateEvent(eventId, draft)
             } else {
+                // The app runs in no-account mode (splash skips auth), so a guest
+                // session must exist for the event to be stored with an organizer.
+                authRepository.continueAsGuest()
                 eventRepository.createEvent(draft)
             }
             _uiState.update { it.copy(isSubmitting = false) }
@@ -282,7 +288,9 @@ class CreateEventViewModel(
             container: AppContainer,
             eventId: String? = null
         ): ViewModelProvider.Factory = viewModelFactory {
-            initializer { CreateEventViewModel(container.eventRepository, eventId) }
+            initializer {
+                CreateEventViewModel(container.eventRepository, container.authRepository, eventId)
+            }
         }
     }
 }

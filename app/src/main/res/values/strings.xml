@@ -91,6 +91,7 @@
     <string name="continue_as_guest">Continue as Guest</string>
     <string name="radius_value">%1$d km</string>
     <string name="your_location">Your location</string>
+    <string name="location_unavailable">Unable to determine your location. Enable GPS and try again.</string>
 
     <!-- Event detail -->
     <string name="about_event">About this event</string>
@@ -152,6 +153,7 @@
     <string name="create_failed">Could not create event</string>
     <string name="title_required">Title is required</string>
     <string name="description_required">Description is required</string>
+    <string name="description_too_short">Description must be at least 20 characters</string>
     <string name="invalid_coordinates">Enter valid coordinates (lat -90..90, lng -180..180)</string>
     <string name="date_in_past">Date cannot be in the past</string>
     <string name="date_required">Please pick a date &amp; time</string>

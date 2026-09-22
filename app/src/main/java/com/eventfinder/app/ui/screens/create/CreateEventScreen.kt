@@ -296,12 +296,22 @@ private fun StepDetails(viewModel: CreateEventViewModel, onPickImage: () -> Unit
         minLines = 4,
         isError = descriptionError,
         supportingText = if (descriptionError) {
-            { Text(stringResource(R.string.description_required)) }
+            {
+                Text(
+                    stringResource(
+                        if (state.description.isBlank()) {
+                            R.string.description_required
+                        } else {
+                            R.string.description_too_short
+                        }
+                    )
+                )
+            }
         } else null,
         modifier = Modifier.fillMaxWidth()
     )
     Text(stringResource(R.string.category), style = MaterialTheme.typography.labelLarge)
-    EventCategory.entries.forEach { category ->
+    EventCategory.entries.filter { it != EventCategory.OTHER }.forEach { category ->
         Row(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier

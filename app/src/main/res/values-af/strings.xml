@@ -91,6 +91,7 @@
     <string name="continue_as_guest">Gaan voort as gas</string>
     <string name="radius_value">%1$d km</string>
     <string name="your_location">Jou ligging</string>
+    <string name="location_unavailable">Kan nie jou ligging bepaal nie. Skakel GPS aan en probeer weer.</string>
 
     <!-- Event detail -->
     <string name="about_event">Oor hierdie gebeurtenis</string>
@@ -152,6 +153,7 @@
     <string name="create_failed">Kon nie gebeurtenis skep nie</string>
     <string name="title_required">Titel is verpligtend</string>
     <string name="description_required">Beskrywing is verpligtend</string>
+    <string name="description_too_short">Beskrywing moet minstens 20 karakters wees</string>
     <string name="invalid_coordinates">Voer geldige koördinate in (breedte -90..90, lengte -180..180)</string>
     <string name="date_in_past">Datum kan nie in die verlede wees nie</string>
     <string name="date_required">Kies asseblief \'n datum &amp; tyd</string>
