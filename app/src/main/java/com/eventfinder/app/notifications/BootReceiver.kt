@@ -29,11 +29,8 @@ class BootReceiver : BroadcastReceiver() {
         val pendingResult = goAsync()
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                // Use the application's existing AppContainer instead of creating a second one.
-                // This avoids a second Room database instance ( Fix 7 ).
-                val appContext = context.applicationContext
-                val container: AppContainer = (appContext as? EventFinderApp)?.container
-                    ?: AppContainer(appContext)
+                val app = context.applicationContext as EventFinderApp
+                val container = app.container
 
                 val userId = container.preferences.sessionUserId.first()
 
@@ -49,7 +46,7 @@ class BootReceiver : BroadcastReceiver() {
                 }
 
                 ReminderHelper.restoreReminders(context, container.database.eventDao(), userId)
-            } catch (t: Exception) {
+            } catch (t: Throwable) {
                 AppLogger.e("BootReceiver", "Failed to reschedule reminders on boot", t)
             } finally {
                 pendingResult.finish()

@@ -132,18 +132,36 @@ class HomeViewModel(
 
         // Wire up new event / favourite updated alerts (FR-04)
         viewModelScope.launch {
-            val favoriteIds by eventRepository.observeFavoriteIds().collect()
-            // Store previous events as Event objects (extract from EventView)
-            val previousEvents = _previousEvents.value.map { it.event }
-            _previousEvents.value = _uiState.value.events.map { EventView(it.event, null) }
-            val now = System.currentTimeMillis()
-            val alerts = detect(previousEvents.associateBy { it.id }, _uiState.value.events.map { it.event }, favoriteIds, now)
-            if (!alerts.isEmpty) {
-                NotificationHelper.postEventAlerts(
-                    context = appContext,
-                    newEvents = alerts.newEvents,
-                    updatedFavorites = alerts.updatedFavorites
+            combine(
+                eventRepository.observeAllEvents(),
+                eventRepository.observeFavoriteIds()
+            ) { events, favoriteIds ->
+                events to favoriteIds
+            }.collect { (events, favoriteIds) ->
+
+                val previous = _previousEvents.value
+                    .map { it.event }
+                    .associateBy { it.id }
+
+
+                val alerts = detect(
+                    previous = previous,
+                    current = events,
+                    favoriteIds = favoriteIds,
+                    now = System.currentTimeMillis()
                 )
+
+
+                if (!alerts.isEmpty) {
+                    NotificationHelper.postEventAlerts(
+                        context = appContext,
+                        newEvents = alerts.newEvents,
+                        updatedFavorites = alerts.updatedFavorites
+                    )
+                }
+
+
+                _previousEvents.value = events.map { EventView(it) }
             }
         }
     }

@@ -111,16 +111,30 @@ class EventRepositoryImpl(
             }
         }
 
-    override suspend fun ensureSeeded() {
-        val count = eventDao.countNonUserCreated()
-        if (count == 0) {
-            val seed = SampleEventsProvider.johannesburgAndCapeTown()
-            eventDao.upsertAll(seed.map { it.toEntity(isCreatedByUser = false) })
-            AppLogger.i(tag, "Seeded ${seed.size} sample events into cache")
-        } else {
-            AppLogger.d(tag, "Non-user event catalogue already contains $count events")
-        }
+override suspend fun ensureSeeded() {
+    val now = System.currentTimeMillis()
+    val upcomingSamples = eventDao.countUpcomingSampleEvents(now)
+
+    if (upcomingSamples == 0) {
+        eventDao.deleteSampleEvents()
+
+        val seed = SampleEventsProvider.johannesburgAndCapeTown()
+
+        eventDao.upsertAll(
+            seed.map { it.toEntity(isCreatedByUser = false) }
+        )
+
+        AppLogger.i(
+            tag,
+            "Seeded ${seed.size} fresh sample events into cache"
+        )
+    } else {
+        AppLogger.d(
+            tag,
+            "Upcoming sample catalogue already contains $upcomingSamples events"
+        )
     }
+}
 
     override suspend fun toggleFavorite(eventId: String): Boolean {
         val userId = preferences.sessionUserId.first()
@@ -171,7 +185,7 @@ class EventRepositoryImpl(
             address = draft.address.trim(),
             latitude = draft.latitude,
             longitude = draft.longitude,
-            imageUrl = draft.imageUrl,
+            imageUrl = imageUrl,
             isPublic = draft.isPublic,
             organizerId = userId,
             organizerName = "You",

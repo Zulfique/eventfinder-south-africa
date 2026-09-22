@@ -63,8 +63,14 @@ interface EventDao {
     @Query("SELECT COUNT(*) FROM events")
     suspend fun count(): Int
 
-    @Query("SELECT COUNT(*) FROM events WHERE isCreatedByUser = 0")
-    suspend fun countNonUserCreated(): Int
+@Query("SELECT COUNT(*) FROM events WHERE isCreatedByUser = 0 AND endDate > :now")
+suspend fun countUpcomingSampleEvents(now: Long): Int
+
+@Query("DELETE FROM events WHERE isCreatedByUser = 0 AND id LIKE 'sample-%'")
+suspend fun deleteSampleEvents()
+
+@Query("SELECT COUNT(*) FROM events WHERE isCreatedByUser = 0")
+suspend fun countNonUserCreated(): Int
 
     @Query("SELECT * FROM events WHERE isCreatedByUser = 0")
     suspend fun getNonUserCreated(): List<EventEntity>

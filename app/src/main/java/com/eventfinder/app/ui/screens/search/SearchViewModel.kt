@@ -23,9 +23,7 @@ data class SearchUiState(
     val query: String = "",
     val results: List<EventView> = emptyList(),
     val recentSearches: List<String> = emptyList()
-) {
-    val showPastEvents: Boolean = false
-}
+)
 
 /**
  * Search (Screen 7): debounced live search across the local catalogue plus
@@ -48,7 +46,10 @@ class SearchViewModel(
         val trimmed = searchQuery.trim()
         val now = System.currentTimeMillis()
         val futureEvents = events.filter { it.endDate > now }
-        val filtered = EventFilterer.filter(events, query = trimmed.ifBlank { null })
+        val filtered = EventFilterer.filter(
+            futureEvents,
+            query = trimmed.ifBlank { null }
+        )
         val sorted = if (trimmed.isBlank()) {
             futureEvents.sortedByDescending { it.attendeeCount }
         } else {

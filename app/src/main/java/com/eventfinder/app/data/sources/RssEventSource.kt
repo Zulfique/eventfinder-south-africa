@@ -291,19 +291,30 @@ class RssEventSource(
     }
 
     private fun parseRssDate(raw: String): Long? {
-        val cleaned = raw.trim()
-        if (cleaned.isBlank()) return null
+    val cleaned = raw.trim()
+    if (cleaned.isBlank()) return null
 
-        return runCatching {
-            synchronized(dateFormats) {
-                for (fmt in dateFormats) {
-                    return fmt.parse(cleaned)?.time
-                }
+    synchronized(dateFormats) {
+        for (fmt in dateFormats) {
+            val parsed = runCatching {
+                fmt.parse(cleaned)?.time
+            }.getOrNull()
+
+            if (parsed != null) {
+                return parsed
             }
-        }.getOrNull().let { it } runCatching {
-            java.time.Instant.parse(cleaned).toEpochMilli()
-        }.getOrNull() runCatching {
-            java.time.OffsetDateTime.parse(cleaned).toInstant().toEpochMilli()
-        }.getOrNull()
+        }
     }
+
+    runCatching {
+        return java.time.Instant.parse(cleaned).toEpochMilli()
+    }
+
+    runCatching {
+        return java.time.OffsetDateTime.parse(cleaned)
+            .toInstant()
+            .toEpochMilli()
+    }
+
+    return null
 }

@@ -88,11 +88,13 @@ class AuthRepositoryImpl(
         }
 
     override val biometricEnrolled: Flow<Boolean>
-        get() = preferences.biometricUserId.map { userId ->
+        get() = preferences.biometricUserId.flatMapLatest { userId ->
             if (userId == null) {
-                false
+                flowOf(false)
             } else {
-                userDao.findById(userId)?.biometricEnabled == true
+                userDao.observeUser(userId).map { user ->
+                    user?.biometricEnabled == true
+                }
             }
         }
 
