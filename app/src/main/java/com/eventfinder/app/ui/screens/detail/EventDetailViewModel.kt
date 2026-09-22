@@ -150,11 +150,10 @@ class EventDetailViewModel(
                         _messages.emit(UiMessage.Resource(R.string.rsvp_updated))
                     }
                 }
-                RsvpStatus.DECLINED -> {
+                RsvpStatus.MAYBE, RsvpStatus.DECLINED -> {
                     NotificationHelper.cancelEventReminders(appContext, eventId)
                     _messages.emit(UiMessage.Resource(R.string.reminders_cancelled))
                 }
-                else -> _messages.emit(UiMessage.Resource(R.string.rsvp_updated))
             }
         }
     }

@@ -178,8 +178,8 @@ fun EventFinderNavHost(
                 container = container,
                 onBack = { navController.popBackStack() },
                 onLoggedOut = {
-                    navController.navigate(AppDestinations.MAIN) {
-                        popUpTo(AppDestinations.MAIN) { inclusive = true }
+                    navController.navigate(AppDestinations.LOGIN) {
+                        popUpTo(0) { inclusive = true }
                     }
                 }
             )
@@ -281,8 +281,8 @@ private fun MainScreen(container: AppContainer, navController: NavHostController
                     onEventClick = { navController.navigate(AppDestinations.eventDetail(it)) },
                     onLogin = { navController.navigate(AppDestinations.LOGIN) },
                     onLoggedOut = {
-                        navController.navigate(AppDestinations.MAIN) {
-                            popUpTo(AppDestinations.MAIN) { inclusive = true }
+                        navController.navigate(AppDestinations.LOGIN) {
+                            popUpTo(0) { inclusive = true }
                         }
                     }
                 )

@@ -163,16 +163,6 @@ class RssEventSource(
                                     imageUrl = href
                                 }
                             }
-                            localName == "content" && ns?.contains("media") == true -> {
-                                val href = parser.getAttributeValue(null, "url")
-                                    ?: parser.getAttributeValue(null, "href")
-                                if (href != null) imageUrl = href
-                            }
-                            localName == "thumbnail" && ns?.contains("media") == true -> {
-                                val href = parser.getAttributeValue(null, "url")
-                                    ?: parser.getAttributeValue(null, "href")
-                                if (href != null) imageUrl = href
-                            }
                             localName == "lat" && ns?.contains("geo") == true -> {
                                 eventLat = parser.nextText().trim().toDoubleOrNull()
                             }

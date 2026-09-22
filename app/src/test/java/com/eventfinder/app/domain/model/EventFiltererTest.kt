@@ -109,6 +109,21 @@ class EventFiltererTest {
     }
 
     @Test
+    fun `radius filter excludes events with unknown coordinates`() {
+        val unknown = jhb.copy(id = "4", title = "Mystery Event", latitude = null, longitude = null)
+        val list = listOf(jhb, unknown)
+
+        assertEquals(
+            listOf(jhb),
+            EventFilterer.filter(list, userLat = -26.2041, userLng = 28.0473, radiusKm = 100)
+        )
+        assertEquals(
+            list,
+            EventFilterer.filter(list, userLat = -26.2041, userLng = 28.0473, radiusKm = 0)
+        )
+    }
+
+    @Test
     fun `filters combine with AND semantics`() {
         val result = EventFilterer.filter(
             all,

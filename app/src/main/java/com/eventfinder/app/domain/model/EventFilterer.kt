@@ -41,10 +41,11 @@ object EventFilterer {
             val matchesCategory = category == null || event.category == category
 
             val matchesRadius = userLat == null || userLng == null || radiusKm <= 0 ||
-                event.latitude == null || event.longitude == null ||
-                DistanceCalculator.between(
-                    userLat, userLng, event.latitude, event.longitude
-                ) <= radiusKm
+                (event.latitude != null &&
+                    event.longitude != null &&
+                    DistanceCalculator.between(
+                        userLat, userLng, event.latitude, event.longitude
+                    ) <= radiusKm)
 
             matchesQuery && matchesCategory && matchesRadius
         }

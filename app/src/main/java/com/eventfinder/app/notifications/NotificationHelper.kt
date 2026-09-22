@@ -17,8 +17,10 @@ import com.eventfinder.app.MainActivity
 import com.eventfinder.app.R
 import com.eventfinder.app.domain.model.Event
 import com.eventfinder.app.utils.AppLogger
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.launch
 
 /**
  * Local reminder notifications (FR-04). Schedules two system notifications per
@@ -235,7 +237,11 @@ object NotificationHelper {
     private fun requestCode(eventId: String, lead: ReminderLead): Int {
         val hash = eventId.fold(17) { result, char -> 31 * result + char.code }
         val positiveHash = hash and Int.MAX_VALUE
-        return REQUEST_CODE_BASE + ((positiveHash % 1_000_000) * 2) + lead.ordinal
+        // Two request-code slots per event (one per lead). Use the full available
+        // int space instead of collapsing into a 1-million-slot range, so that two
+        // different events are very unlikely to share a PendingIntent request code.
+        val slotBase = (positiveHash / 2).coerceAtMost(Int.MAX_VALUE / 2 - 10_000)
+        return REQUEST_CODE_BASE + (slotBase * 2) + lead.ordinal
     }
 
     /** Stable notification id so re-scheduling the same reminder replaces the previous one. */
@@ -263,62 +269,67 @@ class ReminderReceiver : android.content.BroadcastReceiver() {
             return
         }
 
-        val preferences = com.eventfinder.app.data.store.UserPreferences(context)
-        val remindersEnabled = runBlocking {
-            preferences.remindersEnabled.first()
-        }
-        if (!remindersEnabled) {
-            AppLogger.w("ReminderReceiver", "Reminders disabled for current user - skipping notification")
-            return
-        }
+        val pendingResult = goAsync()
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                val preferences = com.eventfinder.app.data.store.UserPreferences(context)
+                val remindersEnabled = preferences.remindersEnabled.first()
+                if (!remindersEnabled) {
+                    AppLogger.w("ReminderReceiver", "Reminders disabled for current user - skipping notification")
+                    return@launch
+                }
 
-        val alarmUserId = intent.getStringExtra(EXTRA_USER_ID)
-        val currentUserId = runBlocking {
-            preferences.sessionUserId.first()
-        }
-        if (!alarmUserId.isNullOrBlank() && alarmUserId != currentUserId) {
-            AppLogger.w("ReminderReceiver", "Alarm user ($alarmUserId) != current session ($currentUserId) - skipping")
-            return
-        }
+                val alarmUserId = intent.getStringExtra(EXTRA_USER_ID)
+                val currentUserId = preferences.sessionUserId.first()
+                if (!alarmUserId.isNullOrBlank() && alarmUserId != currentUserId) {
+                    AppLogger.w("ReminderReceiver", "Alarm user ($alarmUserId) != current session ($currentUserId) - skipping")
+                    return@launch
+                }
 
-        val title = intent.getStringExtra(EXTRA_TITLE) ?: context.getString(R.string.reminder_notification_title)
-        val venue = intent.getStringExtra(EXTRA_VENUE) ?: ""
-        val eventId = intent.getStringExtra(EXTRA_EVENT_ID)
-        val lead = ReminderLead.entries
-            .firstOrNull { it.name == intent.getStringExtra(EXTRA_LEAD) }
-            ?: ReminderLead.HOUR_BEFORE
+                val title = intent.getStringExtra(EXTRA_TITLE) ?: context.getString(R.string.reminder_notification_title)
+                val venue = intent.getStringExtra(EXTRA_VENUE) ?: ""
+                val eventId = intent.getStringExtra(EXTRA_EVENT_ID)
+                val lead = ReminderLead.entries
+                    .firstOrNull { it.name == intent.getStringExtra(EXTRA_LEAD) }
+                    ?: ReminderLead.HOUR_BEFORE
 
-        val body = when (lead) {
-            ReminderLead.DAY_BEFORE -> context.getString(R.string.reminder_tomorrow_body, title, venue)
-            ReminderLead.HOUR_BEFORE -> context.getString(R.string.reminder_notification_body, title, venue)
-        }
+                val body = when (lead) {
+                    ReminderLead.DAY_BEFORE -> context.getString(R.string.reminder_tomorrow_body, title, venue)
+                    ReminderLead.HOUR_BEFORE -> context.getString(R.string.reminder_notification_body, title, venue)
+                }
 
-        val builder = NotificationCompat.Builder(context, NotificationHelper.CHANNEL_REMINDERS)
-            .setSmallIcon(android.R.drawable.ic_popup_reminder)
-            .setContentTitle(context.getString(R.string.reminder_notification_title))
-            .setContentText(if (venue.isBlank()) title else body)
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
-            .setAutoCancel(true)
+                val builder = NotificationCompat.Builder(context, NotificationHelper.CHANNEL_REMINDERS)
+                    .setSmallIcon(android.R.drawable.ic_popup_reminder)
+                    .setContentTitle(context.getString(R.string.reminder_notification_title))
+                    .setContentText(if (venue.isBlank()) title else body)
+                    .setPriority(NotificationCompat.PRIORITY_HIGH)
+                    .setAutoCancel(true)
 
-        if (eventId != null) {
-            builder.setContentIntent(
-                PendingIntent.getActivity(
+                if (eventId != null) {
+                    builder.setContentIntent(
+                        PendingIntent.getActivity(
+                            context,
+                            NotificationHelper.notificationId(eventId, lead),
+                            Intent(context, MainActivity::class.java).apply {
+                                addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                                putExtra(EXTRA_EVENT_ID, eventId)
+                            },
+                            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                        )
+                    )
+                }
+
+                NotificationHelper.postNotification(
                     context,
-                    NotificationHelper.notificationId(eventId, lead),
-                    Intent(context, MainActivity::class.java).apply {
-                        addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-                        putExtra(EXTRA_EVENT_ID, eventId)
-                    },
-                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                    NotificationHelper.notificationId(eventId ?: title, lead),
+                    builder
                 )
-            )
+                AppLogger.i("ReminderReceiver", "Reminder notification posted for '$title' (${lead.name})")
+            } catch (t: Exception) {
+                AppLogger.e("ReminderReceiver", "Failed to post reminder notification", t)
+            } finally {
+                pendingResult.finish()
+            }
         }
-
-        NotificationHelper.postNotification(
-            context,
-            NotificationHelper.notificationId(eventId ?: title, lead),
-            builder
-        )
-        AppLogger.i("ReminderReceiver", "Reminder notification posted for '$title' (${lead.name})")
     }
 }
