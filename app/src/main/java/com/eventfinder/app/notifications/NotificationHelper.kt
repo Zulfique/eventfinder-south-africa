@@ -1,6 +1,7 @@
 package com.eventfinder.app.notifications
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.app.AlarmManager
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -140,6 +141,22 @@ object NotificationHelper {
             //noinspection MissingPermission
             NotificationManagerCompat.from(context).notify(notificationId, builder.build())
         }
+    }
+
+    /**
+     * Central notification-posting entry point. All notification types
+     * (event alerts and reminder broadcasts) go through this single method so
+     * the permission gate and lint suppression are implemented exactly once.
+     * Permissions are re-checked here even when callers have already checked,
+     * so the two paths cannot diverge.
+     */
+    @SuppressLint("MissingPermission")
+    fun postNotification(context: Context, notificationId: Int, builder: NotificationCompat.Builder) {
+        if (!hasNotificationPermission(context)) {
+            AppLogger.w(TAG, "Notification permission missing - skipping notification")
+            return
+        }
+        NotificationManagerCompat.from(context).notify(notificationId, builder.build())
     }
 
     fun hasNotificationPermission(context: Context): Boolean =
@@ -297,12 +314,11 @@ class ReminderReceiver : android.content.BroadcastReceiver() {
             )
         }
 
-        // Only post notification if permission is granted (lint: MissingPermission)
-        if (NotificationHelper.hasNotificationPermission(context)) {
-            //noinspection MissingPermission
-            NotificationManagerCompat.from(context)
-                .notify(NotificationHelper.notificationId(eventId ?: title, lead), builder.build())
-        }
+        NotificationHelper.postNotification(
+            context,
+            NotificationHelper.notificationId(eventId ?: title, lead),
+            builder
+        )
         AppLogger.i("ReminderReceiver", "Reminder notification posted for '$title' (${lead.name})")
     }
 }

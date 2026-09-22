@@ -52,6 +52,7 @@
     <string name="reset_password_action">Herstel wagwoord</string>
     <string name="reset_not_available">Wagwoordherstel is nie beskikbaar in hierdie prototipe nie. Gebruik Wagwoord verander in Instellings.</string>
     <string name="reset_success">Wagwoord herstel — teken in met jou nuwe wagwoord</string>
+    <string name="reset_local_warning">Dit is \'n plaaslike wagwoordherstel. Geen e-posverifikasie word uitgevoer nie.</string>
     <string name="unknown_email">Geen rekening vir daardie e-pos gevind nie</string>
     <string name="reset_failed">Kon nie die wagwoord herstel nie</string>
 
@@ -86,6 +87,10 @@
     <string name="loading_events">Laai gebeurtenisse…</string>
     <string name="offline_banner">Jy is vanlyn — wys gestoorde gebeurtenisse</string>
     <string name="events_nearby">Gebeurtenisse naby jou</string>
+    <string name="locate_me">Vind my ligging</string>
+    <string name="continue_as_guest">Gaan voort as gas</string>
+    <string name="radius_value">%1$d km</string>
+    <string name="your_location">Jou ligging</string>
 
     <!-- Event detail -->
     <string name="about_event">Oor hierdie gebeurtenis</string>

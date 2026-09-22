@@ -21,12 +21,13 @@ import java.util.TimeZone
  * - CATEGORIES, URL, GEO (lat;lng), UID
  * - TZID=Africa/Johannesburg for floating dates
  * - RRULE recurrence: FREQ=DAILY/WEEKLY/MONTHLY/YEARLY with COUNT, UNTIL, INTERVAL
- * - RRULE BYDAY filter (matches specified days within the recurrence step)
+ * - RRULE BYDAY filter for WEEKLY (plain day abbreviations only, e.g. MO;FR)
  * - EXDATE exclusion of specific recurrence instances
  *
  * Limitations:
- * - BYMONTHDAY and BYMONTH in RRULE are not supported
- * - BYDAY with non-WEEKLY frequency may produce fewer matches than expected
+ * - BYMONTH, BYMONTHDAY, BYSETPOS and ordinal BYDAY values (1MO, -1FR) are not
+ *   supported; such RRULEs are logged and ignored rather than expanded with
+ *   incorrect dates.
  *
  * Events without coordinates will be geocoded by the ingestion pipeline.
  */
@@ -203,6 +204,10 @@ class IcsEventSource(
     }
 
     private fun expandRrule(startMillis: Long, rrule: String, exdates: Set<Long>): List<Long> {
+        if (!supportsRule(rrule)) {
+            AppLogger.w(tag, "Unsupported RRULE combination: $rrule")
+            return emptyList()
+        }
         val params = parseRrule(rrule)
         val freq = params["FREQ"] ?: return listOf(startMillis)
         val count = (params["COUNT"]?.toIntOrNull() ?: 30).coerceAtMost(30)
@@ -288,6 +293,33 @@ class IcsEventSource(
             "MONTHLY" -> cal.add(Calendar.MONTH, interval)
             "YEARLY" -> cal.add(Calendar.YEAR, interval)
         }
+    }
+
+    /**
+     * Returns whether the parser can expand [rrule] without silently producing
+     * incorrect dates. Only simple rules are supported: DAILY/YEARLY without
+     * BYDAY, and WEEKLY with plain day abbreviations. Ordinal BYDAY values such
+     * as `1MO` or `-1FR`, plus BYMONTH / BYMONTHDAY / BYSETPOS, are rejected so
+     * callers never receive dates from a recurrence they cannot represent.
+     */
+    private fun supportsRule(rrule: String): Boolean {
+        val params = parseRrule(rrule)
+        val freq = params["FREQ"]?.uppercase() ?: return false
+
+        val unsupportedKeys = listOf("BYMONTH", "BYMONTHDAY", "BYSETPOS", "BYHOUR", "BYMINUTE", "BYSECOND")
+        if (unsupportedKeys.any { params.containsKey(it) }) return false
+
+        val byDay = params["BYDAY"]?.split(",")?.map { it.trim().uppercase() } ?: emptyList()
+        if (byDay.isNotEmpty()) {
+            // Only bare day abbreviations (MO, TU, ...). Ordinals (1MO, -1FR)
+            // are not implemented and would yield wrong matches.
+            val pureDay = Regex("^(SU|MO|TU|WE|TH|FR|SA)$")
+            if (byDay.any { !pureDay.matches(it) }) return false
+            // Ordinal/nth-weekday logic is only implemented for WEEKLY.
+            if (freq != "WEEKLY") return false
+        }
+
+        return freq == "DAILY" || freq == "WEEKLY" || freq == "MONTHLY" || freq == "YEARLY"
     }
 
     private fun parseRrule(rrule: String): Map<String, String> {
