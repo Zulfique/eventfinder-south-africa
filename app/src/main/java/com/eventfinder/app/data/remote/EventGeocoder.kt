@@ -99,31 +99,17 @@ class EventGeocoder(
 
         if (cleaned.isBlank()) return ""
 
-        if (cleaned.lowercase().contains("south africa") || cleaned.lowercase().contains(", za")) {
+        val lower = cleaned.lowercase()
+
+        if (
+            lower.contains("south africa") ||
+            lower.endsWith(", za") ||
+            lower == "za"
+        ) {
             return cleaned
         }
 
-        val parts = cleaned.split(",").map { it.trim() }.filter { it.isNotBlank() }
-        val mainPart = if (parts.size == 1) {
-            parts[0]
-        } else {
-            val lastPart = parts.last()
-            val numericPrefix = lastPart.contains(Regex("\\d"))
-            if (numericPrefix && parts.size > 1) {
-                parts[parts.size - 2]
-            } else {
-                lastPart
-            }
-        }
-
-        if (mainPart.isBlank()) return ""
-
-        val alreadyHasCountry = countryContexts.any { mainPart.lowercase().contains(it) }
-        return if (alreadyHasCountry) {
-            mainPart
-        } else {
-            "$mainPart, South Africa"
-        }
+        return "$cleaned, South Africa"
     }
 
     fun clearCache() {
