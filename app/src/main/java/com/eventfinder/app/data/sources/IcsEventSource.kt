@@ -338,9 +338,17 @@ class IcsEventSource(
                 tzid.contains("UTC", ignoreCase = true) ||
                 tzid.contains("GMT", ignoreCase = true) -> UTC_TZ
 
-                else -> runCatching {
-                    TimeZone.getTimeZone(tzid)
-                }.getOrDefault(SA_TZ)
+                else -> {
+                    val zoneId = runCatching {
+                        java.time.ZoneId.of(tzid)
+                    }.getOrNull()
+                    if (zoneId != null) {
+                        TimeZone.getTimeZone(zoneId)
+                    } else {
+                        AppLogger.w(tag, "Unknown TZID '$tzid', using default timezone")
+                        SA_TZ
+                    }
+                }
             }
             val tzFormats = listOf(
                 SimpleDateFormat("yyyyMMdd'T'HHmmss", Locale.US).apply { timeZone = tz },

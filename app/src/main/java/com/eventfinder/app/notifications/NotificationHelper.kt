@@ -24,8 +24,8 @@ import kotlinx.coroutines.runBlocking
  * attending event - 24 hours and 1 hour before it starts - using AlarmManager,
  * and cancels them again when the user declines the event.
  *
- * Firebase Cloud Messaging is the final-POE upgrade for remote push; this
- * prototype demonstrates the notification UX entirely on-device and free.
+ * Notifications are scheduled entirely on-device using AlarmManager.
+ * No Firebase, cloud backend, sign-in, API key, or push service is required.
  *
  * References:
  *  - Android Developers, "Create and manage notification channels":

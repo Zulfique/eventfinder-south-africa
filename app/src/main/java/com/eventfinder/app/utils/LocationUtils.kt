@@ -7,6 +7,7 @@ import android.content.pm.PackageManager
 import android.location.Location
 import android.location.LocationListener
 import android.location.LocationManager
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import androidx.core.content.ContextCompat
@@ -123,7 +124,22 @@ object LocationUtils {
         }
 
         try {
-            manager.requestSingleUpdate(provider, listener, Looper.getMainLooper())
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                val executor = ContextCompat.getMainExecutor(context)
+                manager.getCurrentLocation(provider, null, executor) { location ->
+                    if (delivered) return@getCurrentLocation
+                    delivered = true
+                    mainHandler.removeCallbacks(timeoutRunnable)
+                    if (location != null) {
+                        onLocation(location.latitude, location.longitude)
+                    } else {
+                        onUnavailable()
+                    }
+                }
+            } else {
+                @Suppress("DEPRECATION")
+                manager.requestSingleUpdate(provider, listener, Looper.getMainLooper())
+            }
             mainHandler.postDelayed(timeoutRunnable, 15_000L)
         } catch (_: SecurityException) {
             delivered = true

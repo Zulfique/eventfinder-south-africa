@@ -108,7 +108,7 @@ class EventDiscoveryRepository(
             val organizerId = "external:${source.id}"
 
             val existingCount = eventDao.findIdsByOrganizerId(organizerId).size
-            if (existingCount >= 20 && validEvents.size < existingCount * 0.2) {
+            if (isSuspiciousReduction(existingCount, validEvents.size)) {
                 AppLogger.w(
                     tag,
                     "Suspiciously small update from ${source.displayName}: " +
@@ -215,6 +215,25 @@ class EventDiscoveryRepository(
                 EventCategory.COMMUNITY.labelKey
             else -> EventCategory.OTHER.labelKey
         }
+    }
+
+    /**
+     * Protects the cache from a source that temporarily returns a much smaller
+     * event list than what is already stored (e.g. feed truncation, partial
+     * responses, or a degraded upstream API). A percentage floor alone is not
+     * enough - a 100-event cache would accept a 21-event reply at 20%. Instead
+     * we require the new count to be at least half the cached count (with a
+     * small hard floor for tiny caches) before allowing a replacement.
+     */
+    private fun isSuspiciousReduction(existingCount: Int, newCount: Int): Boolean {
+        if (existingCount < 10) return false
+
+        val minimumExpected = maxOf(
+            5,
+            (existingCount * 0.50).toInt()
+        )
+
+        return newCount < minimumExpected
     }
 }
 
