@@ -14,6 +14,8 @@ import com.eventfinder.app.domain.model.EventFilterer
 import com.eventfinder.app.domain.model.EventSort
 import com.eventfinder.app.domain.model.EventView
 import com.eventfinder.app.domain.model.RsvpStatus
+import com.eventfinder.app.domain.model.EventAlertDetector.Alerts
+import com.eventfinder.app.domain.model.EventAlertDetector.detect
 import com.eventfinder.app.notifications.NotificationHelper
 import com.eventfinder.app.ui.components.UiMessage
 import com.eventfinder.app.utils.AppLogger
@@ -63,6 +65,9 @@ class HomeViewModel(
 
     val uiState: StateFlow<HomeUiState> = _uiState
     val messages: kotlinx.coroutines.flow.SharedFlow<UiMessage> = _messages
+
+    private val _previousEvents = MutableStateFlow<List<EventView>>(emptyList())
+    val previousEvents: StateFlow<List<EventView>> = _previousEvents.asStateFlow()
 
     private val queryFlow = MutableStateFlow("")
     private val categoryFlow = MutableStateFlow<EventCategory?>(null)
@@ -124,14 +129,38 @@ class HomeViewModel(
                     _uiState.value = _uiState.value.copy(events = views, isLoading = false)
                 }
         }
+
+        // Wire up new event / favourite updated alerts (FR-04)
+        viewModelScope.launch {
+            val favoriteIds by eventRepository.observeFavoriteIds().collect()
+            // Store previous events as Event objects (extract from EventView)
+            val previousEvents = _previousEvents.value.map { it.event }
+            _previousEvents.value = _uiState.value.events.map { EventView(it.event, null) }
+            val now = System.currentTimeMillis()
+            val alerts = detect(previousEvents.associateBy { it.id }, _uiState.value.events.map { it.event }, favoriteIds, now)
+            if (!alerts.isEmpty) {
+                NotificationHelper.postEventAlerts(
+                    context = appContext,
+                    newEvents = alerts.newEvents,
+                    updatedFavorites = alerts.updatedFavorites
+                )
+            }
+        }
     }
 
     private fun applyControls(combined: Combined, c: Controls): List<EventView> {
         val userLat = c.location?.first
         val userLng = c.location?.second
 
+        val now = System.currentTimeMillis()
+
+        val upcomingEvents =
+            combined.events.filter { event ->
+                event.endDate > now
+            }
+
         val filtered = EventFilterer.filter(
-            events = combined.events,
+            events = upcomingEvents,
             query = c.query.ifBlank { null },
             category = c.category,
             userLat = userLat,

@@ -5,9 +5,10 @@ import com.eventfinder.app.data.local.EventEntity
 import com.eventfinder.app.data.local.SourceSyncEntity
 import com.eventfinder.app.data.remote.EventGeocoder
 import com.eventfinder.app.data.remote.model.RemoteEvent
-import com.eventfinder.app.data.sources.EventSource
 import com.eventfinder.app.domain.model.EventCategory
 import com.eventfinder.app.utils.AppLogger
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 
@@ -17,8 +18,14 @@ class EventDiscoveryRepository(
     private val geocoder: EventGeocoder? = null
 ) {
     private val tag = "EventDiscoveryRepository"
+    private val refreshMutex = Mutex()
 
-    suspend fun refresh(): DiscoveryResult {
+    suspend fun refresh(): DiscoveryResult =
+        refreshMutex.withLock {
+            refreshInternal()
+        }
+
+    private suspend fun refreshInternal(): DiscoveryResult {
         val sourceResults = mutableListOf<SourceResult>()
 
         for (source in sources) {

@@ -29,7 +29,12 @@ class BootReceiver : BroadcastReceiver() {
         val pendingResult = goAsync()
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                val container = AppContainer(context)
+                // Use the application's existing AppContainer instead of creating a second one.
+                // This avoids a second Room database instance ( Fix 7 ).
+                val appContext = context.applicationContext
+                val container: AppContainer = (appContext as? EventFinderApp)?.container
+                    ?: AppContainer(appContext)
+
                 val userId = container.preferences.sessionUserId.first()
 
                 if (userId == null) {

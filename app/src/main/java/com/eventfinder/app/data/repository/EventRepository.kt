@@ -154,6 +154,12 @@ class EventRepositoryImpl(
             ?: return Result.failure(IllegalStateException("not_logged_in"))
 
         val id = java.util.UUID.randomUUID().toString()
+        // Normalize IMAGE_REMOVED to null for new events (there's no previous image to remove)
+        val imageUrl = when (draft.imageUrl) {
+            null -> null
+            IMAGE_REMOVED -> null
+            else -> draft.imageUrl
+        }
         val entity = EventEntity(
             id = id,
             title = draft.title.trim(),

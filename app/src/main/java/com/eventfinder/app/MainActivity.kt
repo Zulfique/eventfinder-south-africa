@@ -1,9 +1,15 @@
 package com.eventfinder.app
 
+
+import android.Manifest
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
 import com.eventfinder.app.di.AppContainer
 import com.eventfinder.app.notifications.NotificationHelper
@@ -13,41 +19,83 @@ import com.eventfinder.app.ui.theme.EventFinderTheme
 import com.eventfinder.app.utils.LocaleManager
 import kotlinx.coroutines.flow.MutableStateFlow
 
-/**
- * Single-activity Compose app. The activity extends [FragmentActivity] because
- * the AndroidX BiometricPrompt SDK requires a FragmentActivity host (see the
- * login screen); FragmentActivity is itself a ComponentActivity, so Compose
- * `setContent` continues to work unchanged.
- */
+
 class MainActivity : FragmentActivity() {
 
-    /** Event id delivered by a reminder notification tap; consumed by the nav graph. */
+
     private val deepLinkEventId = MutableStateFlow<String?>(null)
 
+
+    private val notificationPermissionLauncher =
+        registerForActivityResult(
+            ActivityResultContracts.RequestPermission()
+        ) { granted ->
+            if (granted) {
+                NotificationHelper.createChannel(this)
+            }
+        }
+
+
     override fun attachBaseContext(newBase: Context) {
-        // Always start in the user's persisted language (FR-08).
         val lang = LocaleManager.currentLanguage(newBase)
         super.attachBaseContext(LocaleManager.apply(newBase, lang))
     }
 
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val container: AppContainer = (application as EventFinderApp).container
+
+
+        val container: AppContainer =
+            (application as EventFinderApp).container
+
+
         NotificationHelper.createChannel(this)
 
-        deepLinkEventId.value = intent?.getStringExtra(ReminderReceiver.EXTRA_EVENT_ID)
+
+        deepLinkEventId.value =
+            intent?.getStringExtra(ReminderReceiver.EXTRA_EVENT_ID)
+
+
+        requestNotificationPermissionIfNeeded()
+
 
         setContent {
             EventFinderTheme {
-                EventFinderNavHost(container = container, deepLinkEventId = deepLinkEventId)
+                EventFinderNavHost(
+                    container = container,
+                    deepLinkEventId = deepLinkEventId
+                )
             }
         }
     }
 
+
+    private fun requestNotificationPermissionIfNeeded() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+            return
+        }
+
+
+        if (
+            ContextCompat.checkSelfPermission(
+                this,
+                Manifest.permission.POST_NOTIFICATIONS
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
+            notificationPermissionLauncher.launch(
+                Manifest.permission.POST_NOTIFICATIONS
+            )
+        }
+    }
+
+
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        // A reminder was tapped while the app was already open.
-        deepLinkEventId.value = intent.getStringExtra(ReminderReceiver.EXTRA_EVENT_ID)
+
+
+        deepLinkEventId.value =
+            intent.getStringExtra(ReminderReceiver.EXTRA_EVENT_ID)
     }
 }

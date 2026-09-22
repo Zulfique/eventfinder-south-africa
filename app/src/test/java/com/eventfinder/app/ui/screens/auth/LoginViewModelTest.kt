@@ -13,7 +13,6 @@ import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
-import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -43,6 +42,7 @@ class LoginViewModelTest {
 
     private class FakeAuthRepository : AuthRepository {
         override val currentUser: Flow<User?> = flowOf(null)
+        override val biometricEnrolled: Flow<Boolean> = flowOf(false)
         var resetResult: Result<Unit> = Result.success(Unit)
         var lastReset: Pair<String, String>? = null
 

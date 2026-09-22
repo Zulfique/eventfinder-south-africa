@@ -294,18 +294,16 @@ class RssEventSource(
         val cleaned = raw.trim()
         if (cleaned.isBlank()) return null
 
-        for (fmt in dateFormats) {
-            runCatching { return fmt.parse(cleaned)?.time }.getOrNull()
-        }
-
-        runCatching {
-            return java.time.Instant.parse(cleaned).toEpochMilli()
+        return runCatching {
+            synchronized(dateFormats) {
+                for (fmt in dateFormats) {
+                    return fmt.parse(cleaned)?.time
+                }
+            }
+        }.getOrNull().let { it } runCatching {
+            java.time.Instant.parse(cleaned).toEpochMilli()
+        }.getOrNull() runCatching {
+            java.time.OffsetDateTime.parse(cleaned).toInstant().toEpochMilli()
         }.getOrNull()
-
-        runCatching {
-            return java.time.OffsetDateTime.parse(cleaned).toInstant().toEpochMilli()
-        }.getOrNull()
-
-        return null
     }
 }

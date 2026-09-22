@@ -334,9 +334,67 @@ fun EventDetailScreen(
                                 }
                                 OutlinedButton(
                                     onClick = {
-                                        val uri = Uri.parse("geo:${event.latitude},${event.longitude}" +
-                                            "?q=${event.latitude},${event.longitude}(${Uri.encode(event.venueName)})")
-                                        context.startActivity(Intent(Intent.ACTION_VIEW, uri))
+                                        val latitude = event.latitude
+                                        val longitude = event.longitude
+                                        if (latitude == null || longitude == null) {
+                                            // No coordinates: fall back to a text-based maps search.
+                                            val query = Uri.encode(
+                                                listOf(event.venueName, event.address)
+                                                    .filter { it.isNotBlank() }
+                                                    .joinToString(", ")
+                                            )
+
+
+                                            val searchUri = Uri.parse(
+                                                "https://www.google.com/maps/search/?api=1&query=$query"
+                                            )
+
+
+                                            val searchIntent = Intent(
+                                                Intent.ACTION_VIEW,
+                                                searchUri
+                                            )
+
+
+                                            if (searchIntent.resolveActivity(context.packageManager) != null) {
+                                                context.startActivity(searchIntent)
+                                                return@OutlinedButton
+                                            }
+                                        }
+
+
+                                        val geoUri = Uri.parse(
+                                            "geo:$latitude,$longitude" +
+                                                "?q=$latitude,$longitude(${Uri.encode(event.venueName)})"
+                                        )
+
+
+                                        val intent = Intent(Intent.ACTION_VIEW, geoUri)
+
+
+                                        if (intent.resolveActivity(context.packageManager) != null) {
+                                            context.startActivity(intent)
+                                        } else {
+                                            // geo: intent had no handler; fall back to web search.
+                                            val query = Uri.encode(
+                                                listOf(event.venueName, event.address)
+                                                    .filter { it.isNotBlank() }
+                                                    .joinToString(", ")
+                                            )
+
+
+                                            val fallback = Intent(
+                                                Intent.ACTION_VIEW,
+                                                Uri.parse(
+                                                    "https://www.google.com/maps/search/?api=1&query=$query"
+                                                )
+                                            )
+
+
+                                            if (fallback.resolveActivity(context.packageManager) != null) {
+                                                context.startActivity(fallback)
+                                            }
+                                        }
                                     },
                                     modifier = Modifier.weight(1f).height(44.dp)
                                 ) {

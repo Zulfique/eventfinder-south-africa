@@ -128,7 +128,6 @@ class SettingsViewModel(
         viewModelScope.launch {
             val result = authRepository.deleteAccount()
             if (result.isSuccess) {
-                eventRepository.clearLocalCache()
                 _messages.emit(UiMessage.Resource(R.string.account_deleted))
                 onDeleted()
             } else {

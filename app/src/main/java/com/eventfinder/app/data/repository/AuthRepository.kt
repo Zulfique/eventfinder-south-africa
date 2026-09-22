@@ -22,6 +22,7 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import java.util.UUID
 
+
 /**
  * Authentication boundary. Performs local registration/login with PBKDF2-hashed
  * passwords (see [PasswordHasher]). Password reset is a local email-lookup that
@@ -34,6 +35,12 @@ import java.util.UUID
  */
 interface AuthRepository {
     val currentUser: Flow<User?>
+    /**
+     * True when a local user has enrolled biometric login and can therefore
+     * use biometric authentication from the logged-out Login screen.
+     */
+    val biometricEnrolled: Flow<Boolean>
+
     suspend fun register(fullName: String, email: String, password: String, language: String): Result<User>
     suspend fun login(email: String, password: String): Result<User>
     suspend fun biometricLogin(): Result<User>
@@ -60,6 +67,7 @@ interface AuthRepository {
     suspend fun continueAsGuest(): Result<User>
 }
 
+
 @OptIn(ExperimentalCoroutinesApi::class)
 class AuthRepositoryImpl(
     private val database: DatabaseTransactionHelper,
@@ -76,6 +84,15 @@ class AuthRepositoryImpl(
                 flowOf(null)
             } else {
                 userDao.observeUser(sessionId).map { it?.toDomain() }
+            }
+        }
+
+    override val biometricEnrolled: Flow<Boolean>
+        get() = preferences.biometricUserId.map { userId ->
+            if (userId == null) {
+                false
+            } else {
+                userDao.findById(userId)?.biometricEnabled == true
             }
         }
 

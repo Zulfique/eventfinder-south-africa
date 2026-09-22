@@ -49,9 +49,12 @@ class LoginViewModel(
 
     init {
         viewModelScope.launch {
-            authRepository.currentUser.collect { user ->
-                if (user?.biometricEnabled == true && _uiState.value.biometricAvailable) {
-                    _uiState.update { it.copy(biometricEnabled = true) }
+            authRepository.biometricEnrolled.collect { enrolled ->
+                _uiState.update {
+                    it.copy(
+                        biometricEnabled =
+                            enrolled && it.biometricAvailable
+                    )
                 }
             }
         }

@@ -3,6 +3,7 @@ package com.eventfinder.app.data.repository
 import com.eventfinder.app.domain.model.Event
 import com.eventfinder.app.domain.model.EventCategory
 import java.util.Calendar
+import java.util.TimeUnit
 
 /**
  * Curated demo event catalogue for the South African market. Seeded into Room
@@ -15,24 +16,25 @@ import java.util.Calendar
  */
 object SampleEventsProvider {
 
-    private fun at(year: Int, month: Int, day: Int, hour: Int, minute: Int = 0): Long =
-        Calendar.getInstance().apply {
-            clear()
-            set(year, month - 1, day, hour, minute)
-        }.timeInMillis
+    /** Returns current year + [days] days at [hour]:[minute]. */
+    private fun inDays(days: Int, hour: Int, minute: Int = 0): Long {
+        val now = Calendar.getInstance()
+        now.add(Calendar.DAY_OF_YEAR, days)
+        now.set(Calendar.HOUR_OF_DAY, hour)
+        now.set(Calendar.MINUTE, minute)
+        return now.timeInMillis
+    }
 
     /** ~14 realistic demo events across Johannesburg, Cape Town and Durban. */
     fun johannesburgAndCapeTown(): List<Event> {
-        val now = Calendar.getInstance()
-        val year = now.get(Calendar.YEAR)
         val eventive = listOf(
             Event(
                 id = "sample-jhb-music",
                 title = "Joburg Jazz Nights (Demo)",
                 description = "An intimate evening of live jazz in Maboneng precinct, featuring award-winning local ensembles.",
                 category = EventCategory.MUSIC,
-                startDate = at(year, 10, 4, 19, 0),
-                endDate = at(year, 10, 4, 22, 0),
+                startDate = inDays(12, 19, 0),
+                endDate = inDays(12, 22, 0),
                 venueName = "Maboneng Precinct Hall",
                 address = "286 Fox Street, Maboneng, Johannesburg",
                 latitude = -26.2072,
@@ -50,8 +52,8 @@ object SampleEventsProvider {
                 title = "Food Market Weekend (Demo)",
                 description = "Street food, artisanal bakes and live cooking demonstrations across 60 stalls.",
                 category = EventCategory.FOOD,
-                startDate = at(year, 10, 11, 10, 0),
-                endDate = at(year, 10, 12, 18, 0),
+                startDate = inDays(19, 10, 0),
+                endDate = inDays(20, 18, 0),
                 venueName = "Bree Street Markets",
                 address = "Bree Street, CBD, Johannesburg",
                 latitude = -26.2056,
@@ -69,8 +71,8 @@ object SampleEventsProvider {
                 title = "Parkrun Social 5km (Demo)",
                 description = "Community 5km fun run around Zoo Lake. All fitness levels welcome.",
                 category = EventCategory.SPORTS,
-                startDate = at(year, 10, 5, 7, 30),
-                endDate = at(year, 10, 5, 9, 30),
+                startDate = inDays(13, 7, 30),
+                endDate = inDays(13, 9, 30),
                 venueName = "Zoo Lake Park",
                 address = "Sunnyside Drive, Parkview, Johannesburg",
                 latitude = -26.1710,
@@ -88,8 +90,8 @@ object SampleEventsProvider {
                 title = "Startup Pitch Night (Demo)",
                 description = "Early-stage founders pitch to investors and mentors. Networking to follow.",
                 category = EventCategory.BUSINESS,
-                startDate = at(year, 11, 2, 17, 30),
-                endDate = at(year, 11, 2, 20, 0),
+                startDate = inDays(41, 17, 30),
+                endDate = inDays(41, 20, 0),
                 venueName = "Tshimologong Digital Innovation Precinct",
                 address = "41 Juta Street, Braamfontein, Johannesburg",
                 latitude = -26.1918,
@@ -107,8 +109,8 @@ object SampleEventsProvider {
                 title = "Gallery Night Walk (Demo)",
                 description = "Explore contemporary art galleries in the CBD on a guided night walk.",
                 category = EventCategory.ARTS,
-                startDate = at(year, 10, 18, 18, 0),
-                endDate = at(year, 10, 18, 21, 0),
+                startDate = inDays(26, 18, 0),
+                endDate = inDays(26, 21, 0),
                 venueName = "Newtown Cultural Precinct",
                 address = "1 President Street, Newtown, Johannesburg",
                 latitude = -26.2045,
@@ -126,8 +128,8 @@ object SampleEventsProvider {
                 title = "Cape Town Carnival Sound (Demo)",
                 description = "A vibrant celebration of music and dance in the Company's Garden.",
                 category = EventCategory.MUSIC,
-                startDate = at(year, 10, 25, 15, 0),
-                endDate = at(year, 10, 25, 21, 0),
+                startDate = inDays(33, 15, 0),
+                endDate = inDays(33, 21, 0),
                 venueName = "Company's Garden",
                 address = "Queen Victoria Street, Cape Town CBD",
                 latitude = -33.9288,
@@ -145,8 +147,8 @@ object SampleEventsProvider {
                 title = "Hout Bay Food & Craft Market (Demo)",
                 description = "Market stalls serving fresh seafood, preserves and handmade crafts by the bay.",
                 category = EventCategory.FOOD,
-                startDate = at(year, 10, 12, 10, 0),
-                endDate = at(year, 10, 12, 15, 0),
+                startDate = inDays(20, 10, 0),
+                endDate = inDays(20, 15, 0),
                 venueName = "Hout Bay Harbour",
                 address = "Harbour Road, Hout Bay, Cape Town",
                 latitude = -34.0422,
@@ -164,8 +166,8 @@ object SampleEventsProvider {
                 title = "Table Mountain Trail Run (Demo)",
                 description = "Guided trail run up the Platteklip Gorge route with stunning sunset views.",
                 category = EventCategory.SPORTS,
-                startDate = at(year, 11, 8, 6, 30),
-                endDate = at(year, 11, 8, 10, 0),
+                startDate = inDays(47, 6, 30),
+                endDate = inDays(47, 10, 0),
                 venueName = "Table Mountain Lower Cable Station",
                 address = "Tafelberg Road, Cape Town",
                 latitude = -33.9599,
@@ -183,8 +185,8 @@ object SampleEventsProvider {
                 title = "Khayelitsha Community Clean-Up (Demo)",
                 description = "Neighbourhood clean-up with breakfast for volunteers. Bringing the community together.",
                 category = EventCategory.COMMUNITY,
-                startDate = at(year, 10, 19, 8, 0),
-                endDate = at(year, 10, 19, 12, 0),
+                startDate = inDays(27, 8, 0),
+                endDate = inDays(27, 12, 0),
                 venueName = "Khayelitsha Community Hall",
                 address = "Land by N2, Khayelitsha, Cape Town",
                 latitude = -34.0358,
@@ -202,8 +204,8 @@ object SampleEventsProvider {
                 title = "Durban Beachfront Reggae (Demo)",
                 description = "Live reggae acts on the Golden Mile promenade as the sun sets over the Indian Ocean.",
                 category = EventCategory.MUSIC,
-                startDate = at(year, 11, 15, 16, 0),
-                endDate = at(year, 11, 15, 21, 0),
+                startDate = inDays(54, 16, 0),
+                endDate = inDays(54, 21, 0),
                 venueName = "Suncoast Promenade",
                 address = "1 Battery Beach Road, Durban",
                 latitude = -29.8277,
@@ -221,8 +223,8 @@ object SampleEventsProvider {
                 title = "Bunny Chow Festival (Demo)",
                 description = "Durban's favourite curry-through-a-loaf festival with a bunny chow eating contest.",
                 category = EventCategory.FOOD,
-                startDate = at(year, 11, 22, 11, 0),
-                endDate = at(year, 11, 22, 17, 0),
+                startDate = inDays(61, 11, 0),
+                endDate = inDays(61, 17, 0),
                 venueName = "Kings Park Stadium Precinct",
                 address = "Masoja Msiza Road, Stamford Hill, Durban",
                 latitude = -29.8273,
@@ -240,8 +242,8 @@ object SampleEventsProvider {
                 title = "Youth Coding Bootcamp Open Day (Demo)",
                 description = "Free coding introduction for teens, with hands-on Scratch and Python workshops.",
                 category = EventCategory.COMMUNITY,
-                startDate = at(year, 11, 9, 9, 0),
-                endDate = at(year, 11, 9, 14, 0),
+                startDate = inDays(48, 9, 0),
+                endDate = inDays(48, 14, 0),
                 venueName = "Alexandra Community Centre",
                 address = "London Street, Alexandra, Johannesburg",
                 latitude = -26.1030,
@@ -259,8 +261,8 @@ object SampleEventsProvider {
                 title = "Sculpture in the Park (Demo)",
                 description = "Open-air sculpture exhibition with artist talks and a public vote for the people's choice award.",
                 category = EventCategory.ARTS,
-                startDate = at(year, 10, 26, 10, 0),
-                endDate = at(year, 10, 26, 16, 0),
+                startDate = inDays(28, 10, 0),
+                endDate = inDays(28, 16, 0),
                 venueName = "Johannesburg Botanical Gardens",
                 address = "Olifants Road, Emmarentia, Johannesburg",
                 latitude = -26.1642,
@@ -278,8 +280,8 @@ object SampleEventsProvider {
                 title = "AgriTech Innovation Forum (Demo)",
                 description = "Panels and demos on water-smart farming and agritech startups in the Western Cape.",
                 category = EventCategory.BUSINESS,
-                startDate = at(year, 11, 13, 9, 30),
-                endDate = at(year, 11, 13, 16, 0),
+                startDate = inDays(52, 9, 30),
+                endDate = inDays(52, 16, 0),
                 venueName = "Stellenbosch Innovation Hub",
                 address = "Bird Street, Stellenbosch",
                 latitude = -33.9321,

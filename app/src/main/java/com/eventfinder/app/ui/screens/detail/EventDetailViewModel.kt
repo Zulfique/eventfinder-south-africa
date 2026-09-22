@@ -104,7 +104,6 @@ class EventDetailViewModel(
 
     private suspend fun loadWeather(lat: Double, lng: Double, startDate: Long) {
         if (Triple(lat, lng, startDate) == weatherKey) return
-        weatherKey = Triple(lat, lng, startDate)
         val weatherRepository: WeatherRepository = container.weatherRepository
         if (!DateTimeUtils.isInFuture(startDate) ||
             DateTimeUtils.daysUntil(startDate) > 16L
@@ -114,11 +113,13 @@ class EventDetailViewModel(
         }
         weatherRepository.forecastFor(eventId, lat, lng, startDate)
             .onSuccess { weather ->
+                weatherKey = Triple(lat, lng, startDate)
                 _uiState.update { it.copy(weather = weather, weatherUnavailable = false) }
                 AppLogger.d("EventDetailViewModel", "Weather loaded for $eventId")
             }
             .onFailure {
                 _uiState.update { it.copy(weatherUnavailable = true) }
+                weatherKey = null
             }
     }
 
