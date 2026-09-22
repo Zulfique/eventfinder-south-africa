@@ -137,6 +137,7 @@ object NotificationHelper {
         }
         // Only post notification if permission is granted (lint: MissingPermission)
         if (hasNotificationPermission(context)) {
+            //noinspection MissingPermission
             NotificationManagerCompat.from(context).notify(notificationId, builder.build())
         }
     }
@@ -298,6 +299,7 @@ class ReminderReceiver : android.content.BroadcastReceiver() {
 
         // Only post notification if permission is granted (lint: MissingPermission)
         if (NotificationHelper.hasNotificationPermission(context)) {
+            //noinspection MissingPermission
             NotificationManagerCompat.from(context)
                 .notify(NotificationHelper.notificationId(eventId ?: title, lead), builder.build())
         }

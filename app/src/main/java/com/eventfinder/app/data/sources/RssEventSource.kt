@@ -123,7 +123,25 @@ class RssEventSource(
                         }
                         insideItem -> when {
                             localName == "title" -> inTitle = true
-                            localName == "description" || localName == "summary" || localName == "content" -> {
+                            localName == "description" -> {
+                                if (!inDescription) inDescription = true
+                            }
+                            localName == "summary" -> {
+                                if (!inDescription) inDescription = true
+                            }
+                            // MEDIA-SPECIFIC HANDLING FIRST: check namespace-qualified content before generic
+                            localName == "content" && ns?.contains("media") == true -> {
+                                val href = parser.getAttributeValue(null, "url")
+                                    ?: parser.getAttributeValue(null, "href")
+                                if (href != null) imageUrl = href
+                            }
+                            localName == "thumbnail" && ns?.contains("media") == true -> {
+                                val href = parser.getAttributeValue(null, "url")
+                                    ?: parser.getAttributeValue(null, "href")
+                                if (href != null) imageUrl = href
+                            }
+                            localName == "content" -> {
+                                // Generic content fallback (non-namespaced)
                                 if (!inDescription) inDescription = true
                             }
                             localName == "link" -> {

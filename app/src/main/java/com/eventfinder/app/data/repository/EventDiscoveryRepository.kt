@@ -108,7 +108,7 @@ class EventDiscoveryRepository(
             val organizerId = "external:${source.id}"
 
             val existingCount = eventDao.findIdsByOrganizerId(organizerId).size
-            if (existingCount >= 20 && validEvents.size < existingCount * 0.25) {
+            if (existingCount >= 20 && validEvents.size < existingCount * 0.2) {
                 AppLogger.w(
                     tag,
                     "Suspiciously small update from ${source.displayName}: " +
