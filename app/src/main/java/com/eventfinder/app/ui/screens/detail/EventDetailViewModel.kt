@@ -96,7 +96,7 @@ class EventDetailViewModel(
                 loadWeather(latitude, longitude, event.startDate)
             } else {
                 _uiState.update {
-                    it.copy(weatherUnavailable = true)
+                    it.copy(weather = null, weatherUnavailable = true)
                 }
             }
         }

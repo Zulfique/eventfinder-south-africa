@@ -139,8 +139,8 @@ class CreateEventViewModel(
                 dateMillis = event.startDate,
                 venueName = event.venueName,
                 address = event.address,
-                latitude = event.latitude.toString(),
-                longitude = event.longitude.toString(),
+                latitude = event.latitude?.toString() ?: "",
+                longitude = event.longitude?.toString() ?: "",
                 isPublic = event.isPublic,
                 imageUrl = event.imageUrl
             )
