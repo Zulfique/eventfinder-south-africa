@@ -3,6 +3,7 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 using EventFinder.Api.Data;
+using EventFinder.Api.Services;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Data.Sqlite;
@@ -17,6 +18,15 @@ namespace EventFinder.Api.Tests;
 /// class, so tests exercise the actual endpoints, validation and EF Core
 /// code path without touching the development database file.
 /// </summary>
+public class NoOpEmailService : IEmailService
+{
+    public Task SendPasswordResetEmailAsync(string toEmail, string rawToken, CancellationToken ct = default) =>
+        Task.CompletedTask;
+
+    public Task SendEmailChangeVerificationAsync(string toEmail, string rawToken, CancellationToken ct = default) =>
+        Task.CompletedTask;
+}
+
 public class ApiFactory : WebApplicationFactory<Program>
 {
     private readonly SqliteConnection _connection = new("DataSource=:memory:");
@@ -35,8 +45,11 @@ public class ApiFactory : WebApplicationFactory<Program>
         {
             services.RemoveAll(typeof(DbContextOptions<AppDbContext>));
             services.RemoveAll(typeof(DbContextOptions));
-            services.RemoveAll(typeof(AppDbContext));
-            services.AddDbContext<AppDbContext>(o => o.UseSqlite(_connection));
+    services.RemoveAll(typeof(AppDbContext));
+    services.AddDbContext<AppDbContext>(o => o.UseSqlite(_connection));
+
+    services.RemoveAll(typeof(IEmailService));
+    services.AddSingleton<IEmailService>(new NoOpEmailService());
         });
     }
 

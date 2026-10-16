@@ -30,8 +30,7 @@ public class EmailService(HttpClient http, IConfiguration configuration, ILogger
         {
             if (environment.IsDevelopment())
             {
-                logger.LogInformation("Brevo API key not configured — reset email for {Email} not sent (development mode).", toEmail);
-                return;
+                logger.LogWarning("Brevo API key is missing; reset email was NOT sent for {Email}.", toEmail);
             }
             throw new InvalidOperationException("Email delivery is not configured (Brevo:ApiKey missing).");
         }
@@ -81,8 +80,7 @@ public class EmailService(HttpClient http, IConfiguration configuration, ILogger
         {
             if (environment.IsDevelopment())
             {
-                logger.LogInformation("Brevo API key not configured — email-change verification for {Email} not sent (development mode).", toEmail);
-                return;
+                logger.LogWarning("Brevo API key is missing; email-change verification was NOT sent for {Email}.", toEmail);
             }
             throw new InvalidOperationException("Email delivery is not configured (Brevo:ApiKey missing).");
         }

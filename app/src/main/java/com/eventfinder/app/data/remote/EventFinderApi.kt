@@ -304,6 +304,9 @@ class EventFinderApiClient(
                 Result.failure(ApiException(response.code(), message, envelope?.errors ?: emptyMap()))
             }
         }
+    } catch (e: kotlinx.coroutines.CancellationException) {
+        // Preserve structured concurrency: cancelled jobs must stay cancelled.
+        throw e
     } catch (e: Exception) {
         AppLogger.w(tag, "$op unreachable: ${e.message}")
         Result.failure(NetworkException(e))
