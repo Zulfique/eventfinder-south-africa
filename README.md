@@ -12,8 +12,9 @@ discover, save and create local events — from Joburg jazz nights to Cape Town 
 and Durban festivals.
 
 EventFinder was built as the **Part 2 (final) Portfolio of Evidence** for the module.
-It consumes **100% free, keyless REST APIs**, requires **no paid infrastructure**,
-and runs on a physical device or emulator.
+It consumes **100% free, keyless REST APIs** and runs on a physical device or emulator.
+Cloud features (Firestore sync + FCM push) run on the free **Firebase Spark plan** — no
+paid infrastructure; Firebase Storage is optional and falls back to local file storage.
 
 ---
 
@@ -32,7 +33,9 @@ and runs on a physical device or emulator.
 11. [Continuous integration](#continuous-integration)
 12. [Project structure](#project-structure)
 13. [Requirement traceability](#requirement-traceability)
-14. [Attribution & licences](#attribution--licences)
+14. [Firebase setup](#firebase-setup-free-spark-plan)
+15. [Known limitations](#known-limitations)
+16. [Attribution & licences](#attribution--licences)
 
 ---
 
@@ -53,9 +56,9 @@ and runs on a physical device or emulator.
 | **Settings** | Language switch (English / Afrikaans), event reminders, new-event alerts, plus account tools (clear local cache, delete account). |
 | **Reminders** | `AlarmManager` + `NotificationChannel` reminders **24 hours and 1 hour** before an attended event, cancelled when the RSVP is declined. |
 | **Event alerts** | On-device notifications flag newly added or changed events in the local Room catalogue — computed by a pure diff, no push service required. |
-| **Cloud sync** | User-created events, favourites and RSVPs sync bidirectionally with **Cloud Firestore** (NoSQL) - automatically, whenever connectivity returns. |
+| **Cloud sync** | User-created events, favourites and RSVPs sync bidirectionally with **Cloud Firestore** (NoSQL) — automatically, whenever connectivity returns. |
 | **Real-time push** | **Firebase Cloud Messaging** delivers live updates to the `new_events` topic; devices auto-subscribe on launch. |
-| **Blob storage** | Event photos upload to **Firebase Cloud Storage** so they survive device changes; falls back to local storage offline. |
+| **Blob storage** | Event photos upload to **Firebase Cloud Storage**; when Storage is unavailable (requires Blaze billing) they are stored in local internal file storage instead — nothing breaks. |
 
 ## Screenshots
 
@@ -88,7 +91,7 @@ emulator at 1080 × 2340.
 | DI | **Manual `AppContainer`** | Transparent, dependency-free alternative to Hilt for a prototype. |
 | Local DB | **Room 2.6.1** | Compile-time verified SQLite for the offline event cache. |
 | Cloud NoSQL | **Cloud Firestore** | Bidirectional sync of user-created events, favourites and RSVPs. Free Spark plan. |
-| Blob storage | **Firebase Cloud Storage** | Event photos stored as blobs, available on every signed-in device. |
+| Blob storage | **Firebase Cloud Storage** | Event photos stored as blobs; graceful fallback to local internal storage when Storage is not enabled (requires Blaze). |
 | Push notifications | **Firebase Cloud Messaging** | Real-time `new_events` topic pushes; free, no server needed for console sends. |
 | Preferences | **DataStore Preferences 1.0** | Async, type-safe key/value storage for settings & session. |
 | Networking | **Retrofit 2.9 + OkHttp 4.12 + Gson** | Industry standard REST client with logging interceptor. |
@@ -123,16 +126,18 @@ flowchart TB
     subgraph Sources["Data sources"]
         Room[("Room cache<br/>events · favorites · rsvps · users")]
         DS[("DataStore<br/>session & settings")]
+        FS[("Cloud Firestore<br/>per-user cloud sync")]
         OM["Open-Meteo API<br/>keyless"]
         OSM["OpenStreetMap / Overpass<br/>keyless"]
     end
 
     Screens --> VMs
-    VMs --> Repos
     VMs --> Domain
+    VMs --> Repos
     Repos --> Domain
     Repos --> Room
     Repos --> DS
+    Repos --> FS
     Repos --> OM
     Repos --> OSM
 ```
@@ -249,6 +254,7 @@ through `LocaleManager` in `MainActivity.attachBaseContext`.
 
 - Events, favourites and RSVPs are cached in **Room** and observed as `Flow`s, so the UI renders instantly.
 - Favourite, RSVP and event mutations are wrapped in **atomic `@Transaction` boundaries** for consistency.
+- **`SyncCoordinator`** watches connectivity: on every offline → online transition it triggers a Firestore sync (`syncNow()`) and a public-feed refresh, then pushes local mutations made while offline.
 - The app attempts to discover public JSON event feeds when online; discovery failure never blocks the local catalogue.
 - Reminder alarms carry the owning `userId` and `ReminderReceiver` verifies the active session before posting, preventing stale-account notifications.
 - The UI never blocks on the network: a failed discovery simply keeps the cached catalogue.
@@ -281,17 +287,17 @@ Create `local.properties` in the project root (git-ignored):
 sdk.dir=C\:\\Users\\<you>\\AppData\\Local\\Android\\Sdk
 ```
 
-### 3. No API keys required
+### 3. API keys & Firebase config
 
-EventFinder does not require:
+EventFinder requires **no API keys** for its REST integrations — Open-Meteo,
+OpenStreetMap/Overpass and the public event feeds are all keyless. No developer accounts
+or secrets are embedded in the APK.
 
-- API keys
-- API tokens
-- developer accounts
-- cloud backend credentials
-- secrets embedded in the APK
-
-Open-Meteo and OpenStreetMap/Overpass are accessed directly by the Android app.
+The only cloud config is `app/google-services.json`, a **public Firebase app identifier**
+(no secret) that ships in the repo pointing at the live `eventfinder-south-africa` project.
+Every Firebase call checks `FirebaseStatus` first and degrades to offline-only Room
+behaviour when Firebase is unreachable, so the app works with the config removed entirely.
+See [Firebase setup](#firebase-setup-free-spark-plan) to point it at your own project.
 
 ### 4. Build & install
 
@@ -308,7 +314,7 @@ adb install -r app\build\outputs\apk\debug\app-debug.apk
 
 ## Testing
 
-The project has **158 JVM unit tests** across 15 suites, all runnable from the command line with
+The project has **158 JVM unit tests** across 18 suites, all runnable from the command line with
 no emulator:
 
 ```bash
@@ -331,6 +337,10 @@ no emulator:
 | `LoginViewModelTest` | Password-reset flows (mismatch, success) with a fake repository. |
 | `EventDiscoveryRepositoryTest` | Event discovery pipeline: valid future events inserted, missing coordinates rejected, past events rejected, source failures handled gracefully, deduplication by stableId, multi-source merging. |
 | `PublicJsonEventMapperTest` | Public JSON event DTO parsing: Ardent Africa string-location handling, object-location parsing, null-location graceful handling, mapper output validation. |
+| `RssEventSourceTest` | RSS date parsing: `start_time` / `event_date` / plain `<start>` / `dc:date` / `<when>` element variants, and items carrying only a publication date being ignored. |
+| `EventGeocoderTest` | Reverse-geocoding results accepted only when they resolve inside South Africa (full country name, country code, mixed results; non-SA rejected). |
+| `ReminderScheduleTest` | Reminder offsets: 24 h + 1 h lead times, same-day events, events starting within the hour, past events, and boundary-exact leads. |
+| `CloudSyncMappingTest` | Firestore document ↔ domain mapping for events, favourites and RSVPs used by `CloudSyncManager`. |
 
 HTML reports are written to `app/build/reports/tests/testDebugUnitTest/index.html`.
 
@@ -354,23 +364,32 @@ widgets (`app/src/androidTest/.../ui/components/CommonComponentsTest.kt`):
 
 ## Continuous integration
 
-GitHub Actions runs on every push / PR to `main` (`.github/workflows/android-ci.yml`):
+GitHub Actions runs on every push / PR to `main` (`.github/workflows/android-ci.yml`) as two jobs:
+
+**1. Build & unit test** (`ubuntu-latest`)
 
 1. Validate the Gradle wrapper
-2. Set up **JDK 17**
+2. Set up **JDK 17** + Gradle build cache
 3. `./gradlew testDebugUnitTest`
 4. `./gradlew lintDebug`
 5. `./gradlew assembleDebug`
-6. Upload the test report and the debug APK as build artifacts
+6. Upload the unit test report and the debug APK as build artifacts
 
-CI never depends on a secret to compile — all external APIs are keyless.
-The pipeline runs unit tests, lint, and assembles a debug APK.
+**2. Instrumentation tests** (after job 1 passes)
+
+1. Boot an **API 33 x86_64 emulator** (KVM enabled)
+2. `./gradlew connectedDebugAndroidTest`
+3. Upload the instrumentation report
+
+CI never depends on a secret to compile — all external APIs are keyless, and the checked-in
+`google-services.json` is a public app identifier.
 
 ## Project structure
 
 ```
 app/src/main/java/com/eventfinder/app/
 ├── data/
+│   ├── cloud/          FirebaseStatus, CloudSyncManager, FirebaseImageUploader, SyncCoordinator, TaskAwait
 │   ├── local/          Room entities, DAOs, database + entity↔domain mappers
 │   ├── remote/         Retrofit services, DTOs, API client (Open-Meteo + Overpass + public JSON)
 │   ├── remote/dto/     Public JSON event DTOs with multi-format field resolution
@@ -380,7 +399,7 @@ app/src/main/java/com/eventfinder/app/
 │   └── store/          DataStore user preferences
 ├── di/                 AppContainer (manual dependency injection)
 ├── domain/model/       Event, User, RSVP, categories, filter/sort engine
-├── notifications/      Notification channel + reminder receiver
+├── notifications/      Notification helper, reminders, boot receiver, FCM messaging service
 ├── security/           Biometric authentication wrapper
 ├── ui/
 │   ├── components/     Shared Compose components + UiMessage
