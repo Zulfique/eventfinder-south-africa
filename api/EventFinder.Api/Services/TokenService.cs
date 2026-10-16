@@ -14,6 +14,8 @@ public class TokenService(IConfiguration configuration)
         var issuer = configuration["Jwt:Issuer"] ?? "eventfinder-api";
         var audience = configuration["Jwt:Audience"] ?? "eventfinder-app";
         var hours = int.TryParse(configuration["Jwt:ExpiryHours"], out var h) ? h : 168;
+        if (hours <= 0 || hours > 8760)
+            throw new InvalidOperationException("Jwt:ExpiryHours must be between 1 and 8760.");
 
         var expires = DateTime.UtcNow.AddHours(hours);
         var claims = new List<Claim>

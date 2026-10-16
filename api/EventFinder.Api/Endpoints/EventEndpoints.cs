@@ -229,6 +229,11 @@ public static class EventEndpoints
         if (ev is null)
             return Results.Json(ApiResponse<object>.Fail("Event not found."), statusCode: 404);
 
+        if (!ev.IsPublic && ev.OrganizerId != user.Id)
+            return Results.Json(
+                ApiResponse<object>.Fail("You are not allowed to RSVP to this private event."),
+                statusCode: StatusCodes.Status403Forbidden);
+
         var status = request.Status!;
         var now = DateTime.UtcNow;
 
@@ -270,6 +275,7 @@ public static class EventEndpoints
         }
         catch (DbUpdateException)
         {
+            db.ChangeTracker.Clear();
             // Concurrent insert on the unique (EventId, UserId) index: reload
             // the winning row, apply this request's status and recompute.
             var existing = await db.Rsvps.FirstOrDefaultAsync(r => r.EventId == id && r.UserId == user.Id, ct);
@@ -298,6 +304,11 @@ public static class EventEndpoints
         var ev = await db.Events.FirstOrDefaultAsync(e => e.Id == id, ct);
         if (ev is null)
             return Results.Json(ApiResponse<object>.Fail("Event not found."), statusCode: 404);
+
+        if (!ev.IsPublic && ev.OrganizerId != user.Id)
+            return Results.Json(
+                ApiResponse<object>.Fail("You are not allowed to cancel an RSVP on this private event."),
+                statusCode: StatusCodes.Status403Forbidden);
 
         var existing = await db.Rsvps.FirstOrDefaultAsync(r => r.EventId == id && r.UserId == user.Id, ct);
         if (existing is not null)

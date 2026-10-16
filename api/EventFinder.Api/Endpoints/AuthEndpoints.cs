@@ -58,7 +58,17 @@ public static class AuthEndpoints
             UpdatedAt = now,
         };
         db.Users.Add(user);
-        await db.SaveChangesAsync(ct);
+        try
+        {
+            await db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException)
+        {
+            return Results.Json(
+                ApiResponse<AuthResponse>.Fail("An account with this email already exists.",
+                    new Dictionary<string, string[]> { ["email"] = ["Email is already registered."] }),
+                statusCode: 409);
+        }
 
         var (token, expires) = tokens.CreateToken(user);
         return Results.Json(ApiResponse<AuthResponse>.Ok(
@@ -404,7 +414,16 @@ public static class AuthEndpoints
         user.Email = token.NewEmail;
         user.UpdatedAt = DateTime.UtcNow;
         token.UsedAt = DateTime.UtcNow;
-        await db.SaveChangesAsync(ct);
+        try
+        {
+            await db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException)
+        {
+            return Results.Json(
+                ApiResponse<object>.Fail("An account with this email already exists."),
+                statusCode: 409);
+        }
 
         return Results.Json(ApiResponse<object>.Ok(new { }, "Email verified and updated."));
     }
