@@ -167,7 +167,10 @@ public static class AuthEndpoints
             {
                 await email.SendPasswordResetEmailAsync(user.Email, rawToken, ct);
             }
-            catch (InvalidOperationException ex)
+            catch (Exception ex) when (
+                ex is InvalidOperationException ||
+                ex is HttpRequestException ||
+                (ex is TaskCanceledException && !ct.IsCancellationRequested))
             {
                 lf.CreateLogger("AuthEndpoints").LogError(ex, "Failed to send reset email to {Email}", user.Email);
                 // Remove the token we just stored so a failed delivery does not

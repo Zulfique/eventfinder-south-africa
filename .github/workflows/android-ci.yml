@@ -117,11 +117,11 @@ jobs:
         with:
           dotnet-version: '8.0.x'
 
-      - name: Restore dependencies
+      - name: Restore API and test dependencies
         run: dotnet restore api/EventFinder.Api.Tests/EventFinder.Api.Tests.csproj
 
-      - name: Build API
-        run: dotnet build api/EventFinder.Api/EventFinder.Api.csproj --configuration Release --no-restore
+      - name: Build API integration tests
+        run: dotnet build api/EventFinder.Api.Tests/EventFinder.Api.Tests.csproj --configuration Release --no-restore
 
       - name: Run API integration tests
-        run: dotnet test api/EventFinder.Api.Tests/EventFinder.Api.Tests.csproj --configuration Release --no-build --verbosity normal
+        run: dotnet test api/EventFinder.Api.Tests/EventFinder.Api.Tests.csproj --configuration Release --no-build --no-restore --verbosity normal

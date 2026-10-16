@@ -12,6 +12,29 @@ using Microsoft.IdentityModel.Tokens;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Never allow a known development JWT secret in production.
+const string DevelopmentJwtSecret =
+    "DEV-ONLY-Secret-Replace-In-Production-0123456789abcdef";
+
+var configuredJwtSecret = builder.Configuration["Jwt:Secret"];
+
+if (builder.Environment.IsProduction())
+{
+    if (string.IsNullOrWhiteSpace(configuredJwtSecret) ||
+        configuredJwtSecret == DevelopmentJwtSecret ||
+        Encoding.UTF8.GetByteCount(configuredJwtSecret) < 32)
+    {
+        throw new InvalidOperationException(
+            "Production requires a strong, unique Jwt:Secret of at least 32 bytes. " +
+            "Configure it using an environment variable or secret manager.");
+    }
+}
+else
+{
+    // Development and ordinary local tests can run without a deployed secret.
+    configuredJwtSecret ??= DevelopmentJwtSecret;
+}
+
 builder.Services.AddDbContext<AppDbContext>(options =>
 {
     var connectionString = builder.Configuration.GetConnectionString("Default")
@@ -22,7 +45,7 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
-        var secret = builder.Configuration["Jwt:Secret"]
+        var secret = configuredJwtSecret
             ?? throw new InvalidOperationException("Jwt:Secret is not configured.");
         options.TokenValidationParameters = new TokenValidationParameters
         {

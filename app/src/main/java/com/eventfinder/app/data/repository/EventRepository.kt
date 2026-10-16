@@ -87,8 +87,18 @@ class EventRepositoryImpl(
         }
     }
 
+    @OptIn(ExperimentalCoroutinesApi::class)
     override fun observeAllEvents(): Flow<List<Event>> =
-        eventDao.observeAll().map { rows -> rows.map { it.toDomain() } }
+        preferences.sessionUserId.flatMapLatest { userId ->
+            eventDao.observeAll().map { rows ->
+                rows
+                    .filter { event ->
+                        event.isPublic ||
+                            (!userId.isNullOrBlank() && event.organizerId == userId)
+                    }
+                    .map { it.toDomain() }
+            }
+        }
 
     @OptIn(ExperimentalCoroutinesApi::class)
     override fun observeFavoriteIds(): Flow<Set<String>> =

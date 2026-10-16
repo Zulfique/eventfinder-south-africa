@@ -416,6 +416,7 @@ class AuthRepositoryImpl(
         // is updated only after the server confirms success.
         val token = preferences.authToken.first()
         val client = api
+        var serverPasswordChanged = false
         if (client != null && !token.isNullOrBlank()) {
             val result = client.changePassword("Bearer $token", currentPassword, newPassword)
             if (result.isFailure) {
@@ -431,9 +432,19 @@ class AuthRepositoryImpl(
                 // Network failure: keep local change pending? For now report failure.
                 return Result.failure(IllegalArgumentException("password_change_failed"))
             }
+            serverPasswordChanged = true
         }
 
         userDao.upsert(entity.copy(passwordHash = PasswordHasher.hash(newPassword)))
+
+        if (serverPasswordChanged) {
+            // The API increments TokenVersion, invalidating the current JWT.
+            // Clear the old session so the app does not appear authenticated
+            // while subsequent API requests fail with HTTP 401.
+            preferences.setAuthToken(null)
+            preferences.setSessionUserId(null)
+        }
+
         AppLogger.i("AuthRepository", "Password changed for ${entity.email}")
         return Result.success(Unit)
     }
