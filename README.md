@@ -418,31 +418,38 @@ docs/screenshots/                        Real device screenshots
 
 ## Firebase setup (free Spark plan)
 
-EventFinder uses three Firebase services, all covered by the free Spark plan — no credit card
-required. The `api_key` inside `google-services.json` is a **public app identifier** issued by
-Google (the same kind of value that ships in every Android app), not a secret.
+EventFinder uses three Firebase services. Firestore and Cloud Messaging run on the free
+**Spark plan** — no credit card required. The `api_key` inside `google-services.json` is a
+**public app identifier** issued by Google (the same kind of value that ships in every Android
+app), not a secret.
 
-| Service | POE requirement | Free-tier limit |
+| Service | POE requirement | Plan / limits |
 | --- | --- | --- |
-| **Cloud Firestore** | NoSQL database (store + read) | 1 GiB storage, 50 K reads / 20 K writes per day |
-| **Cloud Storage** | Blob storage | 5 GiB storage, 1 GiB/day download |
-| **Cloud Messaging** | Real-time push notifications | Unlimited message volume |
+| **Cloud Firestore** | NoSQL database (store + read) | Spark (free): 1 GiB storage, 50 K reads / 20 K writes per day |
+| **Cloud Messaging** | Real-time push notifications | Spark (free): unlimited message volume |
+| **Cloud Storage** | Blob storage | **Requires Blaze billing** (Google policy change). The app degrades gracefully to local internal file storage via `FirebaseStatus` when Storage is unavailable — event photos still work offline on-device. |
 
-### Connecting your own project (5 minutes)
+### Project status
 
-The repo ships with a **placeholder** `app/google-services.json` so the project builds and all
-152 unit tests pass with zero configuration. Every Firebase call checks `FirebaseStatus` first
-and degrades to offline-only Room behaviour when the placeholder is present, so nothing crashes.
+This repository is wired to a live Firebase project:
 
-To enable live cloud features:
+- **Project ID:** `eventfinder-south-africa`
+- **Android package:** `com.eventfinder.app`
+- **Firestore:** enabled (`nam5`, test mode — update rules before production use)
+- **FCM:** enabled; devices auto-subscribe to the `new_events` topic
+- **Storage:** not enabled (requires Blaze). `FirebaseImageUploader` falls back to local storage.
 
-1. Go to <https://console.firebase.google.com> → **Add project** (free tier, no Blaze plan needed).
+### Connecting your own project
+
+Every Firebase call checks `FirebaseStatus` first and degrades to offline-only Room behaviour
+when Firebase is uninitialised, so nothing crashes. To point the app at your own Firebase
+project:
+
+1. Go to <https://console.firebase.google.com> → **Add project** (Spark plan, free).
 2. **Add an Android app** with package name `com.eventfinder.app`.
 3. Download the generated `google-services.json` and replace `app/google-services.json`.
-4. In the console enable:
-   - **Firestore Database** (create in production mode; rules below)
-   - **Storage** (free tier)
-   - **Cloud Messaging** is on by default
+4. Enable **Firestore Database** (production mode + the rules below, or test mode for demos).
+   Cloud Messaging is on by default. Storage is optional (requires Blaze).
 5. Rebuild and run on your physical device.
 
 Suggested Firestore security rules (owner-only access to each user's data):
