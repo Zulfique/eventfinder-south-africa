@@ -76,12 +76,17 @@ class EditProfileViewModel(
             result.fold(
                 onSuccess = { _messages.emit(UiMessage.Resource(R.string.profile_updated)); onSaved() },
                 onFailure = { throwable ->
-                    _messages.emit(
-                        when (throwable.message) {
-                            "email_in_use" -> UiMessage.Resource(R.string.email_in_use)
-                            else -> UiMessage.Resource(R.string.save_failed)
-                        }
-                    )
+                    if (throwable.message == "email_verification_sent") {
+                        _messages.emit(UiMessage.Resource(R.string.profile_updated))
+                        onSaved()
+                    } else {
+                        _messages.emit(
+                            when (throwable.message) {
+                                "email_in_use" -> UiMessage.Resource(R.string.email_in_use)
+                                else -> UiMessage.Resource(R.string.save_failed)
+                            }
+                        )
+                    }
                 }
             )
         }

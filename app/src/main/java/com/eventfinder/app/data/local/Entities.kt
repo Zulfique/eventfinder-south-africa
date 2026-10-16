@@ -18,7 +18,8 @@ data class UserEntity(
     val defaultCity: String,
     val defaultRadiusKm: Int,
     val biometricEnabled: Boolean,
-    val createdAt: Long
+    val createdAt: Long,
+    val serverBacked: Boolean = false
 )
 
 /**

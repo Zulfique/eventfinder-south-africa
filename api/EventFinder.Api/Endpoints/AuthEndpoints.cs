@@ -22,6 +22,8 @@ public static class AuthEndpoints
         group.MapPost("/reset-password", ResetPasswordAsync);
         group.MapPost("/change-password", ChangePasswordAsync).RequireAuthorization();
         group.MapPut("/me", UpdateProfileAsync).RequireAuthorization();
+        group.MapPost("/request-email-change", RequestEmailChangeAsync).RequireAuthorization();
+        group.MapPost("/verify-email-change", VerifyEmailChangeAsync);
         group.MapDelete("/me", DeleteAccountAsync).RequireAuthorization();
         group.MapGet("/me", MeAsync).RequireAuthorization();
 
@@ -150,14 +152,15 @@ public static class AuthEndpoints
             db.PasswordResetTokens.RemoveRange(prior);
 
             var rawToken = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
-            db.PasswordResetTokens.Add(new PasswordResetToken
+            var reset = new PasswordResetToken
             {
                 Id = Guid.NewGuid(),
                 UserId = user.Id,
                 TokenHash = HashToken(rawToken),
                 ExpiresAt = DateTime.UtcNow.AddMinutes(60),
                 CreatedAt = DateTime.UtcNow,
-            });
+            };
+            db.PasswordResetTokens.Add(reset);
             await db.SaveChangesAsync(ct);
 
             try
@@ -167,6 +170,10 @@ public static class AuthEndpoints
             catch (InvalidOperationException ex)
             {
                 lf.CreateLogger("AuthEndpoints").LogError(ex, "Failed to send reset email to {Email}", user.Email);
+                // Remove the token we just stored so a failed delivery does not
+                // leave a usable reset token behind.
+                db.PasswordResetTokens.Remove(reset);
+                await db.SaveChangesAsync(ct);
                 return Results.Json(
                     ApiResponse<object>.Fail("Could not send the reset email. Try again shortly."),
                     statusCode: 502);
@@ -204,6 +211,7 @@ public static class AuthEndpoints
 
         user.PasswordHash = PasswordHasher.Hash(request.NewPassword!);
         user.UpdatedAt = DateTime.UtcNow;
+        user.TokenVersion++;
         reset.UsedAt = DateTime.UtcNow;
         await db.SaveChangesAsync(ct);
 
@@ -250,25 +258,20 @@ public static class AuthEndpoints
         var fullName = request.FullName!.Trim();
         var email = request.Email!.Trim().ToLowerInvariant();
 
-        if (await db.Users.AnyAsync(u => u.Email == email && u.Id != user.Id, ct))
+        if (email != user.Email)
         {
             return Results.Json(
-                ApiResponse<object>.Fail("An account with this email already exists.",
-                    new Dictionary<string, string[]> { ["email"] = ["Email is already registered."] }),
-                statusCode: 409);
+                ApiResponse<object>.Fail("Email changes require verification.",
+                    new Dictionary<string, string[]> { ["email"] = ["Use the email-change verification flow."] }),
+                statusCode: 400);
         }
 
-        var nameChanged = user.FullName != fullName;
         user.FullName = fullName;
-        user.Email = email;
         user.UpdatedAt = DateTime.UtcNow;
 
-        if (nameChanged)
-        {
-            await db.Events
-                .Where(e => e.OrganizerId == user.Id)
-                .ExecuteUpdateAsync(s => s.SetProperty(e => e.OrganizerName, user.FullName), ct);
-        }
+        await db.Events
+            .Where(e => e.OrganizerId == user.Id)
+            .ExecuteUpdateAsync(s => s.SetProperty(e => e.OrganizerName, user.FullName), ct);
 
         await db.SaveChangesAsync(ct);
         return Results.Json(ApiResponse<UserDto>.Ok(user.ToDto(), "Profile updated."));
@@ -305,6 +308,98 @@ public static class AuthEndpoints
         await db.SaveChangesAsync(ct);
 
         return Results.Json(ApiResponse<object>.Ok(new { }, "Account deleted."));
+    }
+
+    private static async Task<IResult> RequestEmailChangeAsync(
+        RequestEmailChangeRequest request, ClaimsPrincipal principal, AppDbContext db, IEmailService email, ILoggerFactory lf, CancellationToken ct)
+    {
+        var errors = RequestValidator.Validate(request);
+        if (errors.Count > 0)
+            return Results.Json(ApiResponse<object>.Fail("Validation failed.", errors), statusCode: 400);
+
+        var user = await db.Users.CurrentUserAsync(principal, ct);
+        if (user is null)
+            return Results.Json(ApiResponse<object>.Fail("Unauthorized."), statusCode: 401);
+
+        var newEmail = request.NewEmail!.Trim().ToLowerInvariant();
+        if (newEmail == user.Email)
+            return Results.Json(ApiResponse<object>.Ok(new { }, "Email already verified."));
+
+        if (await db.Users.AnyAsync(u => u.Email == newEmail, ct))
+        {
+            return Results.Json(
+                ApiResponse<object>.Fail("An account with this email already exists.",
+                    new Dictionary<string, string[]> { ["newEmail"] = ["Email is already registered."] }),
+                statusCode: 409);
+        }
+
+        db.EmailChangeTokens.RemoveRange(db.EmailChangeTokens.Where(t => t.UserId == user.Id && t.UsedAt == null));
+
+        var rawToken = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
+        var token = new EmailChangeToken
+        {
+            Id = Guid.NewGuid(),
+            UserId = user.Id,
+            NewEmail = newEmail,
+            TokenHash = HashToken(rawToken),
+            ExpiresAt = DateTime.UtcNow.AddMinutes(60),
+            CreatedAt = DateTime.UtcNow,
+        };
+        db.EmailChangeTokens.Add(token);
+        await db.SaveChangesAsync(ct);
+
+        try
+        {
+            await email.SendEmailChangeVerificationAsync(newEmail, rawToken, ct);
+        }
+        catch (InvalidOperationException ex)
+        {
+            lf.CreateLogger("AuthEndpoints").LogError(ex, "Failed to send email-change verification to {Email}", newEmail);
+            db.EmailChangeTokens.Remove(token);
+            await db.SaveChangesAsync(ct);
+            return Results.Json(
+                ApiResponse<object>.Fail("Could not send the verification email. Try again shortly."),
+                statusCode: 502);
+        }
+
+        return Results.Json(ApiResponse<object>.Ok(new { }, "Verification email sent."));
+    }
+
+    private static async Task<IResult> VerifyEmailChangeAsync(
+        VerifyEmailChangeRequest request, AppDbContext db, CancellationToken ct)
+    {
+        var errors = RequestValidator.Validate(request);
+        if (errors.Count > 0)
+            return Results.Json(ApiResponse<object>.Fail("Validation failed.", errors), statusCode: 400);
+
+        var tokenHash = HashToken(request.Token!);
+        var token = await db.EmailChangeTokens.FirstOrDefaultAsync(
+            t => t.TokenHash == tokenHash && t.UsedAt == null && t.ExpiresAt > DateTime.UtcNow, ct);
+        if (token is null)
+        {
+            return Results.Json(
+                ApiResponse<object>.Fail("This verification token is invalid or has expired.",
+                    new Dictionary<string, string[]> { ["token"] = ["Invalid or expired token."] }),
+                statusCode: 400);
+        }
+
+        var user = await db.Users.FirstOrDefaultAsync(u => u.Id == token.UserId, ct);
+        if (user is null)
+            return Results.Json(ApiResponse<object>.Fail("User not found."), statusCode: 404);
+
+        if (await db.Users.AnyAsync(u => u.Email == token.NewEmail && u.Id != user.Id, ct))
+        {
+            return Results.Json(
+                ApiResponse<object>.Fail("An account with this email already exists."),
+                statusCode: 409);
+        }
+
+        user.Email = token.NewEmail;
+        user.UpdatedAt = DateTime.UtcNow;
+        token.UsedAt = DateTime.UtcNow;
+        await db.SaveChangesAsync(ct);
+
+        return Results.Json(ApiResponse<object>.Ok(new { }, "Email verified and updated."));
     }
 
     private static async Task<IResult> MeAsync(

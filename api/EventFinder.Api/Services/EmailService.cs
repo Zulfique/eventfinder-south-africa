@@ -13,6 +13,7 @@ namespace EventFinder.Api.Services;
 public interface IEmailService
 {
     Task SendPasswordResetEmailAsync(string toEmail, string rawToken, CancellationToken ct = default);
+    Task SendEmailChangeVerificationAsync(string toEmail, string rawToken, CancellationToken ct = default);
 }
 
 public class EmailService(HttpClient http, IConfiguration configuration, ILogger<EmailService> logger, IHostEnvironment environment)
@@ -50,6 +51,57 @@ public class EmailService(HttpClient http, IConfiguration configuration, ILogger
             Sender: new BrevoActor(Email: fromEmail, Name: fromName),
             To: [new BrevoActor(Email: toEmail, Name: string.Empty)],
             Subject: "Reset your EventFinder password",
+            TextContent: body);
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, "https://api.brevo.com/v3/smtp/email")
+        {
+            Content = JsonContent.Create(payload, options: new JsonSerializerOptions
+            {
+                DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+            })
+        };
+        request.Headers.Add("api-key", apiKey);
+
+        using var response = await http.SendAsync(request, ct);
+        if (!response.IsSuccessStatusCode)
+        {
+            var detail = await response.Content.ReadAsStringAsync(ct);
+            logger.LogError("Brevo send failed ({Status}): {Detail}", response.StatusCode, detail);
+            throw new InvalidOperationException($"Email delivery failed ({(int)response.StatusCode}).");
+        }
+    }
+
+    public async Task SendEmailChangeVerificationAsync(string toEmail, string rawToken, CancellationToken ct = default)
+    {
+        var apiKey = configuration["Brevo:ApiKey"];
+        var fromEmail = configuration["Brevo:FromEmail"] ?? "no-reply@eventfinder.app";
+        var fromName = configuration["Brevo:FromName"] ?? "EventFinder";
+
+        if (string.IsNullOrWhiteSpace(apiKey))
+        {
+            if (environment.IsDevelopment())
+            {
+                logger.LogInformation("Brevo API key not configured — email-change verification for {Email} not sent (development mode).", toEmail);
+                return;
+            }
+            throw new InvalidOperationException("Email delivery is not configured (Brevo:ApiKey missing).");
+        }
+
+        var body = $"""
+            You requested to change the email address on your EventFinder account.
+
+            Verification token: {rawToken}
+
+            Enter this token in the app to confirm the new address.
+            The token expires in 60 minutes and can only be used once.
+
+            If you did not request this, you can ignore this email.
+            """;
+
+        var payload = new BrevoMail(
+            Sender: new BrevoActor(Email: fromEmail, Name: fromName),
+            To: [new BrevoActor(Email: toEmail, Name: string.Empty)],
+            Subject: "Verify your new EventFinder email",
             TextContent: body);
 
         using var request = new HttpRequestMessage(HttpMethod.Post, "https://api.brevo.com/v3/smtp/email")

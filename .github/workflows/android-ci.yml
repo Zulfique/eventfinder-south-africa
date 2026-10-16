@@ -103,3 +103,25 @@ jobs:
           name: instrumentation-test-report
           path: app/build/reports/androidTests/connected
           if-no-files-found: ignore
+
+  api-tests:
+    name: .NET API tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore dependencies
+        run: dotnet restore api/EventFinder.Api.Tests/EventFinder.Api.Tests.csproj
+
+      - name: Build API
+        run: dotnet build api/EventFinder.Api/EventFinder.Api.csproj --configuration Release --no-restore
+
+      - name: Run API integration tests
+        run: dotnet test api/EventFinder.Api.Tests/EventFinder.Api.Tests.csproj --configuration Release --no-build --verbosity normal

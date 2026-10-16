@@ -132,7 +132,8 @@ class AuthRepositoryImpl(
                     defaultCity = "South Africa",
                     defaultRadiusKm = 50,
                     biometricEnabled = false,
-                    createdAt = System.currentTimeMillis()
+                    createdAt = System.currentTimeMillis(),
+                    serverBacked = true
                 )
                 userDao.upsert(user)
                 preferences.setAuthToken(auth.token)
@@ -174,12 +175,13 @@ class AuthRepositoryImpl(
             preferredLanguage = language,
             defaultCity = "South Africa",
             defaultRadiusKm = 50,
-            biometricEnabled = false,
-            createdAt = System.currentTimeMillis()
-        )
-        userDao.upsert(user)
-        preferences.setSessionUserId(user.id)
-        preferences.setLanguage(language)
+                    biometricEnabled = false,
+                    createdAt = System.currentTimeMillis(),
+                    serverBacked = false
+                )
+                userDao.upsert(user)
+                preferences.setSessionUserId(user.id)
+                preferences.setLanguage(language)
         ReminderHelper.restoreReminders(context, eventDao, user.id)
         AppLogger.i("AuthRepository", "New local account created for ${user.email}")
         return Result.success(user.toDomain())
@@ -202,7 +204,12 @@ class AuthRepositoryImpl(
             }.onFailure { error ->
                 when (error) {
                     is EventFinderApiClient.ApiException -> {
-                        AppLogger.w("AuthRepository", "API login rejected - trying local hash for offline account")
+                        val localUser = userDao.findByEmail(normalizedEmail)
+                        if (localUser?.serverBacked == true) {
+                            AppLogger.w("AuthRepository", "API login rejected for server-backed account - not falling back to stale local hash")
+                            return Result.failure(IllegalArgumentException("login_invalid_credentials"))
+                        }
+                        AppLogger.w("AuthRepository", "API login rejected - trying local hash for local-only account")
                     }
                     is EventFinderApiClient.NetworkException ->
                         AppLogger.w("AuthRepository", "API unreachable during login - trying local hash")
@@ -273,24 +280,37 @@ class AuthRepositoryImpl(
         val token = preferences.authToken.first()
         val client = api
         if (client != null && !token.isNullOrBlank()) {
-            val result = client.updateProfile("Bearer $token", normalizedFullName, normalizedEmail)
-            result.onFailure { error ->
+            // Name is updated immediately; email changes go through a verified
+            // flow so a new address is not trusted until the user confirms it.
+            val nameResult = client.updateProfile("Bearer $token", normalizedFullName, current.email)
+            nameResult.onFailure { error ->
                 if (error is EventFinderApiClient.ApiException && (error.message?.contains("already", ignoreCase = true) == true || error.code == 409)) {
                     return Result.failure(IllegalArgumentException("email_in_use"))
                 }
                 AppLogger.w("AuthRepository", "Server profile update failed: ${error.message}")
                 return Result.failure(error)
             }
-            val updatedUser = result.getOrNull()
+            val updatedUser = nameResult.getOrNull()
             val entity = userDao.findById(current.id) ?: return Result.failure(IllegalStateException("user_missing"))
             userDao.upsert(entity.copy(
-                fullName = updatedUser?.fullName ?: normalizedFullName,
-                email = updatedUser?.email ?: normalizedEmail
+                fullName = updatedUser?.fullName ?: normalizedFullName
             ))
-            val updated = current.copy(
-                fullName = updatedUser?.fullName ?: normalizedFullName,
-                email = updatedUser?.email ?: normalizedEmail
-            )
+            var updated = current.copy(fullName = updatedUser?.fullName ?: normalizedFullName)
+
+            if (normalizedEmail != current.email) {
+                val changeResult = client.requestEmailChange("Bearer $token", normalizedEmail)
+                if (changeResult.isFailure) {
+                    val error = changeResult.exceptionOrNull()
+                    if (error is EventFinderApiClient.ApiException && (error.message?.contains("already", ignoreCase = true) == true || error.code == 409)) {
+                        return Result.failure(IllegalArgumentException("email_in_use"))
+                    }
+                    AppLogger.w("AuthRepository", "Email-change request failed: ${error?.message}")
+                    return Result.failure(error ?: IllegalStateException("email_change_failed"))
+                }
+                AppLogger.i("AuthRepository", "Email-change verification sent for ${updated.id}")
+                return Result.failure(IllegalArgumentException("email_verification_sent"))
+            }
+
             AppLogger.i("AuthRepository", "Profile updated for ${updated.id}")
             return Result.success(updated)
         }
@@ -471,14 +491,16 @@ class AuthRepositoryImpl(
             preferredLanguage = language,
             defaultCity = "South Africa",
             defaultRadiusKm = 50,
-            biometricEnabled = false,
-            createdAt = System.currentTimeMillis()
-        )
-        val refreshed = entity.copy(
+                    biometricEnabled = false,
+                    createdAt = System.currentTimeMillis(),
+                    serverBacked = true
+                )
+                val refreshed = entity.copy(
             fullName = fullName.ifBlank { entity.fullName },
             email = email.ifBlank { entity.email },
             preferredLanguage = language.ifBlank { entity.preferredLanguage },
-            passwordHash = passwordHash
+            passwordHash = passwordHash,
+            serverBacked = true
         )
         userDao.upsert(refreshed)
         return refreshed

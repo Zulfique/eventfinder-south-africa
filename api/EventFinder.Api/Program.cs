@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using System.Text;
 using System.Threading.RateLimiting;
 using EventFinder.Api.Data;
@@ -33,6 +34,32 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ValidateLifetime = true,
             ClockSkew = TimeSpan.FromMinutes(1),
             NameClaimType = "sub",
+        };
+        options.Events = new Microsoft.AspNetCore.Authentication.JwtBearer.JwtBearerEvents
+        {
+            OnTokenValidated = async context =>
+            {
+                var sub = context.Principal?.FindFirstValue(System.Security.Claims.ClaimTypes.NameIdentifier)
+                          ?? context.Principal?.FindFirstValue("sub");
+                var tvClaim = context.Principal?.FindFirstValue("tv");
+                if (!Guid.TryParse(sub, out var userId))
+                {
+                    context.Fail("Invalid subject.");
+                    return;
+                }
+                using var scope = context.HttpContext.RequestServices.CreateScope();
+                var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+                var user = await db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == userId);
+                if (user is null)
+                {
+                    context.Fail("User not found.");
+                    return;
+                }
+                if (tvClaim is null || !int.TryParse(tvClaim, out var tokenVersion) || tokenVersion != user.TokenVersion)
+                {
+                    context.Fail("Token has been revoked.");
+                }
+            }
         };
     });
 builder.Services.AddAuthorization();

@@ -30,6 +30,13 @@ public class User
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
 
+    /// <summary>
+    /// Incremented whenever the password is reset (or otherwise changed in a
+    /// way that must invalidate outstanding JWTs). Tokens carrying an older
+    /// version are rejected.
+    /// </summary>
+    public int TokenVersion { get; set; }
+
     [NotMapped]
     public bool HasGoogleAccount => !string.IsNullOrEmpty(GoogleSubject);
 }
@@ -109,6 +116,24 @@ public class PasswordResetToken
     public Guid UserId { get; set; }
 
     /// <summary>SHA-256 of the raw token that was emailed to the user.</summary>
+    [Required]
+    public string TokenHash { get; set; } = string.Empty;
+
+    public DateTime ExpiresAt { get; set; }
+    public DateTime? UsedAt { get; set; }
+    public DateTime CreatedAt { get; set; }
+}
+
+public class EmailChangeToken
+{
+    [Key]
+    public Guid Id { get; set; }
+
+    public Guid UserId { get; set; }
+
+    [Required, MaxLength(254)]
+    public string NewEmail { get; set; } = string.Empty;
+
     [Required]
     public string TokenHash { get; set; } = string.Empty;
 

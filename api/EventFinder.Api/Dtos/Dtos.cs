@@ -31,6 +31,12 @@ public record UpdateProfileRequest(
     [property: Required, MaxLength(120)] string? FullName,
     [property: Required, EmailAddress, MaxLength(254)] string? Email);
 
+public record RequestEmailChangeRequest(
+    [property: Required, EmailAddress, MaxLength(254)] string? NewEmail);
+
+public record VerifyEmailChangeRequest(
+    [property: Required, MinLength(16), MaxLength(256)] string? Token);
+
 public record CreateEventRequest(
     [property: Required, MaxLength(160)] string? Title,
     [property: Required, MinLength(10), MaxLength(4000)] string? Description,

@@ -91,6 +91,10 @@ data class ChangePasswordBody(val currentPassword: String, val newPassword: Stri
 
 data class UpdateProfileBody(val fullName: String, val email: String)
 
+data class RequestEmailChangeBody(val newEmail: String)
+
+data class VerifyEmailChangeBody(val token: String)
+
 data class CreateEventBody(
     val title: String,
     val description: String,
@@ -134,6 +138,17 @@ interface EventFinderApiService {
         @Header("Authorization") bearer: String,
         @Body body: UpdateProfileBody
     ): retrofit2.Response<ApiEnvelope<ApiUserDto>>
+
+    @POST("api/auth/request-email-change")
+    suspend fun requestEmailChange(
+        @Header("Authorization") bearer: String,
+        @Body body: RequestEmailChangeBody
+    ): retrofit2.Response<ApiEnvelope<Unit>>
+
+    @POST("api/auth/verify-email-change")
+    suspend fun verifyEmailChange(
+        @Body body: VerifyEmailChangeBody
+    ): retrofit2.Response<ApiEnvelope<Unit>>
 
     @DELETE("api/auth/me")
     suspend fun deleteAccount(
@@ -234,6 +249,12 @@ class EventFinderApiClient(
 
     suspend fun updateProfile(bearer: String, fullName: String, email: String): Result<ApiUserDto> =
         wrap("updateProfile") { service.updateProfile(bearer, UpdateProfileBody(fullName, email)) }
+
+    suspend fun requestEmailChange(bearer: String, newEmail: String): Result<Unit> =
+        wrap("requestEmailChange") { service.requestEmailChange(bearer, RequestEmailChangeBody(newEmail)) }
+
+    suspend fun verifyEmailChange(token: String): Result<Unit> =
+        wrap("verifyEmailChange") { service.verifyEmailChange(VerifyEmailChangeBody(token)) }
 
     suspend fun deleteAccount(bearer: String): Result<Unit> =
         wrap("deleteAccount") { service.deleteAccount(bearer) }
