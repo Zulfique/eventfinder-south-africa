@@ -5,13 +5,15 @@ import android.content.Context
 import android.os.Build
 import android.util.Log
 import com.eventfinder.app.di.AppContainer
+import com.eventfinder.app.notifications.EventFinderMessagingService
 import com.eventfinder.app.utils.AppLogger
 import org.osmdroid.config.Configuration
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory
 
 /**
  * Application entry point. Owns the dependency container and performs the
- * one-time global setup (logging, osmdroid configuration) described below.
+ * one-time global setup (logging, osmdroid configuration, Firebase topics,
+ * automatic reconnect sync) described below.
  */
 class EventFinderApp : Application() {
 
@@ -24,6 +26,8 @@ class EventFinderApp : Application() {
         enableStartupLogging()
         container = AppContainer(this)
         startNetworkMonitoring()
+        startReconnectSync()
+        subscribeToPushTopics()
         initialiseMapSdk()
     }
 
@@ -39,6 +43,21 @@ class EventFinderApp : Application() {
     }
 
     /**
+     * Wires the offline→online automatic synchronisation (POE: Offline Mode
+     * with Synchronisation). [SyncCoordinator] pushes Room changes to Firestore
+     * and refreshes discovery feeds as soon as connectivity returns.
+     */
+    private fun startReconnectSync() {
+        container.syncCoordinator.start()
+        AppLogger.d("EventFinderApp", "Reconnect sync coordinator started")
+    }
+
+    /** Subscribes this install to the shared FCM topic for real-time pushes. */
+    private fun subscribeToPushTopics() {
+        EventFinderMessagingService.subscribeToTopics()
+    }
+
+    /**
      * osmdroid (OpenStreetMap SDK) needs its user-agent before any MapView is
      * created. It is configured here exactly once, following the official docs:
      *  - osmdroid wiki: https://github.com/osmdroid/osmdroid/wiki/How-to-use-the-osmdroid-library
@@ -49,7 +68,7 @@ class EventFinderApp : Application() {
             getSharedPreferences("${packageName}_preferences", Context.MODE_PRIVATE)
         )
         Configuration.getInstance().userAgentValue =
-            "EventFinder/1.0 (https://github.com/Zulfique/eventfinder-south-africa)"
+            "EventFinder/1.1 (https://github.com/Zulfique/eventfinder-south-africa)"
         AppLogger.d("EventFinderApp", "osmdroid configured with ${TileSourceFactory.MAPNIK.name()}")
     }
 }

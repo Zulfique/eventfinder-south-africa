@@ -8,6 +8,7 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import android.content.Context
 import android.net.Uri
 import com.eventfinder.app.R
+import com.eventfinder.app.data.cloud.FirebaseImageUploader
 import com.eventfinder.app.data.repository.AuthRepository
 import com.eventfinder.app.data.repository.EventRepository
 import com.eventfinder.app.data.repository.IMAGE_REMOVED
@@ -97,12 +98,15 @@ internal const val MIN_DESCRIPTION_LENGTH = 20
 
 /**
  * Create event wizard (Screen 8). Multi-step form with validation on each
- * step before the event is written to the local Room catalogue.
+ * step before the event is written to the local Room catalogue and, when
+ * available, mirrored to Cloud Firestore with the photo stored in Firebase
+ * Cloud Storage (blob storage).
  */
 class CreateEventViewModel(
     private val eventRepository: EventRepository,
     private val authRepository: AuthRepository,
-    private val eventId: String? = null
+    private val eventId: String? = null,
+    private val imageUploader: FirebaseImageUploader? = null
 ) : ViewModel() {
 
     /** True when the wizard is editing an existing user-created event. */
@@ -237,6 +241,24 @@ class CreateEventViewModel(
             // Blank or omitted coordinates are stored as null (see isValidCoordinate).
             val lat = state.latitude.trim().toDoubleOrNull()
             val lng = state.longitude.trim().toDoubleOrNull()
+
+            // Blob storage: if a local photo was picked, upload it to Firebase
+            // Cloud Storage and use the permanent download URL. Falls back to
+            // the local file URI when Firebase is unavailable or the upload
+            // fails, so the flow never crashes and works fully offline.
+            var imageUrl = state.imageUrl
+            if (imageUrl != null &&
+                imageUrl.startsWith("file:") &&
+                imageUploader != null
+            ) {
+                val uploadId = eventId ?: imageUploader.newImageId()
+                val remoteUrl = imageUploader.uploadEventImage(imageUrl, uploadId)
+                if (remoteUrl != null) {
+                    ImageStorage.deleteIfLocal(imageUrl)
+                    imageUrl = remoteUrl
+                }
+            }
+
             val draft = NewEventDraft(
                 title = state.title.trim(),
                 description = state.description.trim(),
@@ -248,7 +270,7 @@ class CreateEventViewModel(
                 latitude = lat,
                 longitude = lng,
                 isPublic = state.isPublic,
-                imageUrl = state.imageUrl
+                imageUrl = imageUrl
             )
             val result: Result<*> = if (eventId != null) {
                 eventRepository.updateEvent(eventId, draft)
@@ -289,7 +311,12 @@ class CreateEventViewModel(
             eventId: String? = null
         ): ViewModelProvider.Factory = viewModelFactory {
             initializer {
-                CreateEventViewModel(container.eventRepository, container.authRepository, eventId)
+                CreateEventViewModel(
+                    container.eventRepository,
+                    container.authRepository,
+                    eventId,
+                    container.imageUploader
+                )
             }
         }
     }

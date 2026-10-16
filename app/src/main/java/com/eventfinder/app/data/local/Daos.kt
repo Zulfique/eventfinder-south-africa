@@ -94,6 +94,9 @@ suspend fun countNonUserCreated(): Int
     @Query("DELETE FROM events WHERE isCreatedByUser = 1")
     suspend fun deleteCreatedByUser()
 
+    @Query("SELECT * FROM events WHERE isCreatedByUser = 1 AND organizerId = :userId")
+    suspend fun getUserCreatedEventsForUser(userId: String): List<EventEntity>
+
     @Query("DELETE FROM events WHERE id = :id")
     suspend fun deleteById(id: String)
 

@@ -1,5 +1,6 @@
 package com.eventfinder.app.data.repository
 
+import com.eventfinder.app.data.cloud.CloudSyncManager
 import com.eventfinder.app.data.local.DatabaseTransactionHelper
 import com.eventfinder.app.data.local.EventDao
 import com.eventfinder.app.data.local.EventEntity
@@ -17,6 +18,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
 
 /** Sentinel stored in [NewEventDraft.imageUrl] to indicate the image was removed. */
 const val IMAGE_REMOVED = "\u0000IMAGE_REMOVED"
@@ -38,8 +40,9 @@ data class NewEventDraft(
 )
 
 /**
- * Central event catalogue repository backed by Room. Room is the only
- * authoritative data store. There is no cloud backend.
+ * Central event catalogue repository backed by Room. Room is the offline-first
+ * source of truth; user-created events, favourites and RSVPs are additionally
+ * mirrored to Cloud Firestore via [CloudSyncManager] when connectivity allows.
  */
 interface EventRepository {
     fun observeAllEvents(): Flow<List<Event>>
@@ -67,7 +70,8 @@ class EventRepositoryImpl(
     private val favoriteDao: FavoriteDao,
     private val rsvpDao: RsvpDao,
     private val preferences: SessionProvider,
-    private val context: android.content.Context? = null
+    private val context: android.content.Context? = null,
+    private val cloudSyncManager: CloudSyncManager? = null
 ) : EventRepository {
 
     private val tag = "EventRepository"
@@ -154,6 +158,12 @@ override suspend fun ensureSeeded() {
 
         database.setFavoriteAtomically(userId, eventId, newValue)
         AppLogger.i(tag, "${if (newValue) "Added" else "Removed"} favourite: $eventId")
+        // Mirror the change to Firestore (fire-and-forget; retried on reconnect).
+        cloudSyncManager?.let { sync ->
+            kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+                runCatching { sync.pushFavorite(userId, eventId, newValue) }
+            }
+        }
         return newValue
     }
 
@@ -166,6 +176,11 @@ override suspend fun ensureSeeded() {
         }
         database.setRsvpAtomically(userId, eventId, status.storage)
         AppLogger.i(tag, "RSVP updated for $eventId -> ${status.storage}")
+        cloudSyncManager?.let { sync ->
+            kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+                runCatching { sync.pushRsvp(userId, eventId, status.storage) }
+            }
+        }
     }
 
     override suspend fun createEvent(draft: NewEventDraft): Result<String> {
@@ -199,6 +214,11 @@ override suspend fun ensureSeeded() {
         )
         database.createEventAtomically(entity)
         AppLogger.i(tag, "Community event created locally: $id")
+        cloudSyncManager?.let { sync ->
+            kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+                runCatching { sync.pushEvent(entity) }
+            }
+        }
         return Result.success(id)
     }
 
@@ -237,6 +257,11 @@ override suspend fun ensureSeeded() {
         )
         database.updateEventAtomically(updated)
         AppLogger.i(tag, "Community event updated locally: $eventId")
+        cloudSyncManager?.let { sync ->
+            kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+                runCatching { sync.pushEvent(updated) }
+            }
+        }
         return Result.success(Unit)
     }
 
@@ -256,6 +281,11 @@ override suspend fun ensureSeeded() {
         context?.let { com.eventfinder.app.notifications.NotificationHelper.cancelEventReminders(it, eventId) }
         database.deleteEventAtomically(eventId)
         AppLogger.i(tag, "Community event deleted locally: $eventId")
+        cloudSyncManager?.let { sync ->
+            kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+                runCatching { sync.deleteEventFromCloud(eventId) }
+            }
+        }
         return Result.success(Unit)
     }
 

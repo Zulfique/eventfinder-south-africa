@@ -1,6 +1,9 @@
 package com.eventfinder.app.di
 
 import android.content.Context
+import com.eventfinder.app.data.cloud.CloudSyncManager
+import com.eventfinder.app.data.cloud.FirebaseImageUploader
+import com.eventfinder.app.data.cloud.SyncCoordinator
 import com.eventfinder.app.data.local.AppDatabase
 import com.eventfinder.app.data.remote.ApiClient
 import com.eventfinder.app.data.remote.EventGeocoder
@@ -17,6 +20,9 @@ import com.eventfinder.app.data.sources.SouthAfricaEventSources
 import com.eventfinder.app.data.store.UserPreferences
 import com.eventfinder.app.utils.AppLogger
 import com.eventfinder.app.utils.NetworkMonitor
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 
 /**
  * Simple manual dependency-injection container (service locator).
@@ -29,9 +35,24 @@ class AppContainer(context: Context) {
 
     private val appContext = context.applicationContext
 
+    /** Application-wide coroutine scope for background work (sync, push). */
+    val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
     internal val database: AppDatabase by lazy { AppDatabase.build(appContext) }
 
     val preferences: UserPreferences by lazy { UserPreferences(appContext) }
+
+    val cloudSyncManager: CloudSyncManager by lazy {
+        CloudSyncManager(
+            context = appContext,
+            eventDao = database.eventDao(),
+            favoriteDao = database.favoriteDao(),
+            rsvpDao = database.rsvpDao(),
+            preferences = preferences
+        )
+    }
+
+    val imageUploader: FirebaseImageUploader by lazy { FirebaseImageUploader() }
 
     val authRepository: AuthRepository by lazy {
         AuthRepositoryImpl(
@@ -50,7 +71,8 @@ class AppContainer(context: Context) {
             favoriteDao = database.favoriteDao(),
             rsvpDao = database.rsvpDao(),
             preferences = preferences,
-            context = appContext
+            context = appContext,
+            cloudSyncManager = cloudSyncManager
         )
     }
 
@@ -89,6 +111,15 @@ class AppContainer(context: Context) {
     }
 
     val networkMonitor: NetworkMonitor by lazy { NetworkMonitor(appContext) }
+
+    val syncCoordinator: SyncCoordinator by lazy {
+        SyncCoordinator(
+            networkMonitor = networkMonitor,
+            cloudSyncManager = cloudSyncManager,
+            eventDiscoveryRepository = eventDiscoveryRepository,
+            scope = applicationScope
+        )
+    }
 
     init {
         AppLogger.d("AppContainer", "Dependency graph initialised")

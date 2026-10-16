@@ -78,6 +78,9 @@ class EventDiscoveryRepositoryTest {
             emit()
         }
 
+        override suspend fun getUserCreatedEventsForUser(userId: String): List<com.eventfinder.app.data.local.EventEntity> =
+            rows.values.filter { it.isCreatedByUser && it.organizerId == userId }
+
         override suspend fun deleteById(id: String) {
             rows.remove(id)
             emit()

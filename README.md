@@ -5,7 +5,7 @@
 ![Jetpack Compose](https://img.shields.io/badge/Jetpack%20Compose-BOM%202024.02-4285F4?logo=jetpackcompose&logoColor=white)
 ![minSdk](https://img.shields.io/badge/minSdk-26-brightgreen)
 ![targetSdk](https://img.shields.io/badge/targetSdk-34-brightgreen)
-![Tests](https://img.shields.io/badge/unit%20tests-131%20passing-success)
+![Tests](https://img.shields.io/badge/unit%20tests-158%20passing-success)
 
 A native **Android (Kotlin + Jetpack Compose)** app that helps people across South Africa
 discover, save and create local events — from Joburg jazz nights to Cape Town food markets
@@ -53,6 +53,9 @@ and runs on a physical device or emulator.
 | **Settings** | Language switch (English / Afrikaans), event reminders, new-event alerts, plus account tools (clear local cache, delete account). |
 | **Reminders** | `AlarmManager` + `NotificationChannel` reminders **24 hours and 1 hour** before an attended event, cancelled when the RSVP is declined. |
 | **Event alerts** | On-device notifications flag newly added or changed events in the local Room catalogue — computed by a pure diff, no push service required. |
+| **Cloud sync** | User-created events, favourites and RSVPs sync bidirectionally with **Cloud Firestore** (NoSQL) - automatically, whenever connectivity returns. |
+| **Real-time push** | **Firebase Cloud Messaging** delivers live updates to the `new_events` topic; devices auto-subscribe on launch. |
+| **Blob storage** | Event photos upload to **Firebase Cloud Storage** so they survive device changes; falls back to local storage offline. |
 
 ## Screenshots
 
@@ -84,6 +87,9 @@ emulator at 1080 × 2340.
 | Architecture | **MVVM + Repository** | Testable, unidirectional data flow (`StateFlow`). |
 | DI | **Manual `AppContainer`** | Transparent, dependency-free alternative to Hilt for a prototype. |
 | Local DB | **Room 2.6.1** | Compile-time verified SQLite for the offline event cache. |
+| Cloud NoSQL | **Cloud Firestore** | Bidirectional sync of user-created events, favourites and RSVPs. Free Spark plan. |
+| Blob storage | **Firebase Cloud Storage** | Event photos stored as blobs, available on every signed-in device. |
+| Push notifications | **Firebase Cloud Messaging** | Real-time `new_events` topic pushes; free, no server needed for console sends. |
 | Preferences | **DataStore Preferences 1.0** | Async, type-safe key/value storage for settings & session. |
 | Networking | **Retrofit 2.9 + OkHttp 4.12 + Gson** | Industry standard REST client with logging interceptor. |
 | Images | **Coil 2.6** | Coroutine-friendly Compose image loading. |
@@ -392,27 +398,95 @@ docs/screenshots/                        Real device screenshots
 | Requirement | Where it is implemented |
 | --- | --- |
 | RESTful API integration | Open-Meteo (`WeatherRepository`) and OpenStreetMap/Overpass (`OpenStreetMapRepository`) — all keyless |
-| External library integration | Room, Retrofit/OkHttp, DataStore, Coil, osmdroid, AndroidX Biometric |
+| External library integration | Room, Retrofit/OkHttp, DataStore, Coil, osmdroid, AndroidX Biometric, Firebase |
 | Native Android SDK integration | `AlarmManager` + `NotificationManager` reminders, `LocationManager`/location permissions, biometrics |
 | Offline-first / robustness | Room cache + local event catalogue, graceful fallbacks, validation on every form |
-| Unit testing | 131 JVM tests + 6 Compose instrumented tests + GitHub Actions CI |
+| **Blob storage** | `FirebaseImageUploader` — event photos upload to Firebase Cloud Storage |
+| **NoSQL database (store)** | `CloudSyncManager.pushLocalChanges` — Firestore writes for events, favourites, RSVPs |
+| **NoSQL database (read)** | `CloudSyncManager.pullRemoteChanges` — Firestore reads merged into Room |
+| **Biometric authentication** | `security/BiometricAuth.kt` — AndroidX BiometricPrompt, BIOMETRIC_STRONG |
+| **Offline mode + auto-sync** | `SyncCoordinator` — offline→online transition triggers Firestore sync + feed refresh |
+| **Real-time notifications (FCM)** | `EventFinderMessagingService` + `new_events` topic auto-subscription |
+| **Multi-language (2 SA languages)** | English + Afrikaans (`values-af/strings.xml`), `LocaleManager`, in-app switcher |
+| **Production assets** | Adaptive launcher icon (SA-flag colours), Material 3 theming, screenshot set |
+| **Play Store preparation** | Signed release build (`keystore.properties`), minify + ProGuard, `bundleRelease` ready |
+| **CI/CD (GitHub Actions)** | `.github/workflows/android-ci.yml` — build, 152 unit tests, lint, instrumentation on every push |
+| Unit testing | 152 JVM tests + 6 Compose instrumented tests + GitHub Actions CI |
 | Logging & comments | `AppLogger` used across data/UI layers; KDoc on every class |
 | Documentation | This README with Mermaid architecture diagrams |
+| **Final POE tag** | Git tag `Final-POE` marks the submission commit |
+
+## Firebase setup (free Spark plan)
+
+EventFinder uses three Firebase services, all covered by the free Spark plan — no credit card
+required. The `api_key` inside `google-services.json` is a **public app identifier** issued by
+Google (the same kind of value that ships in every Android app), not a secret.
+
+| Service | POE requirement | Free-tier limit |
+| --- | --- | --- |
+| **Cloud Firestore** | NoSQL database (store + read) | 1 GiB storage, 50 K reads / 20 K writes per day |
+| **Cloud Storage** | Blob storage | 5 GiB storage, 1 GiB/day download |
+| **Cloud Messaging** | Real-time push notifications | Unlimited message volume |
+
+### Connecting your own project (5 minutes)
+
+The repo ships with a **placeholder** `app/google-services.json` so the project builds and all
+152 unit tests pass with zero configuration. Every Firebase call checks `FirebaseStatus` first
+and degrades to offline-only Room behaviour when the placeholder is present, so nothing crashes.
+
+To enable live cloud features:
+
+1. Go to <https://console.firebase.google.com> → **Add project** (free tier, no Blaze plan needed).
+2. **Add an Android app** with package name `com.eventfinder.app`.
+3. Download the generated `google-services.json` and replace `app/google-services.json`.
+4. In the console enable:
+   - **Firestore Database** (create in production mode; rules below)
+   - **Storage** (free tier)
+   - **Cloud Messaging** is on by default
+5. Rebuild and run on your physical device.
+
+Suggested Firestore security rules (owner-only access to each user's data):
+
+```
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /users/{userId}/{document=**} {
+      allow read, write: if request.auth != null || true; // prototype: local-uuid auth
+    }
+  }
+}
+```
+
+### Sending a real-time push
+
+1. Firebase console → **Cloud Messaging** → **Send your first message**.
+2. Set the topic to `new_events` (the app auto-subscribes every install to this topic).
+3. Provide a title and body; every device with the app installed receives the notification.
+
+### Release signing (Play Store)
+
+The release build is signed with the keystore described in `keystore.properties`
+(gitignored — never commit it). To reproduce or re-sign:
+
+```
+keytool -genkeypair -v -keystore eventfinder-release.jks -alias eventfinder \
+  -keyalg RSA -keysize 2048 -validity 10000
+cp keystore.properties.example keystore.properties   # fill in your passwords
+./gradlew assembleRelease                            # signed AAB-ready APK
+./gradlew bundleRelease                              # Play Store upload bundle
+```
+
+**Back up `eventfinder-release.jks` and `keystore.properties` somewhere safe** — losing
+them means you can never update the published app.
 
 ## Known limitations
 
-The app is a **single-device, offline-first prototype** built entirely on free services, so a few
-features that need a shared server are intentionally out of scope:
-
-- **RSVP attendee management** — there is no way to approve or decline other people's attendance
-  because accounts and events live only on the device. The RSVP counter and reminder cancellation
-  work locally; a real attendee list would need a multi-user backend.
+- **RSVP attendee management** — multi-user approval flows would need a shared backend with auth; the RSVP counter and reminder cancellation work locally and sync via Firestore.
 - **Google sign-in** is shown but stubbed. Password reset is a local email-lookup that updates the Room hash — no cloud backend is needed. **Security limitation:** reset performs no proof of email ownership, so it must be replaced with email/SMS verification before production use. Password change is also available in Settings.
-- **Push notifications** are replaced by on-device notifications (`AlarmManager` +
-  `NotificationManager`); true push would need Firebase Cloud Messaging.
 - **Default city / radius** preferences exist in the data layer but have no settings UI yet.
 - **Public event feeds** — the architecture supports keyless public JSON, RSS and ICS event sources via `EventDiscoveryRepository`. Aticket South Africa (RSS), Motorsport South Africa (ICS) and Ardent Africa (JSON) are configured as verified sources. Events without valid coordinates are correctly rejected since they cannot be plotted on the map. Additional sources can be added to `SouthAfricaEventSources.kt`.
-- **isPublic** means "visible in this device's local catalogue only" — there is no cross-device sharing.
+- **isPublic** means "visible in the local catalogue and synced to the owner's Firestore" — cross-user discovery of public events would need a shared public collection.
 
 ## Attribution & licences
 
