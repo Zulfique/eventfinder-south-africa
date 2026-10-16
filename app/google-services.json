@@ -1,13 +1,13 @@
 {
   "project_info": {
-    "project_number": "000000000000",
+    "project_number": "690167106186",
     "project_id": "eventfinder-south-africa",
-    "storage_bucket": "eventfinder-south-africa.appspot.com"
+    "storage_bucket": "eventfinder-south-africa.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:000000000000:android:0000000000000000000000",
+        "mobilesdk_app_id": "1:690167106186:android:4766476a0ad8af4c513b73",
         "android_client_info": {
           "package_name": "com.eventfinder.app"
         }
@@ -15,7 +15,7 @@
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyA_PLACEHOLDER_KEY_REPLACE_WITH_REAL_FIREBASE_KEY"
+          "current_key": "AIzaSyCHCRusnHWqMIt1o7UqyN3Fvv_pjPJ5ARk"
         }
       ],
       "services": {
