@@ -17,6 +17,16 @@ val keystoreProperties = Properties().apply {
     }
 }
 
+// Local overrides (gitignored): GOOGLE_SERVER_CLIENT_ID, EVENTFINDER_API_URL, …
+// Exposed as project properties so project.findProperty(...) below resolves them.
+val localPropertiesFile = rootProject.file("local.properties")
+val localProperties = Properties().apply {
+    if (localPropertiesFile.exists()) {
+        localPropertiesFile.inputStream().use { load(it) }
+    }
+}
+localProperties.forEach { (key, value) -> extra[key.toString()] = value }
+
 android {
     namespace = "com.eventfinder.app"
     compileSdk = 34

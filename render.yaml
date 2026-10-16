@@ -25,6 +25,7 @@ services:
       # Optional: enables real password-reset emails via Brevo (free 300/day).
       - key: Brevo__ApiKey
         value: ""
-      # Optional: enables Google sign-in (paste the OAuth web client ID).
+      # Enables Google sign-in (OAuth web client ID — public value, verified
+      # as the ID-token audience; must match GOOGLE_SERVER_CLIENT_ID in the app).
       - key: Google__ServerClientId
-        value: ""
+        value: "690167106186-o9bolqrekmkv8bpbfrqd532iqe6r5m3c.apps.googleusercontent.com"
