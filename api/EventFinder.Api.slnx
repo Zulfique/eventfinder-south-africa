@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="EventFinder.Api.Tests/EventFinder.Api.Tests.csproj" />
+  <Project Path="EventFinder.Api/EventFinder.Api.csproj" />
+</Solution>

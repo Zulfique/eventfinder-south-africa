@@ -28,7 +28,9 @@ data class SettingsUiState(
     val language: SupportedLanguage = SupportedLanguage.ENGLISH,
     val biometricEnabled: Boolean = false,
     val remindersEnabled: Boolean = true,
-    val newEventsAlerts: Boolean = true
+    val newEventsAlerts: Boolean = true,
+    val defaultCity: String = "",
+    val defaultRadiusKm: Int = 50
 )
 
 /**
@@ -47,12 +49,26 @@ class SettingsViewModel(
     val messages = _messages.asSharedFlow()
 
     val uiState = kotlinx.coroutines.flow.combine(
-        preferences.language.map { SupportedLanguage.fromCode(it) },
-        authRepository.currentUser.map { it?.biometricEnabled ?: false },
-        preferences.remindersEnabled,
-        preferences.newEventAlertsEnabled
-    ) { lang, bio, rem, alerts ->
-        SettingsUiState(lang, bio, rem, alerts)
+        kotlinx.coroutines.flow.combine(
+            preferences.language.map { SupportedLanguage.fromCode(it) },
+            authRepository.currentUser.map { it?.biometricEnabled ?: false },
+            preferences.remindersEnabled,
+            preferences.newEventAlertsEnabled
+        ) { lang, bio, rem, alerts ->
+            listOf(lang, bio, rem, alerts)
+        },
+        preferences.defaultCity,
+        preferences.defaultRadiusKm
+    ) { base, city, radius ->
+        @Suppress("UNCHECKED_CAST")
+        SettingsUiState(
+            language = base[0] as SupportedLanguage,
+            biometricEnabled = base[1] as Boolean,
+            remindersEnabled = base[2] as Boolean,
+            newEventsAlerts = base[3] as Boolean,
+            defaultCity = city,
+            defaultRadiusKm = radius
+        )
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5_000),
@@ -87,6 +103,14 @@ class SettingsViewModel(
 
     fun setNewEventsAlerts(enabled: Boolean) {
         viewModelScope.launch { preferences.setNewEventAlertsEnabled(enabled) }
+    }
+
+    fun setDefaultCity(city: String) {
+        viewModelScope.launch { preferences.setDefaultCity(city) }
+    }
+
+    fun setDefaultRadiusKm(km: Int) {
+        viewModelScope.launch { preferences.setDefaultRadiusKm(km.coerceIn(5, 200)) }
     }
 
     /** Verifies the current password, then stores the new PBKDF2 hash (FR-01). */

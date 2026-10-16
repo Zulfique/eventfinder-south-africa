@@ -32,3 +32,10 @@ lint_output.txt
 temp_compile.txt
 test.txt
 test_output.txt
+
+# .NET build artefacts (EventFinder API)
+**/bin/
+**/obj/
+api/**/data/*.db
+api/**/data/*.db-shm
+api/**/data/*.db-wal

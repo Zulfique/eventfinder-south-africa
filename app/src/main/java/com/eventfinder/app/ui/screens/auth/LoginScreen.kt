@@ -1,7 +1,5 @@
 package com.eventfinder.app.ui.screens.auth
 
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -20,6 +18,7 @@ import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.MailOutline
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.VisibilityOff
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -40,6 +39,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -55,12 +55,15 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.eventfinder.app.R
 import com.eventfinder.app.di.AppContainer
 import com.eventfinder.app.security.BiometricAuth
+import com.eventfinder.app.security.GoogleSignInHelper
 import com.eventfinder.app.ui.components.resolve
 import com.eventfinder.app.utils.AppLogger
+import kotlinx.coroutines.launch
 
 /**
- * Screen 2 (Login) from the design: email/password with validation, biometric
- * unlock when enabled, a "forgot password" reset and a link to registration.
+ * Screen 2 (Login): email/password with validation, Google sign-in via
+ * Credential Manager, biometric unlock when enabled, a two-step verified
+ * password reset, and a link to registration.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -80,6 +83,8 @@ fun LoginScreen(
     )
     val uiState by viewModel.uiState.collectAsState()
     var showForgotDialog by remember { mutableStateOf(false) }
+    val coroutineScope = rememberCoroutineScope()
+    val googleSignInHelper = remember { GoogleSignInHelper(activity) }
 
     // Biometric prompt wiring: falls back silently to password login on error.
     var biometricPrompt by remember {
@@ -103,6 +108,7 @@ fun LoginScreen(
     }
 
     if (showForgotDialog) {
+        var resetToken by remember { mutableStateOf("") }
         var newPassword by remember { mutableStateOf("") }
         var confirmPassword by remember { mutableStateOf("") }
 
@@ -113,47 +119,74 @@ fun LoginScreen(
             }
         }
 
-        androidx.compose.material3.AlertDialog(
+        AlertDialog(
             onDismissRequest = { showForgotDialog = false },
             title = { Text(stringResource(R.string.reset_password_title)) },
             text = {
                 Column {
-                    Text(stringResource(R.string.forgot_password_hint))
-                    Spacer(Modifier.height(12.dp))
-                    OutlinedTextField(
-                        value = uiState.email,
-                        onValueChange = viewModel::onEmailChange,
-                        label = { Text(stringResource(R.string.email)) },
-                        singleLine = true,
-                        isError = uiState.emailError != null,
-                        supportingText = {
-                            uiState.emailError?.let { res -> Text(stringResource(res)) }
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    OutlinedTextField(
-                        value = newPassword,
-                        onValueChange = { newPassword = it },
-                        label = { Text(stringResource(R.string.new_password)) },
-                        singleLine = true,
-                        visualTransformation = PasswordVisualTransformation(),
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    OutlinedTextField(
-                        value = confirmPassword,
-                        onValueChange = { confirmPassword = it },
-                        label = { Text(stringResource(R.string.confirm_password)) },
-                        singleLine = true,
-                        visualTransformation = PasswordVisualTransformation(),
-                        modifier = Modifier.fillMaxWidth()
-                    )
+                    if (!uiState.resetEmailSent) {
+                        Text(stringResource(R.string.reset_send_token_hint))
+                        Spacer(Modifier.height(12.dp))
+                        OutlinedTextField(
+                            value = uiState.email,
+                            onValueChange = viewModel::onEmailChange,
+                            label = { Text(stringResource(R.string.email)) },
+                            singleLine = true,
+                            isError = uiState.emailError != null,
+                            supportingText = {
+                                uiState.emailError?.let { res -> Text(stringResource(res)) }
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    } else {
+                        Text(stringResource(R.string.reset_enter_token_hint))
+                        Spacer(Modifier.height(12.dp))
+                        OutlinedTextField(
+                            value = resetToken,
+                            onValueChange = { resetToken = it },
+                            label = { Text(stringResource(R.string.reset_token_label)) },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        OutlinedTextField(
+                            value = newPassword,
+                            onValueChange = { newPassword = it },
+                            label = { Text(stringResource(R.string.new_password)) },
+                            singleLine = true,
+                            visualTransformation = PasswordVisualTransformation(),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        OutlinedTextField(
+                            value = confirmPassword,
+                            onValueChange = { confirmPassword = it },
+                            label = { Text(stringResource(R.string.confirm_password)) },
+                            singleLine = true,
+                            visualTransformation = PasswordVisualTransformation(),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
                 }
             },
             confirmButton = {
-                TextButton(onClick = { viewModel.requestPasswordReset(newPassword, confirmPassword) }) {
-                    Text(stringResource(R.string.reset_password_action))
+                TextButton(
+                    enabled = !uiState.isSubmitting,
+                    onClick = {
+                        if (!uiState.resetEmailSent) viewModel.sendResetEmail()
+                        else viewModel.confirmPasswordReset(resetToken, newPassword, confirmPassword)
+                    }
+                ) {
+                    if (uiState.isSubmitting) {
+                        CircularProgressIndicator(Modifier.size(18.dp))
+                    } else {
+                        Text(
+                            stringResource(
+                                if (!uiState.resetEmailSent) R.string.reset_send_token_action
+                                else R.string.reset_password_action
+                            )
+                        )
+                    }
                 }
             },
             dismissButton = {
@@ -226,7 +259,10 @@ fun LoginScreen(
             )
 
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                TextButton(onClick = { showForgotDialog = true }) {
+                TextButton(onClick = {
+                    viewModel.consumePasswordReset()
+                    showForgotDialog = true
+                }) {
                     Text(stringResource(R.string.forgot_password))
                 }
             }
@@ -235,11 +271,33 @@ fun LoginScreen(
 
             Button(
                 onClick = { viewModel.login(onLoggedIn) },
-                enabled = !uiState.isSubmitting,
+                enabled = !uiState.isSubmitting && !uiState.isGoogleSigningIn,
                 modifier = Modifier.fillMaxWidth().height(50.dp)
             ) {
                 if (uiState.isSubmitting) CircularProgressIndicator(Modifier.size(22.dp))
                 else Text(stringResource(R.string.login), fontWeight = FontWeight.SemiBold)
+            }
+
+            if (GoogleSignInHelper.isConfigured) {
+                Spacer(Modifier.height(12.dp))
+                OutlinedButton(
+                    onClick = {
+                        coroutineScope.launch {
+                            val idToken = googleSignInHelper.getCredential()
+                            if (idToken != null) {
+                                viewModel.signInWithGoogle(idToken, onLoggedIn)
+                            }
+                        }
+                    },
+                    enabled = !uiState.isSubmitting && !uiState.isGoogleSigningIn,
+                    modifier = Modifier.fillMaxWidth().height(50.dp)
+                ) {
+                    if (uiState.isGoogleSigningIn) {
+                        CircularProgressIndicator(Modifier.size(22.dp))
+                    } else {
+                        Text(stringResource(R.string.login_google))
+                    }
+                }
             }
 
             if (biometricAvailable && uiState.biometricEnabled) {

@@ -90,7 +90,9 @@ emulator at 1080 × 2340.
 | Architecture | **MVVM + Repository** | Testable, unidirectional data flow (`StateFlow`). |
 | DI | **Manual `AppContainer`** | Transparent, dependency-free alternative to Hilt for a prototype. |
 | Local DB | **Room 2.6.1** | Compile-time verified SQLite for the offline event cache. |
-| Cloud NoSQL | **Cloud Firestore** | Bidirectional sync of user-created events, favourites and RSVPs. Free Spark plan. |
+| Cloud NoSQL | **Cloud Firestore** | Bidirectional sync of user-created events, favourites and RSVPs. Free Spark plan, owner-scoped secure rules + anonymous auth. |
+| Backend | **ASP.NET Core 8 Minimal API** (`api/`) | Verified auth (register / login / Google), two-step password reset, public event catalogue, multi-user RSVP. EF Core + SQLite, deploys on Render free tier. |
+| Google sign-in | **AndroidX Credential Manager** | Returns a Google ID token verified server-side (audience + signature) before a JWT is issued. |
 | Blob storage | **Firebase Cloud Storage** | Event photos stored as blobs; graceful fallback to local internal storage when Storage is not enabled (requires Blaze). |
 | Push notifications | **Firebase Cloud Messaging** | Real-time `new_events` topic pushes; free, no server needed for console sends. |
 | Preferences | **DataStore Preferences 1.0** | Async, type-safe key/value storage for settings & session. |
@@ -299,6 +301,15 @@ Every Firebase call checks `FirebaseStatus` first and degrades to offline-only R
 behaviour when Firebase is unreachable, so the app works with the config removed entirely.
 See [Firebase setup](#firebase-setup-free-spark-plan) to point it at your own project.
 
+Google sign-in and the REST backend are configured via Gradle properties (all optional —
+the app falls back to purely local auth when they are blank):
+
+```properties
+# local.properties (gitignored) — used by app/build.gradle.kts
+GOOGLE_SERVER_CLIENT_ID=<OAuth web client ID from Google Cloud console>
+EVENTFINDER_API_URL=https://eventfinder-api.onrender.com/
+```
+
 ### 4. Build & install
 
 ```bash
@@ -314,7 +325,7 @@ adb install -r app\build\outputs\apk\debug\app-debug.apk
 
 ## Testing
 
-The project has **158 JVM unit tests** across 18 suites, all runnable from the command line with
+The project has **159 JVM unit tests** across 18 suites, all runnable from the command line with
 no emulator:
 
 ```bash
@@ -334,7 +345,7 @@ no emulator:
 | `CreateEventValidationTest` | Per-step wizard validation (required title/description, future date, venue, coordinate ranges) that drives the inline error messages. |
 | `EventAlertDetectorTest` | Pure new-event / favourite-changed diffing, including quiet first sync and past-event suppression. |
 | `DateTimeUtilsTest` | Relative date helpers (today/tomorrow, day & hour offsets) and stable date formatting. |
-| `LoginViewModelTest` | Password-reset flows (mismatch, success) with a fake repository. |
+| `LoginViewModelTest` | Two-step backend password reset (send token, confirm token, mismatch, weak password, blank token) with a fake repository. |
 | `EventDiscoveryRepositoryTest` | Event discovery pipeline: valid future events inserted, missing coordinates rejected, past events rejected, source failures handled gracefully, deduplication by stableId, multi-source merging. |
 | `PublicJsonEventMapperTest` | Public JSON event DTO parsing: Ardent Africa string-location handling, object-location parsing, null-location graceful handling, mapper output validation. |
 | `RssEventSourceTest` | RSS date parsing: `start_time` / `event_date` / plain `<start>` / `dc:date` / `<when>` element variants, and items carrying only a publication date being ignored. |
@@ -391,7 +402,7 @@ app/src/main/java/com/eventfinder/app/
 ├── data/
 │   ├── cloud/          FirebaseStatus, CloudSyncManager, FirebaseImageUploader, SyncCoordinator, TaskAwait
 │   ├── local/          Room entities, DAOs, database + entity↔domain mappers
-│   ├── remote/         Retrofit services, DTOs, API client (Open-Meteo + Overpass + public JSON)
+│   ├── remote/         Retrofit services, DTOs, API client (Open-Meteo + Overpass + public JSON + EventFinder backend)
 │   ├── remote/dto/     Public JSON event DTOs with multi-format field resolution
 │   ├── remote/model/   Provider-independent RemoteEvent model
 │   ├── repository/     Event / Auth / Weather / Discovery repositories + sample seed data
@@ -400,7 +411,7 @@ app/src/main/java/com/eventfinder/app/
 ├── di/                 AppContainer (manual dependency injection)
 ├── domain/model/       Event, User, RSVP, categories, filter/sort engine
 ├── notifications/      Notification helper, reminders, boot receiver, FCM messaging service
-├── security/           Biometric authentication wrapper
+├── security/           Biometric authentication wrapper + GoogleSignInHelper (Credential Manager)
 ├── ui/
 │   ├── components/     Shared Compose components + UiMessage
 │   ├── navigation/     NavHost + bottom navigation
@@ -409,6 +420,9 @@ app/src/main/java/com/eventfinder/app/
 └── utils/              Logging, date/time, distance, validation, hashing, locale, network
 app/src/test/java/com/eventfinder/app/   JVM unit tests
 app/src/androidTest/java/com/eventfinder/app/   Compose instrumented UI tests
+api/EventFinder.Api/                     ASP.NET Core 8 backend (Minimal API + EF Core + SQLite)
+api/EventFinder.Api.Tests/               13 xUnit integration tests (WebApplicationFactory)
+render.yaml                              Render free-tier deploy blueprint (Docker)
 docs/screenshots/                        Real device screenshots
 ```
 
@@ -416,8 +430,8 @@ docs/screenshots/                        Real device screenshots
 
 | Requirement | Where it is implemented |
 | --- | --- |
-| RESTful API integration | Open-Meteo (`WeatherRepository`) and OpenStreetMap/Overpass (`OpenStreetMapRepository`) — all keyless |
-| External library integration | Room, Retrofit/OkHttp, DataStore, Coil, osmdroid, AndroidX Biometric, Firebase |
+| RESTful API integration | Open-Meteo, OpenStreetMap/Overpass (keyless) **and** the ASP.NET Core EventFinder backend (`EventFinderApiClient`) |
+| External library integration | Room, Retrofit/OkHttp, DataStore, Coil, osmdroid, AndroidX Biometric, Credential Manager, Firebase |
 | Native Android SDK integration | `AlarmManager` + `NotificationManager` reminders, `LocationManager`/location permissions, biometrics |
 | Offline-first / robustness | Room cache + local event catalogue, graceful fallbacks, validation on every form |
 | **Blob storage** | `FirebaseImageUploader` - uploads to Firebase Cloud Storage; falls back to local internal file storage when Storage is unavailable (requires Blaze) |
@@ -429,11 +443,40 @@ docs/screenshots/                        Real device screenshots
 | **Multi-language (2 SA languages)** | English + Afrikaans (`values-af/strings.xml`), `LocaleManager`, in-app switcher |
 | **Production assets** | Adaptive launcher icon (SA-flag colours), Material 3 theming, screenshot set |
 | **Play Store preparation** | Signed release build (`keystore.properties`), minify + ProGuard, `bundleRelease` ready |
-| **CI/CD (GitHub Actions)** | `.github/workflows/android-ci.yml` — build, 158 unit tests, lint, instrumentation on every push |
-| Unit testing | 158 JVM tests + 6 Compose instrumented tests + GitHub Actions CI |
+| **CI/CD (GitHub Actions)** | `.github/workflows/android-ci.yml` — build, 159 unit tests, lint, instrumentation on every push |
+| Unit testing | 159 JVM tests + 13 API integration tests + 6 Compose instrumented tests + GitHub Actions CI |
 | Logging & comments | `AppLogger` used across data/UI layers; KDoc on every class |
 | Documentation | This README with Mermaid architecture diagrams |
 | **Final POE tag** | Git tag `Final-POE` marks the submission commit |
+
+## Backend (ASP.NET Core 8)
+
+`api/EventFinder.Api` is a free-tier Minimal API that turns the prototype into a real
+multi-user product while staying 100% free:
+
+| Capability | Detail |
+| --- | --- |
+| Stack | ASP.NET Core 8, EF Core 8 + SQLite, JWT bearer auth, xUnit integration tests |
+| Auth | Register / login / Google (ID-token verified via `oauth2.googleapis.com/tokeninfo`), change password, `/me` |
+| Password reset | Two-step: `forgot-password` emails a SHA-256-hashed, single-use 60-minute token (Brevo free 300/day; falls back to logging the token when no API key) → `reset-password` |
+| Events | Public catalogue (`GET /api/events/public`) with city + Haversine radius filters, owner-guarded CRUD |
+| RSVP | Multi-user: anyone signed in can RSVP/cancel; `GET /api/events/{id}/attendees` returns the shared list |
+| Envelope | Every response is `{ success, message, data, errors }` with server-generated IDs |
+| Health | `GET /health` → 200; wired as the Render health check |
+| Deploy | `render.yaml` blueprint (Docker, free web tier), `Dockerfile`, auto-migrate on boot |
+
+Run it locally:
+
+```bash
+dotnet tool restore                       # dotnet-ef from repo-root manifest
+dotnet run --project api/EventFinder.Api  # http://localhost:5078
+dotnet test api/EventFinder.Api.Tests     # 13 integration tests
+```
+
+The Android app uses Room as its offline source of truth and prefers the API when it is
+reachable (auth, create/update/delete, RSVP, discovery merge with `api:`-prefixed ids),
+falling back to purely local behaviour when offline. See `api/README.md` for the full
+endpoint reference.
 
 ## Firebase setup (free Spark plan)
 
@@ -454,9 +497,13 @@ This repository is wired to a live Firebase project:
 
 - **Project ID:** `eventfinder-south-africa`
 - **Android package:** `com.eventfinder.app`
-- **Firestore:** enabled (`nam5`, test mode — update rules before production use)
+- **Firestore:** enabled (`nam5`); **anonymous authentication** on; owner-scoped security rules
+  (`request.auth.uid == userId`) — the app signs in anonymously before syncing and keys every
+  document path by the Firebase auth uid
 - **FCM:** enabled; devices auto-subscribe to the `new_events` topic
 - **Storage:** not enabled (requires Blaze). `FirebaseImageUploader` falls back to local storage.
+- **Google sign-in:** an OAuth **web client ID** is required in `local.properties`
+  (`GOOGLE_SERVER_CLIENT_ID`); until it is set the Google button stays hidden.
 
 ### Connecting your own project
 
@@ -467,18 +514,23 @@ project:
 1. Go to <https://console.firebase.google.com> → **Add project** (Spark plan, free).
 2. **Add an Android app** with package name `com.eventfinder.app`.
 3. Download the generated `google-services.json` and replace `app/google-services.json`.
-4. Enable **Firestore Database** (production mode + the rules below, or test mode for demos).
-   Cloud Messaging is on by default. Storage is optional (requires Blaze).
-5. Rebuild and run on your physical device.
+4. Enable **Authentication → Anonymous** and **Firestore Database** (production mode + the
+   owner-scoped rules below). Cloud Messaging is on by default. Storage is optional
+   (requires Blaze).
+5. (Optional) **Authentication → Sign-in method → Google** + **Google Cloud console →
+   Credentials → OAuth 2.0 Client IDs (Web application)** → copy the web client ID into
+   `local.properties` as `GOOGLE_SERVER_CLIENT_ID`.
+6. Rebuild and run on your physical device.
 
-Suggested Firestore security rules (owner-only access to each user's data):
+Firestore security rules — each user can only touch their own documents, and only while
+authenticated (anonymous sign-in is free on the Spark plan):
 
 ```
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     match /users/{userId}/{document=**} {
-      allow read, write: if request.auth != null || true; // prototype: local-uuid auth
+      allow read, write: if request.auth != null && request.auth.uid == userId;
     }
   }
 }
@@ -508,11 +560,22 @@ them means you can never update the published app.
 
 ## Known limitations
 
-- **RSVP attendee management** — multi-user approval flows would need a shared backend with auth; the RSVP counter and reminder cancellation work locally and sync via Firestore.
-- **Google sign-in** is shown but stubbed. Password reset is a local email-lookup that updates the Room hash — no cloud backend is needed. **Security limitation:** reset performs no proof of email ownership, so it must be replaced with email/SMS verification before production use. Password change is also available in Settings.
-- **Default city / radius** preferences exist in the data layer but have no settings UI yet.
-- **Public event feeds** — the architecture supports keyless public JSON, RSS and ICS event sources via `EventDiscoveryRepository`. Aticket South Africa (RSS), Motorsport South Africa (ICS) and Ardent Africa (JSON) are configured as verified sources. Events without valid coordinates are correctly rejected since they cannot be plotted on the map. Additional sources can be added to `SouthAfricaEventSources.kt`.
-- **isPublic** means "visible in the local catalogue and synced to the owner's Firestore" — cross-user discovery of public events would need a shared public collection.
+- **RSVP attendee management** — attendee lists are now shared multi-user via the backend
+  (`GET /api/events/{id}/attendees`); there is still no organiser approve/reject workflow.
+- **Google sign-in** needs an OAuth web client ID (`GOOGLE_SERVER_CLIENT_ID`) and a Firebase
+  project with Google sign-in enabled; the button is hidden until configured.
+- **Firebase Cloud Storage** requires the Blaze plan (item 21) — event photos use local
+  internal storage fallback, or can be served by the API itself.
+- **Render free tier** — the backend sleeps after ~15 min idle (30–60 s cold start) and the
+  free managed Postgres expires after 30 days; this deployment uses the persistent-disk
+  SQLite file instead, which survives restarts within the free plan.
+- **Public event feeds** — the architecture supports keyless public JSON, RSS and ICS event
+  sources via `EventDiscoveryRepository`. Aticket South Africa (RSS), Motorsport South
+  Africa (ICS) and Ardent Africa (JSON) are configured as verified sources. Events without
+  valid coordinates are correctly rejected since they cannot be plotted on the map.
+  Additional sources can be added to `SouthAfricaEventSources.kt`.
+- **isPublic** events created in the app are pushed to the backend catalogue, so any signed-in
+  user discovers them through `GET /api/events/public` (merged into Room with `api:` ids).
 
 ## Attribution & licences
 

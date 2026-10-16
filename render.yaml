@@ -1,0 +1,30 @@
+# Render blueprint — deploys the EventFinder ASP.NET Core 8 API on the
+# free hobby tier (no credit card required). Services sleep after 15 minutes
+# of inactivity and wake on the next request.
+services:
+  - type: web
+    name: eventfinder-api
+    runtime: docker
+    plan: free
+    dockerfilePath: ./api/EventFinder.Api/Dockerfile
+    dockerContext: ./api/EventFinder.Api
+    healthCheckPath: /health
+    envVars:
+      - key: ASPNETCORE_ENVIRONMENT
+        value: Production
+      - key: Jwt__Secret
+        generateValue: true
+      - key: Jwt__Issuer
+        value: eventfinder-api
+      - key: Jwt__Audience
+        value: eventfinder-app
+      - key: Jwt__ExpiryHours
+        value: "168"
+      - key: ConnectionStrings__Default
+        value: "Data Source=/app/data/eventfinder.db"
+      # Optional: enables real password-reset emails via Brevo (free 300/day).
+      - key: Brevo__ApiKey
+        value: ""
+      # Optional: enables Google sign-in (paste the OAuth web client ID).
+      - key: Google__ServerClientId
+        value: ""

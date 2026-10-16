@@ -27,12 +27,16 @@ data class LoginUiState(
     val passwordError: Int? = null,
     val biometricAvailable: Boolean = false,
     val biometricEnabled: Boolean = false,
-    val passwordResetComplete: Boolean = false
+    val passwordResetComplete: Boolean = false,
+    val resetEmailSent: Boolean = false,
+    val isGoogleSigningIn: Boolean = false
 )
 
 /**
- * Login flow (FR-01). Validates fields client-side before invoking the
- * repository; a successful login updates the persisted session (FR-01).
+ * Login flow. Validates fields client-side before invoking the repository;
+ * a successful login updates the persisted session. Google sign-in goes
+ * through Credential Manager (ID token verified server-side) and password
+ * reset is a two-step, email-verified flow against the backend.
  */
 class LoginViewModel(
     private val authRepository: AuthRepository,
@@ -105,6 +109,24 @@ class LoginViewModel(
         }
     }
 
+    /** Signs in with a Google ID token obtained from Credential Manager. */
+    fun signInWithGoogle(idToken: String, onSuccess: () -> Unit) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isGoogleSigningIn = true) }
+            authRepository.googleSignIn(idToken)
+                .onSuccess { user ->
+                    AppLogger.i("LoginViewModel", "Google sign-in succeeded for ${user.email}")
+                    _messages.emit(UiMessage.Resource(R.string.login_success))
+                    onSuccess()
+                }
+                .onFailure { throwable ->
+                    AppLogger.w("LoginViewModel", "Google sign-in failed: ${throwable.message}")
+                    _messages.emit(UiMessage.Resource(R.string.google_sign_in_failed))
+                }
+            _uiState.update { it.copy(isGoogleSigningIn = false) }
+        }
+    }
+
     /** Completes a biometric unlock straight into the app. */
     fun confirmBiometricLogin(onSuccess: () -> Unit) {
         viewModelScope.launch {
@@ -119,10 +141,55 @@ class LoginViewModel(
         }
     }
 
-    fun requestPasswordReset(newPassword: String, confirmPassword: String) {
+    /**
+     * Password reset step 1 — emails a single-use token to the address typed
+     * in the login form. The API never reveals whether the account exists.
+     */
+    fun sendResetEmail() {
+        val email = _uiState.value.email
+        if (!com.eventfinder.app.utils.EmailValidator.isValid(email)) {
+            viewModelScope.launch {
+                _uiState.update { it.copy(emailError = R.string.invalid_email) }
+                _messages.emit(UiMessage.Resource(R.string.invalid_email))
+            }
+            return
+        }
+        viewModelScope.launch {
+            _uiState.update { it.copy(isSubmitting = true) }
+            authRepository.requestPasswordReset(email)
+                .onSuccess {
+                    AppLogger.i("LoginViewModel", "Reset email requested")
+                    _uiState.update { it.copy(resetEmailSent = true, isSubmitting = false) }
+                    _messages.emit(UiMessage.Resource(R.string.reset_email_sent))
+                }
+                .onFailure { throwable ->
+                    AppLogger.w("LoginViewModel", "Reset email failed: ${throwable.message}")
+                    _uiState.update { it.copy(isSubmitting = false) }
+                    when (throwable.message) {
+                        "invalid_email" -> {
+                            _uiState.update { it.copy(emailError = R.string.invalid_email) }
+                            _messages.emit(UiMessage.Resource(R.string.invalid_email))
+                        }
+                        "password_reset_requires_authenticated_backend" ->
+                            _messages.emit(UiMessage.Resource(R.string.reset_not_available))
+                        else -> _messages.emit(UiMessage.Resource(R.string.reset_failed))
+                    }
+                }
+        }
+    }
+
+    /**
+     * Password reset step 2 — consumes the emailed token together with the
+     * new password chosen in the dialog.
+     */
+    fun confirmPasswordReset(token: String, newPassword: String, confirmPassword: String) {
         val email = _uiState.value.email
         if (newPassword != confirmPassword) {
             viewModelScope.launch { _messages.emit(UiMessage.Resource(R.string.passwords_mismatch)) }
+            return
+        }
+        if (token.isBlank()) {
+            viewModelScope.launch { _messages.emit(UiMessage.Resource(R.string.invalid_token)) }
             return
         }
         if (!com.eventfinder.app.utils.EmailValidator.isValid(email)) {
@@ -133,8 +200,7 @@ class LoginViewModel(
             return
         }
         // Surface password-policy failures before hitting the repository so the
-        // dialog gives actionable feedback (the repository only returns a generic
-        // "weak_password" string that was previously swallowed as reset_failed).
+        // dialog gives actionable feedback.
         when (val validation = com.eventfinder.app.utils.PasswordValidator.validate(newPassword)) {
             is com.eventfinder.app.utils.ValidationResult.Invalid -> {
                 val key = validation.messages.firstOrNull() ?: "weak_password"
@@ -151,14 +217,16 @@ class LoginViewModel(
             else -> Unit
         }
         viewModelScope.launch {
-            authRepository.resetPassword(email, newPassword)
+            _uiState.update { it.copy(isSubmitting = true) }
+            authRepository.confirmPasswordReset(email, token, newPassword)
                 .onSuccess {
-                    AppLogger.i("LoginViewModel", "Local password reset succeeded")
-                    _uiState.update { it.copy(passwordResetComplete = true) }
+                    AppLogger.i("LoginViewModel", "Password reset succeeded")
+                    _uiState.update { it.copy(passwordResetComplete = true, isSubmitting = false) }
                     _messages.emit(UiMessage.Resource(R.string.reset_success))
                 }
                 .onFailure { throwable ->
                     AppLogger.w("LoginViewModel", "Password reset failed: ${throwable.message}")
+                    _uiState.update { it.copy(isSubmitting = false) }
                     when (throwable.message) {
                         "password_reset_requires_authenticated_backend" ->
                             _messages.emit(UiMessage.Resource(R.string.reset_not_available))
@@ -166,9 +234,9 @@ class LoginViewModel(
                             _uiState.update { it.copy(emailError = R.string.invalid_email) }
                             _messages.emit(UiMessage.Resource(R.string.invalid_email))
                         }
-                        "unknown_email" -> _messages.emit(UiMessage.Resource(R.string.unknown_email))
+                        "invalid_token", "token" ->
+                            _messages.emit(UiMessage.Resource(R.string.invalid_token))
                         "weak_password" -> _messages.emit(UiMessage.Resource(R.string.weak_password))
-                        "same_password" -> _messages.emit(UiMessage.Resource(R.string.password_unchanged))
                         else -> _messages.emit(UiMessage.Resource(R.string.reset_failed))
                     }
                 }
@@ -177,7 +245,7 @@ class LoginViewModel(
 
     /** Clears the one-shot flag once the screen has closed the reset dialog. */
     fun consumePasswordReset() {
-        _uiState.update { it.copy(passwordResetComplete = false) }
+        _uiState.update { it.copy(passwordResetComplete = false, resetEmailSent = false) }
     }
 
     companion object {

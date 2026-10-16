@@ -9,9 +9,11 @@ import com.eventfinder.app.data.local.RsvpDao
 import com.eventfinder.app.data.local.RsvpEntity
 import com.eventfinder.app.data.store.UserPreferences
 import com.eventfinder.app.utils.AppLogger
+import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withTimeoutOrNull
 
 /**
@@ -24,10 +26,12 @@ import kotlinx.coroutines.withTimeoutOrNull
  *  - Offline mode + automatic synchronisation when connectivity returns →
  *    [SyncCoordinator] invokes [syncNow] on every offline→online transition.
  *
- * Firestore layout (all reads/writes are scoped to the signed-in user):
- *   users/{userId}/events/{eventId}      — user-created events
- *   users/{userId}/favorites/{eventId}   — favourite links
- *   users/{userId}/rsvps/{eventId}       — RSVP links
+ * Firestore layout (all reads/writes are scoped to the signed-in user;
+ * the path key is the Firebase anonymous-auth uid so secure rules
+ * `request.auth.uid == userId` authorise every operation):
+ *   users/{uid}/events/{eventId}      — user-created events
+ *   users/{uid}/favorites/{eventId}   — favourite links
+ *   users/{uid}/rsvps/{eventId}       — RSVP links
  *
  * Every public method no-ops when Firebase is uninitialised (no real
  * google-services.json) so the app remains fully functional offline-only.
@@ -44,6 +48,26 @@ class CloudSyncManager(
 
     private val firestore: FirebaseFirestore?
         get() = if (FirebaseStatus.isAvailable) FirebaseFirestore.getInstance() else null
+
+    /**
+     * Ensures a Firebase identity exists so secure Firestore rules
+     * (`request.auth.uid == userId`) can authorise the sync. Signs in
+     * anonymously on first use; caches the uid in DataStore.
+     */
+    private suspend fun ownerUid(): String? {
+        if (!FirebaseStatus.isAvailable) return null
+        return try {
+            val auth = FirebaseAuth.getInstance()
+            val user = auth.currentUser
+                ?: withTimeoutOrNull(AUTH_TIMEOUT_MS) { auth.signInAnonymously().await()?.user }
+            val uid = user?.uid
+            if (uid != null) preferences.setFirebaseUid(uid)
+            uid
+        } catch (e: Exception) {
+            AppLogger.w(tag, "Firebase anonymous auth failed: ${e.message}")
+            null
+        }
+    }
 
     // ------------------------------------------------------------------
     // Public entry points
@@ -64,9 +88,14 @@ class CloudSyncManager(
             AppLogger.d(tag, "No signed-in user - skipping cloud sync")
             return
         }
-        AppLogger.i(tag, "Starting cloud sync for user $userId")
-        pushLocalChanges(userId)
-        pullRemoteChanges(userId)
+        val owner = ownerUid()
+        if (owner == null) {
+            AppLogger.d(tag, "No Firebase identity - skipping cloud sync")
+            return
+        }
+        AppLogger.i(tag, "Starting cloud sync for user $userId (owner $owner)")
+        pushLocalChanges(userId, owner)
+        pullRemoteChanges(userId, owner)
         AppLogger.i(tag, "Cloud sync complete")
     }
 
@@ -74,8 +103,9 @@ class CloudSyncManager(
     suspend fun pushEvent(event: EventEntity) {
         val userId = preferences.sessionUserId.first() ?: return
         if (!event.isCreatedByUser || event.organizerId != userId) return
+        val owner = ownerUid() ?: return
         runCatching {
-            userEventsCollection(userId).document(event.id).set(event.toFirestoreMap()).await()
+            userEventsCollection(owner).document(event.id).set(event.toFirestoreMap()).await()
             AppLogger.i(tag, "Pushed event ${event.id} to Firestore")
         }.onFailure {
             AppLogger.w(tag, "Failed to push event ${event.id}: ${it.message}")
@@ -84,9 +114,10 @@ class CloudSyncManager(
 
     /** Removes an event document from Firestore after a local delete. */
     suspend fun deleteEventFromCloud(eventId: String) {
-        val userId = preferences.sessionUserId.first() ?: return
+        preferences.sessionUserId.first() ?: return
+        val owner = ownerUid() ?: return
         runCatching {
-            userEventsCollection(userId).document(eventId).delete().await()
+            userEventsCollection(owner).document(eventId).delete().await()
             AppLogger.i(tag, "Deleted event $eventId from Firestore")
         }.onFailure {
             AppLogger.w(tag, "Failed to delete event $eventId from Firestore: ${it.message}")
@@ -94,9 +125,11 @@ class CloudSyncManager(
     }
 
     /** Mirrors a favourite add/remove to Firestore. */
+    @Suppress("UNUSED_PARAMETER")
     suspend fun pushFavorite(userId: String, eventId: String, isFavorite: Boolean) {
+        val owner = ownerUid() ?: return
         runCatching {
-            val doc = userFavoritesCollection(userId).document(eventId)
+            val doc = userFavoritesCollection(owner).document(eventId)
             if (isFavorite) {
                 doc.set(mapOf("eventId" to eventId, "createdAt" to System.currentTimeMillis())).await()
             } else {
@@ -108,9 +141,11 @@ class CloudSyncManager(
     }
 
     /** Mirrors an RSVP status change to Firestore. */
+    @Suppress("UNUSED_PARAMETER")
     suspend fun pushRsvp(userId: String, eventId: String, status: String) {
+        val owner = ownerUid() ?: return
         runCatching {
-            val doc = userRsvpsCollection(userId).document(eventId)
+            val doc = userRsvpsCollection(owner).document(eventId)
             if (status.isBlank() || status == "none") {
                 doc.delete().await()
             } else {
@@ -125,11 +160,11 @@ class CloudSyncManager(
     // Push (NoSQL store)
     // ------------------------------------------------------------------
 
-    private suspend fun pushLocalChanges(userId: String) {
+    private suspend fun pushLocalChanges(userId: String, owner: String) {
         val events = eventDao.getUserCreatedEventsForUser(userId)
         events.forEach { event ->
             runCatching {
-                userEventsCollection(userId).document(event.id).set(event.toFirestoreMap()).await()
+                userEventsCollection(owner).document(event.id).set(event.toFirestoreMap()).await()
             }.onFailure {
                 AppLogger.w(tag, "Event push failed for ${event.id}: ${it.message}")
             }
@@ -138,7 +173,7 @@ class CloudSyncManager(
         val favorites = favoriteDao.observeAllForUser(userId).first()
         favorites.forEach { favorite ->
             runCatching {
-                userFavoritesCollection(userId).document(favorite.eventId)
+                userFavoritesCollection(owner).document(favorite.eventId)
                     .set(mapOf("eventId" to favorite.eventId, "createdAt" to favorite.createdAt))
                     .await()
             }
@@ -147,7 +182,7 @@ class CloudSyncManager(
         val rsvps = rsvpDao.observeAllForUser(userId).first()
         rsvps.forEach { rsvp ->
             runCatching {
-                userRsvpsCollection(userId).document(rsvp.eventId)
+                userRsvpsCollection(owner).document(rsvp.eventId)
                     .set(mapOf("eventId" to rsvp.eventId, "status" to rsvp.status, "createdAt" to rsvp.createdAt))
                     .await()
             }
@@ -162,11 +197,11 @@ class CloudSyncManager(
     // Pull (NoSQL read)
     // ------------------------------------------------------------------
 
-    private suspend fun pullRemoteChanges(userId: String) {
+    private suspend fun pullRemoteChanges(userId: String, owner: String) {
         // Events: upsert every remote document into Room. Existing rows are
         // replaced only when the remote copy is not the same local-only seed.
         val remoteEvents = withTimeoutOrNull(PULL_TIMEOUT_MS) {
-            userEventsCollection(userId)
+            userEventsCollection(owner)
                 .orderBy("startDate", Query.Direction.ASCENDING)
                 .limit(PULL_EVENT_LIMIT.toLong())
                 .get()
@@ -189,7 +224,7 @@ class CloudSyncManager(
 
         // Favourites
         val remoteFavorites = withTimeoutOrNull(PULL_TIMEOUT_MS) {
-            userFavoritesCollection(userId).get().await()
+            userFavoritesCollection(owner).get().await()
         }
         remoteFavorites?.documents?.forEach { doc ->
             val eventId = doc.getString("eventId") ?: doc.id
@@ -201,7 +236,7 @@ class CloudSyncManager(
 
         // RSVPs
         val remoteRsvps = withTimeoutOrNull(PULL_TIMEOUT_MS) {
-            userRsvpsCollection(userId).get().await()
+            userRsvpsCollection(owner).get().await()
         }
         remoteRsvps?.documents?.forEach { doc ->
             val eventId = doc.getString("eventId") ?: doc.id
@@ -223,13 +258,13 @@ class CloudSyncManager(
     // Collections
     // ------------------------------------------------------------------
 
-    private fun userCollection(userId: String) =
-        firestore?.collection(USERS_COLLECTION)?.document(userId)
+    private fun userCollection(ownerId: String) =
+        firestore?.collection(USERS_COLLECTION)?.document(ownerId)
             ?: throw IllegalStateException("Firestore unavailable")
 
-    private fun userEventsCollection(userId: String) = userCollection(userId).collection(EVENTS_COLLECTION)
-    private fun userFavoritesCollection(userId: String) = userCollection(userId).collection(FAVORITES_COLLECTION)
-    private fun userRsvpsCollection(userId: String) = userCollection(userId).collection(RSVPS_COLLECTION)
+    private fun userEventsCollection(ownerId: String) = userCollection(ownerId).collection(EVENTS_COLLECTION)
+    private fun userFavoritesCollection(ownerId: String) = userCollection(ownerId).collection(FAVORITES_COLLECTION)
+    private fun userRsvpsCollection(ownerId: String) = userCollection(ownerId).collection(RSVPS_COLLECTION)
 
     companion object {
         private const val USERS_COLLECTION = "users"
@@ -238,6 +273,7 @@ class CloudSyncManager(
         private const val RSVPS_COLLECTION = "rsvps"
         private const val PULL_TIMEOUT_MS = 15_000L
         private const val PULL_EVENT_LIMIT = 200
+        private const val AUTH_TIMEOUT_MS = 10_000L
     }
 }
 

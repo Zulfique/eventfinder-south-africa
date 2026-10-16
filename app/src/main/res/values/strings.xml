@@ -273,4 +273,21 @@
     <string name="event_reminders_hint">Notify me 24 hours and 1 hour before an event I am attending</string>
     <string name="new_events_alerts">New event alerts</string>
     <string name="settings_about">%1$s prototype — built with free APIs (Ardent Africa, Open-Meteo, OpenStreetMap).</string>
-</resources>
+
+  <!-- Backend password reset (two-step, email-verified) -->
+  <string name="reset_send_token_hint">Enter your email and we will send a single-use reset token.</string>
+  <string name="reset_enter_token_hint">Enter the token from your reset email together with a new password.</string>
+  <string name="reset_token_label">Reset token</string>
+  <string name="reset_send_token_action">Send token</string>
+  <string name="reset_email_sent">If an account exists for that email, a reset token has been sent.</string>
+  <string name="invalid_token">That reset token is invalid or has expired.</string>
+
+  <!-- Google sign-in -->
+  <string name="google_sign_in_failed">Google sign-in failed. Please try again.</string>
+
+  <!-- Discovery defaults (Settings) -->
+  <string name="discovery_settings">Discovery defaults</string>
+  <string name="default_city">Default city</string>
+  <string name="default_city_hint">e.g. Johannesburg — used when location is off</string>
+  <string name="default_radius">Search radius</string>
+  <string name="radius_km_value">%d km</string></resources>

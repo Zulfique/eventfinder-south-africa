@@ -6,6 +6,7 @@ import com.eventfinder.app.data.local.EventDao
 import com.eventfinder.app.data.local.UserDao
 import com.eventfinder.app.data.local.UserEntity
 import com.eventfinder.app.data.local.toDomain
+import com.eventfinder.app.data.remote.EventFinderApiClient
 import com.eventfinder.app.data.store.SessionProvider
 import com.eventfinder.app.domain.model.User
 import com.eventfinder.app.notifications.ReminderHelper
@@ -24,14 +25,12 @@ import java.util.UUID
 
 
 /**
- * Authentication boundary. Performs local registration/login with PBKDF2-hashed
- * passwords (see [PasswordHasher]). Password reset is a local email-lookup that
- * updates the Room hash — no cloud backend is required.
+ * Authentication boundary.
  *
- * **Security limitation:** password reset performs no proof of email ownership.
- * Anyone who knows a registered email can reset that account's password. This is
- * acceptable for a single-device prototype but must be replaced with email/SMS
- * verification before production use.
+ * Accounts are backed by the EventFinder REST API (ASP.NET Core, JWT bearer
+ * tokens, server-side PBKDF2 hashes, verified Google ID tokens, and an
+ * email-verified password-reset flow). A local Room copy of the profile is
+ * kept so the UI works offline; guest accounts remain purely local.
  */
 interface AuthRepository {
     val currentUser: Flow<User?>
@@ -48,12 +47,21 @@ interface AuthRepository {
     suspend fun updateProfile(fullName: String, email: String): Result<User>
     suspend fun setBiometricEnabled(enabled: Boolean)
 
+    /** Signs in (or provisions) an account from a verified Google ID token. */
+    suspend fun googleSignIn(idToken: String, language: String = "en"): Result<User>
+
     /**
-     * Resets a password by looking up the account by email, validating the new
-     * password, and updating the Room hash. Returns an error if the email is
-     * unknown, the password is weak, or it matches the current password.
+     * Step 1 of password reset: asks the backend to email a single-use,
+     * expiring reset token to [email]. Always succeeds when the server is
+     * reachable — the API does not reveal whether the account exists.
      */
-    suspend fun resetPassword(email: String, newPassword: String): Result<Unit>
+    suspend fun requestPasswordReset(email: String): Result<Unit>
+
+    /**
+     * Step 2 of password reset: consumes the emailed [token] on the backend
+     * and updates the local password hash so offline login keeps working.
+     */
+    suspend fun confirmPasswordReset(email: String, token: String, newPassword: String): Result<Unit>
 
     /** Changes the signed-in user's password after verifying the current one. */
     suspend fun changePassword(currentPassword: String, newPassword: String): Result<Unit>
@@ -74,7 +82,8 @@ class AuthRepositoryImpl(
     private val userDao: UserDao,
     private val eventDao: EventDao,
     private val context: Context,
-    private val preferences: SessionProvider
+    private val preferences: SessionProvider,
+    private val api: EventFinderApiClient? = null
 ) : AuthRepository {
 
     @OptIn(ExperimentalCoroutinesApi::class)
@@ -109,6 +118,44 @@ class AuthRepositoryImpl(
             AppLogger.w("AuthRepository", "Registration rejected - email already used: $normalizedEmail")
             return Result.failure(IllegalArgumentException("email_in_use"))
         }
+
+        val remote = api?.register(fullName.trim(), normalizedEmail, password, language)
+        if (remote != null) {
+            remote.onSuccess { auth ->
+                val user = UserEntity(
+                    id = auth.user.id,
+                    fullName = auth.user.fullName,
+                    email = auth.user.email,
+                    passwordHash = PasswordHasher.hash(password),
+                    preferredLanguage = auth.user.preferredLanguage.ifBlank { language },
+                    defaultCity = "South Africa",
+                    defaultRadiusKm = 50,
+                    biometricEnabled = false,
+                    createdAt = System.currentTimeMillis()
+                )
+                userDao.upsert(user)
+                preferences.setAuthToken(auth.token)
+                preferences.setSessionUserId(user.id)
+                preferences.setLanguage(user.preferredLanguage)
+                ReminderHelper.restoreReminders(context, eventDao, user.id)
+                AppLogger.i("AuthRepository", "Account created via API for ${user.email}")
+                return Result.success(user.toDomain())
+            }.onFailure { error ->
+                when (error) {
+                    is EventFinderApiClient.NetworkException ->
+                        AppLogger.w("AuthRepository", "API unreachable during register - falling back to local")
+                    is EventFinderApiClient.ApiException ->
+                        if (error.message?.contains("already", ignoreCase = true) == true || error.code == 409) {
+                            return Result.failure(IllegalArgumentException("email_in_use"))
+                        } else {
+                            AppLogger.w("AuthRepository", "API register rejected: ${error.message}")
+                        }
+                    else -> Unit
+                }
+            }
+        }
+
+        // Offline fallback: purely local account (works with no backend).
         val user = UserEntity(
             id = UUID.randomUUID().toString(),
             fullName = fullName.trim(),
@@ -124,12 +171,35 @@ class AuthRepositoryImpl(
         preferences.setSessionUserId(user.id)
         preferences.setLanguage(language)
         ReminderHelper.restoreReminders(context, eventDao, user.id)
-        AppLogger.i("AuthRepository", "New account created for ${user.email}")
+        AppLogger.i("AuthRepository", "New local account created for ${user.email}")
         return Result.success(user.toDomain())
     }
 
     override suspend fun login(email: String, password: String): Result<User> {
         val normalizedEmail = email.trim().lowercase()
+
+        val remote = api?.login(normalizedEmail, password)
+        if (remote != null) {
+            remote.onSuccess { auth ->
+                val user = upsertServerUser(auth.user.id, auth.user.email, auth.user.fullName,
+                    auth.user.preferredLanguage, PasswordHasher.hash(password))
+                preferences.setAuthToken(auth.token)
+                preferences.setSessionUserId(user.id)
+                preferences.setLanguage(user.preferredLanguage)
+                ReminderHelper.restoreReminders(context, eventDao, user.id)
+                AppLogger.i("AuthRepository", "User signed in via API: ${user.email}")
+                return Result.success(user.toDomain())
+            }.onFailure { error ->
+                when (error) {
+                    is EventFinderApiClient.ApiException ->
+                        return Result.failure(IllegalArgumentException("login_invalid_credentials"))
+                    is EventFinderApiClient.NetworkException ->
+                        AppLogger.w("AuthRepository", "API unreachable during login - trying local hash")
+                    else -> Unit
+                }
+            }
+        }
+
         val user = userDao.findByEmail(normalizedEmail)
         if (user == null || !PasswordHasher.verify(password, user.passwordHash)) {
             AppLogger.w("AuthRepository", "Login rejected for $normalizedEmail")
@@ -138,8 +208,22 @@ class AuthRepositoryImpl(
         preferences.setSessionUserId(user.id)
         preferences.setLanguage(user.preferredLanguage)
         ReminderHelper.restoreReminders(context, eventDao, user.id)
-        AppLogger.i("AuthRepository", "User signed in: ${user.email}")
+        AppLogger.i("AuthRepository", "User signed in locally: ${user.email}")
         return Result.success(user.toDomain())
+    }
+
+    override suspend fun googleSignIn(idToken: String, language: String): Result<User> {
+        val apiClient = api ?: return Result.failure(IllegalStateException("password_reset_requires_authenticated_backend"))
+        return apiClient.googleSignIn(idToken).map { auth ->
+            val user = upsertServerUser(auth.user.id, auth.user.email, auth.user.fullName,
+                auth.user.preferredLanguage.ifBlank { language }, PasswordHasher.hash(UUID.randomUUID().toString()))
+            preferences.setAuthToken(auth.token)
+            preferences.setSessionUserId(user.id)
+            preferences.setLanguage(user.preferredLanguage)
+            ReminderHelper.restoreReminders(context, eventDao, user.id)
+            AppLogger.i("AuthRepository", "Google sign-in for ${user.email}")
+            user.toDomain()
+        }
     }
 
     override suspend fun biometricLogin(): Result<User> {
@@ -163,6 +247,7 @@ class AuthRepositoryImpl(
             ReminderHelper.cancelReminders(context, eventDao, userId)
         }
         preferences.setSessionUserId(null)
+        preferences.setAuthToken(null)
         AppLogger.i("AuthRepository", "User logged out - session cleared")
     }
 
@@ -200,22 +285,41 @@ class AuthRepositoryImpl(
         AppLogger.i("AuthRepository", "Biometric preference updated: $enabled")
     }
 
-    override suspend fun resetPassword(email: String, newPassword: String): Result<Unit> {
+    override suspend fun requestPasswordReset(email: String): Result<Unit> {
         val normalizedEmail = email.trim().lowercase()
         if (!EmailValidator.isValid(normalizedEmail)) {
             return Result.failure(IllegalArgumentException("invalid_email"))
         }
-        val user = userDao.findByEmail(normalizedEmail)
-            ?: return Result.failure(IllegalArgumentException("unknown_email"))
+        val apiClient = api ?: return Result.failure(
+            IllegalStateException("password_reset_requires_authenticated_backend")
+        )
+        return apiClient.forgotPassword(normalizedEmail).onSuccess {
+            AppLogger.i("AuthRepository", "Reset token requested for $normalizedEmail")
+        }
+    }
+
+    override suspend fun confirmPasswordReset(
+        email: String,
+        token: String,
+        newPassword: String
+    ): Result<Unit> {
+        val normalizedEmail = email.trim().lowercase()
         if (PasswordValidator.validate(newPassword) is ValidationResult.Invalid) {
             return Result.failure(IllegalArgumentException("weak_password"))
         }
-        if (PasswordHasher.verify(newPassword, user.passwordHash)) {
-            return Result.failure(IllegalArgumentException("same_password"))
+        if (token.isBlank()) {
+            return Result.failure(IllegalArgumentException("invalid_token"))
         }
-        userDao.upsert(user.copy(passwordHash = PasswordHasher.hash(newPassword)))
-        AppLogger.i("AuthRepository", "Local password reset completed for ${user.email}")
-        return Result.success(Unit)
+        val apiClient = api ?: return Result.failure(
+            IllegalStateException("password_reset_requires_authenticated_backend")
+        )
+        return apiClient.resetPassword(normalizedEmail, token.trim(), newPassword).map {
+            // Keep the offline copy of the hash in step with the server.
+            userDao.findByEmail(normalizedEmail)?.let { user ->
+                userDao.upsert(user.copy(passwordHash = PasswordHasher.hash(newPassword)))
+            }
+            AppLogger.i("AuthRepository", "Password reset completed via API for $normalizedEmail")
+        }
     }
 
     override suspend fun changePassword(currentPassword: String, newPassword: String): Result<Unit> {
@@ -234,6 +338,15 @@ class AuthRepositoryImpl(
             return Result.failure(IllegalArgumentException("same_password"))
         }
 
+        // Mirror the change to the backend when we hold a token (fire-and-forget
+        // on failure — the local hash is authoritative for offline login).
+        val token = preferences.authToken.first()
+        val client = api
+        if (client != null && !token.isNullOrBlank()) {
+            runCatching { client.changePassword("Bearer $token", currentPassword, newPassword) }
+                .onFailure { AppLogger.w("AuthRepository", "Server password change failed: ${it.message}") }
+        }
+
         userDao.upsert(entity.copy(passwordHash = PasswordHasher.hash(newPassword)))
         AppLogger.i("AuthRepository", "Password changed for ${entity.email}")
         return Result.success(Unit)
@@ -245,6 +358,7 @@ class AuthRepositoryImpl(
         ReminderHelper.cancelReminders(context, eventDao, current.id)
         database.deleteAccountData(current.id)
         preferences.clearUserPreferences(current.id)
+        preferences.setAuthToken(null)
 
         AppLogger.i("AuthRepository", "Account deleted for ${current.email}")
         return Result.success(Unit)
@@ -277,5 +391,40 @@ class AuthRepositoryImpl(
         preferences.setSessionUserId(user.id)
         AppLogger.i("AuthRepository", "Guest session created: ${user.id}")
         return Result.success(user.toDomain())
+    }
+
+    /** Creates or refreshes the local Room mirror of a server-side account. */
+    private suspend fun upsertServerUser(
+        id: String,
+        email: String,
+        fullName: String,
+        language: String,
+        passwordHash: String
+    ): UserEntity {
+        val existing = userDao.findById(id)
+        val entity = existing ?: userDao.findByEmail(email)?.let { local ->
+            // A pre-existing local account adopted the server id so the session
+            // and all user-scoped preferences follow the account to the backend.
+            userDao.upsert(local.copy(id = id))
+            userDao.findById(id)
+        } ?: UserEntity(
+            id = id,
+            fullName = fullName,
+            email = email,
+            passwordHash = passwordHash,
+            preferredLanguage = language,
+            defaultCity = "South Africa",
+            defaultRadiusKm = 50,
+            biometricEnabled = false,
+            createdAt = System.currentTimeMillis()
+        )
+        val refreshed = entity.copy(
+            fullName = fullName.ifBlank { entity.fullName },
+            email = email.ifBlank { entity.email },
+            preferredLanguage = language.ifBlank { entity.preferredLanguage },
+            passwordHash = passwordHash
+        )
+        userDao.upsert(refreshed)
+        return refreshed
     }
 }

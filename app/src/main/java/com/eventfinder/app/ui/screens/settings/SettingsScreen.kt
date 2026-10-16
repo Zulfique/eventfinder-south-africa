@@ -21,6 +21,7 @@ import androidx.compose.material.icons.outlined.Language
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.NotificationsActive
+import androidx.compose.material.icons.outlined.Place
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -35,6 +36,7 @@ import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Slider
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Switch
@@ -219,6 +221,36 @@ fun SettingsScreen(
                                 onCheckedChange = viewModel::setNewEventsAlerts
                             )
                         }
+                    )
+                }
+            }
+
+            Card(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        stringResource(R.string.discovery_settings),
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                    OutlinedTextField(
+                        value = state.defaultCity,
+                        onValueChange = viewModel::setDefaultCity,
+                        label = { Text(stringResource(R.string.default_city)) },
+                        placeholder = { Text(stringResource(R.string.default_city_hint)) },
+                        singleLine = true,
+                        leadingIcon = { Icon(Icons.Outlined.Place, contentDescription = null) },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Text(
+                        stringResource(R.string.default_radius) +
+                            ": " + stringResource(R.string.radius_km_value, state.defaultRadiusKm),
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Slider(
+                        value = state.defaultRadiusKm.toFloat(),
+                        onValueChange = { viewModel.setDefaultRadiusKm(it.toInt()) },
+                        valueRange = 5f..200f,
+                        steps = 38,
+                        modifier = Modifier.fillMaxWidth()
                     )
                 }
             }

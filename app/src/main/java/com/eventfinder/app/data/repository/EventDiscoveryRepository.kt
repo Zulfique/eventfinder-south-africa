@@ -16,10 +16,16 @@ import java.util.concurrent.TimeUnit
 class EventDiscoveryRepository(
     private val eventDao: EventDao,
     private val sources: List<EventSource>,
-    private val geocoder: EventGeocoder? = null
+    private val geocoder: EventGeocoder? = null,
+    private val apiClient: com.eventfinder.app.data.remote.EventFinderApiClient? = null
 ) {
     private val tag = "EventDiscoveryRepository"
     private val refreshMutex = Mutex()
+
+    private companion object {
+        /** organizerId used for events merged from the shared backend catalogue. */
+        const val BACKEND_ORGANIZER_ID = "api:backend"
+    }
 
     suspend fun refresh(): DiscoveryResult =
         refreshMutex.withLock {
@@ -47,6 +53,10 @@ class EventDiscoveryRepository(
             }
         }
 
+        // Merge the shared public catalogue hosted on the EventFinder API so
+        // events created by other users become discoverable here too.
+        totalInserted += refreshBackendEvents()
+
         val totalFetched = sourceResults.sumOf { it.fetched }
         val failedSources = sourceResults.count { it.failed }
 
@@ -70,6 +80,54 @@ class EventDiscoveryRepository(
             failedSources = failedSources,
             sourceResults = sourceResults
         )
+    }
+
+    /**
+     * Pulls the shared public catalogue from the EventFinder backend and
+     * replaces the `api:backend` slice of Room with it. IDs are stored as
+     * `api:{serverGuid}` so they can never collide with local UUIDs or the
+     * `remote:` ids used by the public JSON feeds.
+     */
+    private suspend fun refreshBackendEvents(): Int {
+        val client = apiClient ?: return 0
+        return try {
+            val remote = client.publicEvents().getOrNull() ?: return 0
+            val entities = remote.mapNotNull { e ->
+                val start = com.eventfinder.app.data.remote.EventFinderApiClient
+                    .parseIso(e.startUtc) ?: return@mapNotNull null
+                val end = com.eventfinder.app.data.remote.EventFinderApiClient
+                    .parseIso(e.endUtc) ?: start
+                if (start < System.currentTimeMillis() - TimeUnit.DAYS.toMillis(1)) {
+                    return@mapNotNull null
+                }
+                EventEntity(
+                    id = "api:${e.id}",
+                    title = e.title,
+                    description = e.description,
+                    category = e.category,
+                    startDate = start,
+                    endDate = end,
+                    venueName = e.venueName,
+                    address = e.address,
+                    latitude = e.latitude,
+                    longitude = e.longitude,
+                    imageUrl = e.imageUrl,
+                    isPublic = true,
+                    organizerId = BACKEND_ORGANIZER_ID,
+                    organizerName = e.organizerName.ifBlank { "EventFinder" },
+                    attendeeCount = e.attendeeCount,
+                    isCreatedByUser = false
+                )
+            }
+            if (entities.isNotEmpty()) {
+                eventDao.replaceEventsForSource(BACKEND_ORGANIZER_ID, entities)
+                AppLogger.i(tag, "Backend catalogue: ${entities.size} public events merged")
+            }
+            entities.size
+        } catch (e: Exception) {
+            AppLogger.w(tag, "Backend catalogue refresh failed: ${e.message}")
+            0
+        }
     }
 
     private suspend fun fetchSource(source: EventSource): SourceResult {

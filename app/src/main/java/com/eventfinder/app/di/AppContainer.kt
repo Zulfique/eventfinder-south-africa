@@ -42,6 +42,11 @@ class AppContainer(context: Context) {
 
     val preferences: UserPreferences by lazy { UserPreferences(appContext) }
 
+    /** REST backend client (ASP.NET Core on Render; optional at runtime). */
+    val eventFinderApiClient: com.eventfinder.app.data.remote.EventFinderApiClient by lazy {
+        com.eventfinder.app.data.remote.EventFinderApiClient()
+    }
+
     val cloudSyncManager: CloudSyncManager by lazy {
         CloudSyncManager(
             context = appContext,
@@ -60,7 +65,8 @@ class AppContainer(context: Context) {
             userDao = database.userDao(),
             eventDao = database.eventDao(),
             context = appContext,
-            preferences = preferences
+            preferences = preferences,
+            api = eventFinderApiClient
         )
     }
 
@@ -72,7 +78,8 @@ class AppContainer(context: Context) {
             rsvpDao = database.rsvpDao(),
             preferences = preferences,
             context = appContext,
-            cloudSyncManager = cloudSyncManager
+            cloudSyncManager = cloudSyncManager,
+            apiClient = eventFinderApiClient
         )
     }
 
@@ -106,7 +113,8 @@ class AppContainer(context: Context) {
         EventDiscoveryRepository(
             eventDao = database.eventDao(),
             sources = SouthAfricaEventSources.create(publicJsonEventClient, httpClient),
-            geocoder = eventGeocoder
+            geocoder = eventGeocoder,
+            apiClient = eventFinderApiClient
         )
     }
 

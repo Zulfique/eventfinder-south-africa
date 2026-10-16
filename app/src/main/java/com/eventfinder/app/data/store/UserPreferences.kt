@@ -50,6 +50,8 @@ class UserPreferences(private val context: Context) : SessionProvider {
         val BIOMETRIC_USER_ID = stringPreferencesKey("biometric_user_id")
         val LANGUAGE = stringPreferencesKey("language")
         val PENDING_NAVIGATION_ROUTE = stringPreferencesKey("pending_navigation_route")
+        val AUTH_TOKEN = stringPreferencesKey("auth_token")
+        val FIREBASE_UID = stringPreferencesKey("firebase_uid")
     }
 
     // ---- Helpers for user-scoped keys ----
@@ -78,6 +80,30 @@ class UserPreferences(private val context: Context) : SessionProvider {
     /** Emits the id of the signed-in user (null when logged out). */
     override val sessionUserId: Flow<String?> = context.eventFinderDataStore.data
         .map { it[Keys.SESSION_USER_ID] }
+
+    // ---- REST API bearer token (global) ----
+
+    override val authToken: Flow<String?> = context.eventFinderDataStore.data
+        .map { it[Keys.AUTH_TOKEN] }
+
+    override suspend fun setAuthToken(token: String?) {
+        context.eventFinderDataStore.edit {
+            if (token == null) it.remove(Keys.AUTH_TOKEN)
+            else it[Keys.AUTH_TOKEN] = token
+        }
+    }
+
+    // ---- Firebase anonymous-auth uid (global; used as the Firestore owner key) ----
+
+    val firebaseUid: Flow<String?> = context.eventFinderDataStore.data
+        .map { it[Keys.FIREBASE_UID] }
+
+    suspend fun setFirebaseUid(uid: String?) {
+        context.eventFinderDataStore.edit {
+            if (uid == null) it.remove(Keys.FIREBASE_UID)
+            else it[Keys.FIREBASE_UID] = uid
+        }
+    }
 
     // ---- Language (global — needed before login for the login screen) ----
 
@@ -150,6 +176,24 @@ class UserPreferences(private val context: Context) : SessionProvider {
         val userId = sessionUserId.first() ?: return
         context.eventFinderDataStore.edit {
             it[userStringKey("default_radius_km", userId)] = km.toString()
+        }
+    }
+
+    // ---- User-scoped default city ----
+
+    val defaultCity: Flow<String> = sessionUserId.flatMapLatest { userId ->
+        if (userId.isNullOrBlank()) {
+            flowOf("")
+        } else {
+            context.eventFinderDataStore.data
+                .map { prefs -> prefs[userStringKey("default_city", userId)] ?: "" }
+        }
+    }
+
+    suspend fun setDefaultCity(city: String) {
+        val userId = sessionUserId.first() ?: return
+        context.eventFinderDataStore.edit {
+            it[userStringKey("default_city", userId)] = city.trim()
         }
     }
 

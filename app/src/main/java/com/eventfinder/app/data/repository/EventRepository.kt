@@ -15,6 +15,7 @@ import com.eventfinder.app.utils.AppLogger
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
@@ -71,7 +72,8 @@ class EventRepositoryImpl(
     private val rsvpDao: RsvpDao,
     private val preferences: SessionProvider,
     private val context: android.content.Context? = null,
-    private val cloudSyncManager: CloudSyncManager? = null
+    private val cloudSyncManager: CloudSyncManager? = null,
+    private val apiClient: com.eventfinder.app.data.remote.EventFinderApiClient? = null
 ) : EventRepository {
 
     private val tag = "EventRepository"
@@ -181,19 +183,57 @@ override suspend fun ensureSeeded() {
                 runCatching { sync.pushRsvp(userId, eventId, status.storage) }
             }
         }
+        // Mirror to the backend so multi-user attendee lists stay current.
+        pushRsvpToApi(eventId, status.storage)
+    }
+
+    private fun pushRsvpToApi(eventId: String, status: String) {
+        val client = apiClient ?: return
+        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+            val token = preferences.authToken.firstOrNull() ?: return@launch
+            val bearer = "Bearer $token"
+            if (status.isBlank() || status == "none") {
+                runCatching { client.cancelRsvp(bearer, eventId) }
+            } else {
+                runCatching { client.rsvp(bearer, eventId, status) }
+            }.onFailure { AppLogger.w(tag, "API RSVP push failed: ${it.message}") }
+        }
     }
 
     override suspend fun createEvent(draft: NewEventDraft): Result<String> {
         val userId = preferences.sessionUserId.first()
             ?: return Result.failure(IllegalStateException("not_logged_in"))
 
-        val id = java.util.UUID.randomUUID().toString()
         // Normalize IMAGE_REMOVED to null for new events (there's no previous image to remove)
         val imageUrl = when (draft.imageUrl) {
             null -> null
             IMAGE_REMOVED -> null
             else -> draft.imageUrl
         }
+
+        // Prefer a server-generated identifier when the backend is reachable.
+        var id = java.util.UUID.randomUUID().toString()
+        val token = preferences.authToken.firstOrNull()
+        if (apiClient != null && !token.isNullOrBlank()) {
+            val body = com.eventfinder.app.data.remote.EventFinderApiClient.eventBody(
+                title = draft.title.trim(),
+                description = draft.description.trim(),
+                venueName = draft.venueName.trim(),
+                address = draft.address.trim(),
+                city = "",
+                latitude = draft.latitude ?: -26.2041,
+                longitude = draft.longitude ?: 28.0473,
+                startUtcMillis = draft.startDate,
+                endUtcMillis = draft.endDate,
+                category = draft.category.labelKey,
+                imageUrl = imageUrl,
+                isPublic = draft.isPublic
+            )
+            apiClient.createEvent("Bearer $token", body)
+                .onSuccess { remote -> id = remote.id }
+                .onFailure { AppLogger.w(tag, "API create failed - using local id: ${it.message}") }
+        }
+
         val entity = EventEntity(
             id = id,
             title = draft.title.trim(),
@@ -262,6 +302,28 @@ override suspend fun ensureSeeded() {
                 runCatching { sync.pushEvent(updated) }
             }
         }
+        // Best-effort mirror to the backend (owner-guarded server-side).
+        apiClient?.let { client ->
+            kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+                val token = preferences.authToken.firstOrNull() ?: return@launch
+                val body = com.eventfinder.app.data.remote.EventFinderApiClient.eventBody(
+                    title = updated.title,
+                    description = updated.description,
+                    venueName = updated.venueName,
+                    address = updated.address,
+                    city = "",
+                    latitude = updated.latitude ?: 0.0,
+                    longitude = updated.longitude ?: 0.0,
+                    startUtcMillis = updated.startDate,
+                    endUtcMillis = updated.endDate,
+                    category = updated.category,
+                    imageUrl = updated.imageUrl,
+                    isPublic = updated.isPublic
+                )
+                runCatching { client.updateEvent("Bearer $token", eventId, body) }
+                    .onFailure { AppLogger.w(tag, "API update push failed: ${it.message}") }
+            }
+        }
         return Result.success(Unit)
     }
 
@@ -284,6 +346,13 @@ override suspend fun ensureSeeded() {
         cloudSyncManager?.let { sync ->
             kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
                 runCatching { sync.deleteEventFromCloud(eventId) }
+            }
+        }
+        apiClient?.let { client ->
+            kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+                val token = preferences.authToken.firstOrNull() ?: return@launch
+                runCatching { client.deleteEvent("Bearer $token", eventId) }
+                    .onFailure { AppLogger.w(tag, "API delete push failed: ${it.message}") }
             }
         }
         return Result.success(Unit)

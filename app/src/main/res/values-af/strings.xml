@@ -273,4 +273,21 @@
     <string name="event_reminders_hint">Laat my 24 uur en 1 uur voor \'n gebeurtenis wat ek bywoon weet</string>
     <string name="new_events_alerts">Nuwe gebeurteniswaarskuwings</string>
     <string name="settings_about">%1$s-prototipe — gebou met gratis API\'s (Ardent Africa, Open-Meteo, OpenStreetMap).</string>
-</resources>
+
+  <!-- Backend password reset (two-step, email-verified) -->
+  <string name="reset_send_token_hint">Sleutel jou e-pos in en ons stuur \'n eenmalige herstelkode.</string>
+  <string name="reset_enter_token_hint">Voer die kode uit die herstel-e-pos in saam met \'n nuwe wagwoord.</string>
+  <string name="reset_token_label">Herstelkode</string>
+  <string name="reset_send_token_action">Stuur kode</string>
+  <string name="reset_email_sent">As daar \'n rekening vir daardie e-pos bestaan, is \'n herstelkode gestuur.</string>
+  <string name="invalid_token">Daardie herstelkode is ongeldig of het verstryk.</string>
+
+  <!-- Google sign-in -->
+  <string name="google_sign_in_failed">Google-aanmelding het misluk. Probeer asseblief weer.</string>
+
+  <!-- Discovery defaults (Settings) -->
+  <string name="discovery_settings">Ontdekkingsinstellings</string>
+  <string name="default_city">Verstek stad</string>
+  <string name="default_city_hint">bv. Johannesburg — gebruik wanneer ligging af is</string>
+  <string name="default_radius">Soekradius</string>
+  <string name="radius_km_value">%d km</string></resources>
