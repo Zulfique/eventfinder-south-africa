@@ -308,7 +308,7 @@ adb install -r app\build\outputs\apk\debug\app-debug.apk
 
 ## Testing
 
-The project has **131 JVM unit tests** across 15 suites, all runnable from the command line with
+The project has **158 JVM unit tests** across 15 suites, all runnable from the command line with
 no emulator:
 
 ```bash
@@ -401,7 +401,7 @@ docs/screenshots/                        Real device screenshots
 | External library integration | Room, Retrofit/OkHttp, DataStore, Coil, osmdroid, AndroidX Biometric, Firebase |
 | Native Android SDK integration | `AlarmManager` + `NotificationManager` reminders, `LocationManager`/location permissions, biometrics |
 | Offline-first / robustness | Room cache + local event catalogue, graceful fallbacks, validation on every form |
-| **Blob storage** | `FirebaseImageUploader` — event photos upload to Firebase Cloud Storage |
+| **Blob storage** | `FirebaseImageUploader` - uploads to Firebase Cloud Storage; falls back to local internal file storage when Storage is unavailable (requires Blaze) |
 | **NoSQL database (store)** | `CloudSyncManager.pushLocalChanges` — Firestore writes for events, favourites, RSVPs |
 | **NoSQL database (read)** | `CloudSyncManager.pullRemoteChanges` — Firestore reads merged into Room |
 | **Biometric authentication** | `security/BiometricAuth.kt` — AndroidX BiometricPrompt, BIOMETRIC_STRONG |
@@ -410,8 +410,8 @@ docs/screenshots/                        Real device screenshots
 | **Multi-language (2 SA languages)** | English + Afrikaans (`values-af/strings.xml`), `LocaleManager`, in-app switcher |
 | **Production assets** | Adaptive launcher icon (SA-flag colours), Material 3 theming, screenshot set |
 | **Play Store preparation** | Signed release build (`keystore.properties`), minify + ProGuard, `bundleRelease` ready |
-| **CI/CD (GitHub Actions)** | `.github/workflows/android-ci.yml` — build, 152 unit tests, lint, instrumentation on every push |
-| Unit testing | 152 JVM tests + 6 Compose instrumented tests + GitHub Actions CI |
+| **CI/CD (GitHub Actions)** | `.github/workflows/android-ci.yml` — build, 158 unit tests, lint, instrumentation on every push |
+| Unit testing | 158 JVM tests + 6 Compose instrumented tests + GitHub Actions CI |
 | Logging & comments | `AppLogger` used across data/UI layers; KDoc on every class |
 | Documentation | This README with Mermaid architecture diagrams |
 | **Final POE tag** | Git tag `Final-POE` marks the submission commit |
