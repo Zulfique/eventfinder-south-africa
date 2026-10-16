@@ -5,6 +5,7 @@ using EventFinder.Api.Data;
 using EventFinder.Api.Endpoints;
 using EventFinder.Api.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -64,14 +65,22 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     });
 builder.Services.AddAuthorization();
 
+builder.Services.Configure<ForwardedHeadersOptions>(o =>
+{
+    o.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+});
+
 builder.Services.AddRateLimiter(options =>
 {
-    options.AddFixedWindowLimiter("auth", o =>
+    options.AddPolicy("auth", context =>
     {
-        o.Window = TimeSpan.FromMinutes(1);
-        o.PermitLimit = 20;
-        o.QueueLimit = 0;
-        o.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
+        var ip = context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+        return RateLimitPartition.GetFixedWindowLimiter(ip, _ => new FixedWindowRateLimiterOptions
+        {
+            Window = TimeSpan.FromMinutes(1),
+            PermitLimit = 20,
+            QueueLimit = 0,
+        });
     });
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
 });
@@ -99,6 +108,7 @@ if (!emailConfigured)
         app.Logger.LogInformation("Brevo:ApiKey is not configured — running in development fallback (no email sent).");
 }
 
+app.UseForwardedHeaders();
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseRateLimiter();

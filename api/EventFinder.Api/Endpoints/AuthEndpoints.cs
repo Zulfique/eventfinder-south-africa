@@ -171,12 +171,10 @@ public static class AuthEndpoints
             {
                 lf.CreateLogger("AuthEndpoints").LogError(ex, "Failed to send reset email to {Email}", user.Email);
                 // Remove the token we just stored so a failed delivery does not
-                // leave a usable reset token behind.
+                // leave a usable reset token behind. Return the same success
+                // response as for an unknown account to avoid enumeration.
                 db.PasswordResetTokens.Remove(reset);
                 await db.SaveChangesAsync(ct);
-                return Results.Json(
-                    ApiResponse<object>.Fail("Could not send the reset email. Try again shortly."),
-                    statusCode: 502);
             }
         }
 
@@ -239,6 +237,12 @@ public static class AuthEndpoints
 
         user.PasswordHash = PasswordHasher.Hash(request.NewPassword!);
         user.UpdatedAt = DateTime.UtcNow;
+        user.TokenVersion++;
+
+        // Invalidate any outstanding reset tokens for this account.
+        var outstanding = db.PasswordResetTokens.Where(t => t.UserId == user.Id && t.UsedAt == null);
+        db.PasswordResetTokens.RemoveRange(outstanding);
+
         await db.SaveChangesAsync(ct);
 
         return Results.Json(ApiResponse<object>.Ok(new { }, "Password changed."));

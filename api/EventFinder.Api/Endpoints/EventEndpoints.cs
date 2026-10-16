@@ -232,38 +232,56 @@ public static class EventEndpoints
         var status = request.Status!;
         var now = DateTime.UtcNow;
 
-        await using var tx = await db.Database.BeginTransactionAsync(ct);
         try
         {
+            await using var tx = await db.Database.BeginTransactionAsync(ct);
+            try
+            {
+                var existing = await db.Rsvps.FirstOrDefaultAsync(r => r.EventId == id && r.UserId == user.Id, ct);
+                if (existing is null)
+                {
+                    existing = new Rsvp
+                    {
+                        Id = Guid.NewGuid(),
+                        EventId = id,
+                        UserId = user.Id,
+                        Status = status,
+                        CreatedAt = now,
+                        UpdatedAt = now,
+                    };
+                    db.Rsvps.Add(existing);
+                }
+                else
+                {
+                    existing.Status = status;
+                    existing.UpdatedAt = now;
+                }
+
+                await db.SaveChangesAsync(ct);
+                ev.AttendeeCount = await db.Rsvps.CountAsync(r => r.EventId == id && r.Status == "attending", ct);
+                await db.SaveChangesAsync(ct);
+                await tx.CommitAsync(ct);
+            }
+            catch
+            {
+                await tx.RollbackAsync(ct);
+                throw;
+            }
+        }
+        catch (DbUpdateException)
+        {
+            // Concurrent insert on the unique (EventId, UserId) index: reload
+            // the winning row, apply this request's status and recompute.
             var existing = await db.Rsvps.FirstOrDefaultAsync(r => r.EventId == id && r.UserId == user.Id, ct);
             if (existing is null)
             {
-                existing = new Rsvp
-                {
-                    Id = Guid.NewGuid(),
-                    EventId = id,
-                    UserId = user.Id,
-                    Status = status,
-                    CreatedAt = now,
-                    UpdatedAt = now,
-                };
-                db.Rsvps.Add(existing);
+                return Results.Json(ApiResponse<object>.Fail("RSVP conflict."), statusCode: 409);
             }
-            else
-            {
-                existing.Status = status;
-                existing.UpdatedAt = now;
-            }
-
+            existing.Status = status;
+            existing.UpdatedAt = now;
             await db.SaveChangesAsync(ct);
             ev.AttendeeCount = await db.Rsvps.CountAsync(r => r.EventId == id && r.Status == "attending", ct);
             await db.SaveChangesAsync(ct);
-            await tx.CommitAsync(ct);
-        }
-        catch
-        {
-            await tx.RollbackAsync(ct);
-            throw;
         }
 
         return Results.Json(ApiResponse<AttendeeDto>.Ok(

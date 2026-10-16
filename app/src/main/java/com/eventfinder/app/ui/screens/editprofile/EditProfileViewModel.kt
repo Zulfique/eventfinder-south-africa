@@ -24,7 +24,9 @@ data class EditProfileUiState(
     val email: String = "",
     val saving: Boolean = false,
     val nameError: Int? = null,
-    val emailError: Int? = null
+    val emailError: Int? = null,
+    val verificationToken: String = "",
+    val verifying: Boolean = false
 )
 
 /**
@@ -53,6 +55,27 @@ class EditProfileViewModel(
 
     fun onNameChange(v: String) = _uiState.update { it.copy(fullName = v, nameError = null) }
     fun onEmailChange(v: String) = _uiState.update { it.copy(email = v, emailError = null) }
+    fun onVerificationTokenChange(v: String) = _uiState.update { it.copy(verificationToken = v) }
+
+    fun verifyEmail(onVerified: () -> Unit) {
+        val token = _uiState.value.verificationToken.trim()
+        if (token.isBlank()) return
+        viewModelScope.launch {
+            _uiState.update { it.copy(verifying = true) }
+            val result = authRepository.verifyEmailChange(token)
+            _uiState.update { it.copy(verifying = false) }
+            result.fold(
+                onSuccess = {
+                    _messages.emit(UiMessage.Resource(R.string.profile_updated))
+                    // Refresh local profile from server.
+                    onVerified()
+                },
+                onFailure = {
+                    _messages.emit(UiMessage.Resource(R.string.save_failed))
+                }
+            )
+        }
+    }
 
     /** Returns true when validation passes; surfaces errors inline in the form. */
     fun validate(): Boolean {

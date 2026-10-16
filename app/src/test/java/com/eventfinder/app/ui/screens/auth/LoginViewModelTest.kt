@@ -79,6 +79,8 @@ class LoginViewModelTest {
         override suspend fun updateProfile(fullName: String, email: String): Result<User> =
             error("not used")
 
+        override suspend fun verifyEmailChange(token: String): Result<Unit> = error("not used")
+
         override suspend fun setBiometricEnabled(enabled: Boolean) = error("not used")
         override suspend fun changePassword(currentPassword: String, newPassword: String): Result<Unit> =
             error("not used")

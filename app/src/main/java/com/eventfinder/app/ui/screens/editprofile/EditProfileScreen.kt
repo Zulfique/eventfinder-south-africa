@@ -105,6 +105,25 @@ fun EditProfileScreen(
                     Text(stringResource(R.string.save_changes))
                 }
             }
+
+            OutlinedTextField(
+                value = state.verificationToken,
+                onValueChange = viewModel::onVerificationTokenChange,
+                label = { Text("Email verification token") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth()
+            )
+            Button(
+                onClick = { viewModel.verifyEmail(onBack) },
+                enabled = !state.verifying && state.verificationToken.isNotBlank(),
+                modifier = Modifier.fillMaxWidth().height(48.dp)
+            ) {
+                if (state.verifying) {
+                    CircularProgressIndicator(Modifier.height(20.dp).width(20.dp))
+                } else {
+                    Text("Verify email change")
+                }
+            }
         }
     }
 }

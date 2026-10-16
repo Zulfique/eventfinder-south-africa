@@ -139,6 +139,11 @@ interface EventFinderApiService {
         @Body body: UpdateProfileBody
     ): retrofit2.Response<ApiEnvelope<ApiUserDto>>
 
+    @GET("api/auth/me")
+    suspend fun me(
+        @Header("Authorization") bearer: String
+    ): retrofit2.Response<ApiEnvelope<ApiUserDto>>
+
     @POST("api/auth/request-email-change")
     suspend fun requestEmailChange(
         @Header("Authorization") bearer: String,
@@ -249,6 +254,9 @@ class EventFinderApiClient(
 
     suspend fun updateProfile(bearer: String, fullName: String, email: String): Result<ApiUserDto> =
         wrap("updateProfile") { service.updateProfile(bearer, UpdateProfileBody(fullName, email)) }
+
+    suspend fun me(bearer: String): Result<ApiUserDto> =
+        wrap("me") { service.me(bearer) }
 
     suspend fun requestEmailChange(bearer: String, newEmail: String): Result<Unit> =
         wrap("requestEmailChange") { service.requestEmailChange(bearer, RequestEmailChangeBody(newEmail)) }

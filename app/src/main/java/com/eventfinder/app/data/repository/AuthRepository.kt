@@ -45,6 +45,7 @@ interface AuthRepository {
     suspend fun biometricLogin(): Result<User>
     suspend fun logout()
     suspend fun updateProfile(fullName: String, email: String): Result<User>
+    suspend fun verifyEmailChange(token: String): Result<Unit>
     suspend fun setBiometricEnabled(enabled: Boolean)
 
     /** Signs in (or provisions) an account from a verified Google ID token. */
@@ -324,6 +325,25 @@ class AuthRepositoryImpl(
         val updated = current.copy(fullName = normalizedFullName, email = normalizedEmail)
         AppLogger.i("AuthRepository", "Profile updated locally for ${updated.id}")
         return Result.success(updated)
+    }
+
+    override suspend fun verifyEmailChange(token: String): Result<Unit> {
+        val bearer = preferences.authToken.first()
+        val client = api ?: return Result.failure(
+            IllegalStateException("password_reset_requires_authenticated_backend")
+        )
+        if (bearer.isNullOrBlank()) {
+            return Result.failure(IllegalStateException("no_session"))
+        }
+        val result = client.verifyEmailChange(token.trim())
+        result.onFailure { return Result.failure(it) }
+        // Refresh the local profile from the server after a successful change.
+        client.me("Bearer $bearer").onSuccess { user ->
+            userDao.findById(user.id)?.let { entity ->
+                userDao.upsert(entity.copy(fullName = user.fullName, email = user.email))
+            }
+        }
+        return Result.success(Unit)
     }
 
     override suspend fun setBiometricEnabled(enabled: Boolean) {
