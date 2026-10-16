@@ -175,13 +175,13 @@ class AuthRepositoryImpl(
             preferredLanguage = language,
             defaultCity = "South Africa",
             defaultRadiusKm = 50,
-                    biometricEnabled = false,
-                    createdAt = System.currentTimeMillis(),
-                    serverBacked = false
-                )
-                userDao.upsert(user)
-                preferences.setSessionUserId(user.id)
-                preferences.setLanguage(language)
+            biometricEnabled = false,
+            createdAt = System.currentTimeMillis(),
+            serverBacked = false
+        )
+        userDao.upsert(user)
+        preferences.setSessionUserId(user.id)
+        preferences.setLanguage(language)
         ReminderHelper.restoreReminders(context, eventDao, user.id)
         AppLogger.i("AuthRepository", "New local account created for ${user.email}")
         return Result.success(user.toDomain())
