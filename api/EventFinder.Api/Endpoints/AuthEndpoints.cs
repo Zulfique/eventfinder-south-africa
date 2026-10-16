@@ -13,7 +13,7 @@ public static class AuthEndpoints
 {
     public static RouteGroupBuilder MapAuthEndpoints(this IEndpointRouteBuilder app)
     {
-        var group = app.MapGroup("/api/auth").WithTags("Auth");
+        var group = app.MapGroup("/api/auth").WithTags("Auth").RequireRateLimiting("auth");
 
         group.MapPost("/register", RegisterAsync);
         group.MapPost("/login", LoginAsync);
@@ -21,6 +21,8 @@ public static class AuthEndpoints
         group.MapPost("/forgot-password", ForgotPasswordAsync);
         group.MapPost("/reset-password", ResetPasswordAsync);
         group.MapPost("/change-password", ChangePasswordAsync).RequireAuthorization();
+        group.MapPut("/me", UpdateProfileAsync).RequireAuthorization();
+        group.MapDelete("/me", DeleteAccountAsync).RequireAuthorization();
         group.MapGet("/me", MeAsync).RequireAuthorization();
 
         return group;
@@ -142,6 +144,11 @@ public static class AuthEndpoints
         // Always answer success so the endpoint cannot be used to enumerate accounts.
         if (user is not null)
         {
+            // Invalidate any earlier unused reset tokens for this account so only
+            // the most recently issued one remains usable.
+            var prior = db.PasswordResetTokens.Where(t => t.UserId == user.Id && t.UsedAt == null);
+            db.PasswordResetTokens.RemoveRange(prior);
+
             var rawToken = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
             db.PasswordResetTokens.Add(new PasswordResetToken
             {
@@ -227,6 +234,77 @@ public static class AuthEndpoints
         await db.SaveChangesAsync(ct);
 
         return Results.Json(ApiResponse<object>.Ok(new { }, "Password changed."));
+    }
+
+    private static async Task<IResult> UpdateProfileAsync(
+        UpdateProfileRequest request, ClaimsPrincipal principal, AppDbContext db, CancellationToken ct)
+    {
+        var errors = RequestValidator.Validate(request);
+        if (errors.Count > 0)
+            return Results.Json(ApiResponse<object>.Fail("Validation failed.", errors), statusCode: 400);
+
+        var user = await db.Users.CurrentUserAsync(principal, ct);
+        if (user is null)
+            return Results.Json(ApiResponse<object>.Fail("Unauthorized."), statusCode: 401);
+
+        var fullName = request.FullName!.Trim();
+        var email = request.Email!.Trim().ToLowerInvariant();
+
+        if (await db.Users.AnyAsync(u => u.Email == email && u.Id != user.Id, ct))
+        {
+            return Results.Json(
+                ApiResponse<object>.Fail("An account with this email already exists.",
+                    new Dictionary<string, string[]> { ["email"] = ["Email is already registered."] }),
+                statusCode: 409);
+        }
+
+        var nameChanged = user.FullName != fullName;
+        user.FullName = fullName;
+        user.Email = email;
+        user.UpdatedAt = DateTime.UtcNow;
+
+        if (nameChanged)
+        {
+            await db.Events
+                .Where(e => e.OrganizerId == user.Id)
+                .ExecuteUpdateAsync(s => s.SetProperty(e => e.OrganizerName, user.FullName), ct);
+        }
+
+        await db.SaveChangesAsync(ct);
+        return Results.Json(ApiResponse<UserDto>.Ok(user.ToDto(), "Profile updated."));
+    }
+
+    private static async Task<IResult> DeleteAccountAsync(
+        ClaimsPrincipal principal, AppDbContext db, CancellationToken ct)
+    {
+        var user = await db.Users.CurrentUserAsync(principal, ct);
+        if (user is null)
+            return Results.Json(ApiResponse<object>.Fail("Unauthorized."), statusCode: 401);
+
+        // Decrement attendee counts for events this user RSVP'd to as "attending".
+        var userRsvps = await db.Rsvps.Where(r => r.UserId == user.Id).ToListAsync(ct);
+        foreach (var r in userRsvps)
+        {
+            if (r.Status == "attending")
+            {
+                var ev = await db.Events.FirstOrDefaultAsync(e => e.Id == r.EventId, ct);
+                if (ev is not null) ev.AttendeeCount = Math.Max(0, ev.AttendeeCount - 1);
+            }
+        }
+        db.Rsvps.RemoveRange(userRsvps);
+
+        // Remove owned events (their RSVPs cascade).
+        var owned = await db.Events.Where(e => e.OrganizerId == user.Id).ToListAsync(ct);
+        db.Events.RemoveRange(owned);
+
+        // Remove outstanding reset tokens.
+        var tokens = await db.PasswordResetTokens.Where(t => t.UserId == user.Id).ToListAsync(ct);
+        db.PasswordResetTokens.RemoveRange(tokens);
+
+        db.Users.Remove(user);
+        await db.SaveChangesAsync(ct);
+
+        return Results.Json(ApiResponse<object>.Ok(new { }, "Account deleted."));
     }
 
     private static async Task<IResult> MeAsync(

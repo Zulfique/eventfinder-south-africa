@@ -27,6 +27,10 @@ public record ChangePasswordRequest(
     [property: Required, MaxLength(128)] string? CurrentPassword,
     [property: Required, MinLength(8), MaxLength(128)] string? NewPassword);
 
+public record UpdateProfileRequest(
+    [property: Required, MaxLength(120)] string? FullName,
+    [property: Required, EmailAddress, MaxLength(254)] string? Email);
+
 public record CreateEventRequest(
     [property: Required, MaxLength(160)] string? Title,
     [property: Required, MinLength(10), MaxLength(4000)] string? Description,

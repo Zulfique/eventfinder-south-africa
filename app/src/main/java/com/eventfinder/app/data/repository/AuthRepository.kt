@@ -121,6 +121,7 @@ class AuthRepositoryImpl(
 
         val remote = api?.register(fullName.trim(), normalizedEmail, password, language)
         if (remote != null) {
+            var fallThrough = false
             remote.onSuccess { auth ->
                 val user = UserEntity(
                     id = auth.user.id,
@@ -142,16 +143,25 @@ class AuthRepositoryImpl(
                 return Result.success(user.toDomain())
             }.onFailure { error ->
                 when (error) {
-                    is EventFinderApiClient.NetworkException ->
+                    is EventFinderApiClient.NetworkException -> {
                         AppLogger.w("AuthRepository", "API unreachable during register - falling back to local")
-                    is EventFinderApiClient.ApiException ->
+                        fallThrough = true
+                    }
+                    is EventFinderApiClient.ApiException -> {
                         if (error.message?.contains("already", ignoreCase = true) == true || error.code == 409) {
                             return Result.failure(IllegalArgumentException("email_in_use"))
-                        } else {
-                            AppLogger.w("AuthRepository", "API register rejected: ${error.message}")
                         }
-                    else -> Unit
+                        AppLogger.w("AuthRepository", "API register rejected: ${error.message}")
+                        return Result.failure(IllegalArgumentException(error.message ?: "registration_failed"))
+                    }
+                    else -> {
+                        AppLogger.w("AuthRepository", "API register failed: ${error.message}")
+                        return Result.failure(error)
+                    }
                 }
+            }
+            if (!fallThrough) {
+                // Should not reach here, but guard anyway.
             }
         }
 
@@ -191,11 +201,12 @@ class AuthRepositoryImpl(
                 return Result.success(user.toDomain())
             }.onFailure { error ->
                 when (error) {
-                    is EventFinderApiClient.ApiException ->
-                        return Result.failure(IllegalArgumentException("login_invalid_credentials"))
+                    is EventFinderApiClient.ApiException -> {
+                        AppLogger.w("AuthRepository", "API login rejected - trying local hash for offline account")
+                    }
                     is EventFinderApiClient.NetworkException ->
                         AppLogger.w("AuthRepository", "API unreachable during login - trying local hash")
-                    else -> Unit
+                    else -> AppLogger.w("AuthRepository", "API login failed - trying local hash")
                 }
             }
         }
@@ -257,18 +268,41 @@ class AuthRepositoryImpl(
         if (!EmailValidator.isValid(email)) return Result.failure(IllegalArgumentException("invalid_email"))
 
         val normalizedEmail = email.trim().lowercase()
+        val normalizedFullName = fullName.trim()
+
+        val token = preferences.authToken.first()
+        val client = api
+        if (client != null && !token.isNullOrBlank()) {
+            val result = client.updateProfile("Bearer $token", normalizedFullName, normalizedEmail)
+            result.onFailure { error ->
+                if (error is EventFinderApiClient.ApiException && (error.message?.contains("already", ignoreCase = true) == true || error.code == 409)) {
+                    return Result.failure(IllegalArgumentException("email_in_use"))
+                }
+                AppLogger.w("AuthRepository", "Server profile update failed: ${error.message}")
+                return Result.failure(error)
+            }
+            val updatedUser = result.getOrNull()
+            val entity = userDao.findById(current.id) ?: return Result.failure(IllegalStateException("user_missing"))
+            userDao.upsert(entity.copy(
+                fullName = updatedUser?.fullName ?: normalizedFullName,
+                email = updatedUser?.email ?: normalizedEmail
+            ))
+            val updated = current.copy(
+                fullName = updatedUser?.fullName ?: normalizedFullName,
+                email = updatedUser?.email ?: normalizedEmail
+            )
+            AppLogger.i("AuthRepository", "Profile updated for ${updated.id}")
+            return Result.success(updated)
+        }
+
         val existing = userDao.findByEmail(normalizedEmail)
         if (existing != null && existing.id != current.id) {
             return Result.failure(IllegalArgumentException("email_in_use"))
         }
-
-        val updated = current.copy(
-            fullName = fullName.trim(),
-            email = normalizedEmail
-        )
         val entity = userDao.findById(current.id) ?: return Result.failure(IllegalStateException("user_missing"))
-        userDao.upsert(entity.copy(fullName = updated.fullName, email = updated.email))
-        AppLogger.i("AuthRepository", "Profile updated for ${updated.id}")
+        userDao.upsert(entity.copy(fullName = normalizedFullName, email = normalizedEmail))
+        val updated = current.copy(fullName = normalizedFullName, email = normalizedEmail)
+        AppLogger.i("AuthRepository", "Profile updated locally for ${updated.id}")
         return Result.success(updated)
     }
 
@@ -338,13 +372,25 @@ class AuthRepositoryImpl(
             return Result.failure(IllegalArgumentException("same_password"))
         }
 
-        // Mirror the change to the backend when we hold a token (fire-and-forget
-        // on failure — the local hash is authoritative for offline login).
+        // Mirror the change to the backend when we hold a token. The local hash
+        // is updated only after the server confirms success.
         val token = preferences.authToken.first()
         val client = api
         if (client != null && !token.isNullOrBlank()) {
-            runCatching { client.changePassword("Bearer $token", currentPassword, newPassword) }
-                .onFailure { AppLogger.w("AuthRepository", "Server password change failed: ${it.message}") }
+            val result = client.changePassword("Bearer $token", currentPassword, newPassword)
+            if (result.isFailure) {
+                val error = result.exceptionOrNull()
+                AppLogger.w("AuthRepository", "Server password change failed: ${error?.message}")
+                if (error is EventFinderApiClient.ApiException) {
+                    return when {
+                        error.message?.contains("incorrect", ignoreCase = true) == true || error.code == 400 ->
+                            Result.failure(IllegalArgumentException("wrong_password"))
+                        else -> Result.failure(IllegalArgumentException("password_change_failed"))
+                    }
+                }
+                // Network failure: keep local change pending? For now report failure.
+                return Result.failure(IllegalArgumentException("password_change_failed"))
+            }
         }
 
         userDao.upsert(entity.copy(passwordHash = PasswordHasher.hash(newPassword)))
@@ -354,6 +400,16 @@ class AuthRepositoryImpl(
 
     override suspend fun deleteAccount(): Result<Unit> {
         val current = currentUser.first() ?: return Result.failure(IllegalStateException("no_session"))
+
+        val token = preferences.authToken.first()
+        val client = api
+        if (client != null && !token.isNullOrBlank()) {
+            val result = client.deleteAccount("Bearer $token")
+            if (result.isFailure) {
+                AppLogger.w("AuthRepository", "Server account deletion failed: ${result.exceptionOrNull()?.message}")
+                return Result.failure(result.exceptionOrNull() ?: IllegalStateException("account_delete_failed"))
+            }
+        }
 
         ReminderHelper.cancelReminders(context, eventDao, current.id)
         database.deleteAccountData(current.id)

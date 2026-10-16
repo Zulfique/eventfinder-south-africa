@@ -89,6 +89,8 @@ data class ResetBody(val email: String, val token: String, val newPassword: Stri
 
 data class ChangePasswordBody(val currentPassword: String, val newPassword: String)
 
+data class UpdateProfileBody(val fullName: String, val email: String)
+
 data class CreateEventBody(
     val title: String,
     val description: String,
@@ -125,6 +127,17 @@ interface EventFinderApiService {
     suspend fun changePassword(
         @Header("Authorization") bearer: String,
         @Body body: ChangePasswordBody
+    ): retrofit2.Response<ApiEnvelope<Unit>>
+
+    @PUT("api/auth/me")
+    suspend fun updateProfile(
+        @Header("Authorization") bearer: String,
+        @Body body: UpdateProfileBody
+    ): retrofit2.Response<ApiEnvelope<ApiUserDto>>
+
+    @DELETE("api/auth/me")
+    suspend fun deleteAccount(
+        @Header("Authorization") bearer: String
     ): retrofit2.Response<ApiEnvelope<Unit>>
 
     @GET("api/events/public")
@@ -218,6 +231,12 @@ class EventFinderApiClient(
 
     suspend fun changePassword(bearer: String, currentPassword: String, newPassword: String): Result<Unit> =
         wrap("changePassword") { service.changePassword(bearer, ChangePasswordBody(currentPassword, newPassword)) }
+
+    suspend fun updateProfile(bearer: String, fullName: String, email: String): Result<ApiUserDto> =
+        wrap("updateProfile") { service.updateProfile(bearer, UpdateProfileBody(fullName, email)) }
+
+    suspend fun deleteAccount(bearer: String): Result<Unit> =
+        wrap("deleteAccount") { service.deleteAccount(bearer) }
 
     suspend fun publicEvents(city: String? = null, lat: Double? = null, lng: Double? = null, radiusKm: Double? = null): Result<List<ApiEventDto>> =
         wrap("publicEvents") { service.publicEvents(city, lat, lng, radiusKm) }

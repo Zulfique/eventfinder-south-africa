@@ -457,8 +457,8 @@ multi-user product while staying 100% free:
 | Capability | Detail |
 | --- | --- |
 | Stack | ASP.NET Core 8, EF Core 8 + SQLite, JWT bearer auth, xUnit integration tests |
-| Auth | Register / login / Google (ID-token verified via `oauth2.googleapis.com/tokeninfo`), change password, `/me` |
-| Password reset | Two-step: `forgot-password` emails a SHA-256-hashed, single-use 60-minute token (Brevo free 300/day; falls back to logging the token when no API key) → `reset-password` |
+| Auth | Register / login / Google (ID-token verified via `oauth2.googleapis.com/tokeninfo`), change password, profile update (`PUT /api/auth/me`), account deletion (`DELETE /api/auth/me`), `/me` |
+| Password reset | Two-step: `forgot-password` emails a SHA-256-hashed, single-use 60-minute token (Brevo free 300/day); missing Brevo key fails visibly instead of logging the token → `reset-password` |
 | Events | Public catalogue (`GET /api/events/public`) with city + Haversine radius filters, owner-guarded CRUD |
 | RSVP | Multi-user: anyone signed in can RSVP/cancel; `GET /api/events/{id}/attendees` returns the shared list |
 | Envelope | Every response is `{ success, message, data, errors }` with server-generated IDs |
@@ -566,9 +566,11 @@ them means you can never update the published app.
   project with Google sign-in enabled; the button is hidden until configured.
 - **Firebase Cloud Storage** requires the Blaze plan (item 21) — event photos use local
   internal storage fallback, or can be served by the API itself.
-- **Render free tier** — the backend sleeps after ~15 min idle (30–60 s cold start) and the
-  free managed Postgres expires after 30 days; this deployment uses the persistent-disk
-  SQLite file instead, which survives restarts within the free plan.
+- **Render free tier** — the backend sleeps after ~15 min idle (30–60 s cold start); the SQLite
+  file lives on ephemeral disk and can reset on redeploy (use a persistent disk or managed DB
+  for durable user data).
+- **Password reset email** requires a Brevo API key in production (`Brevo__ApiKey`); without it
+  `forgot-password` returns a controlled 502 and the service never logs raw tokens.
 - **Public event feeds** — the architecture supports keyless public JSON, RSS and ICS event
   sources via `EventDiscoveryRepository`. Aticket South Africa (RSS), Motorsport South
   Africa (ICS) and Ardent Africa (JSON) are configured as verified sources. Events without

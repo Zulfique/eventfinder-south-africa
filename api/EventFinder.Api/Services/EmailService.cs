@@ -5,16 +5,17 @@ namespace EventFinder.Api.Services;
 
 /// <summary>
 /// Sends transactional email through the Brevo (formerly Sendinblue) SMTP API.
-/// Brevo's free plan allows 300 emails/day with no credit card. When no API key
-/// is configured the service logs the message instead — convenient for local
-/// development and for the automated test suite.
+/// Brevo's free plan allows 300 emails/day with no credit card. In Development
+/// with no API key configured the service skips delivery (it never logs the raw
+/// token). In Production a missing key is a configuration error and the call
+/// throws so the caller can surface a controlled failure.
 /// </summary>
 public interface IEmailService
 {
     Task SendPasswordResetEmailAsync(string toEmail, string rawToken, CancellationToken ct = default);
 }
 
-public class EmailService(HttpClient http, IConfiguration configuration, ILogger<EmailService> logger)
+public class EmailService(HttpClient http, IConfiguration configuration, ILogger<EmailService> logger, IHostEnvironment environment)
     : IEmailService
 {
     public async Task SendPasswordResetEmailAsync(string toEmail, string rawToken, CancellationToken ct = default)
@@ -23,6 +24,16 @@ public class EmailService(HttpClient http, IConfiguration configuration, ILogger
         var fromEmail = configuration["Brevo:FromEmail"] ?? "no-reply@eventfinder.app";
         var fromName = configuration["Brevo:FromName"] ?? "EventFinder";
         var appUrl = configuration["App:WebUrl"] ?? "https://eventfinder.app";
+
+        if (string.IsNullOrWhiteSpace(apiKey))
+        {
+            if (environment.IsDevelopment())
+            {
+                logger.LogInformation("Brevo API key not configured — reset email for {Email} not sent (development mode).", toEmail);
+                return;
+            }
+            throw new InvalidOperationException("Email delivery is not configured (Brevo:ApiKey missing).");
+        }
 
         var body = $"""
             You requested a password reset for EventFinder.
@@ -34,14 +45,6 @@ public class EmailService(HttpClient http, IConfiguration configuration, ILogger
 
             If you did not request this, you can ignore this email.
             """;
-
-        if (string.IsNullOrWhiteSpace(apiKey))
-        {
-            logger.LogWarning(
-                "BREVO_API_KEY not configured — password reset for {Email} not sent. Token: {Token}",
-                toEmail, rawToken);
-            return;
-        }
 
         var payload = new BrevoMail(
             Sender: new BrevoActor(Email: fromEmail, Name: fromName),

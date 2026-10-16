@@ -59,12 +59,23 @@ public static class EventEndpoints
         return Results.Json(ApiResponse<List<EventDto>>.Ok(events.Select(ToDto).ToList()));
     }
 
-    private static async Task<IResult> GetAsync(Guid id, AppDbContext db, CancellationToken ct)
+    private static async Task<IResult> GetAsync(Guid id, ClaimsPrincipal principal, AppDbContext db, CancellationToken ct)
     {
         var ev = await db.Events.AsNoTracking().FirstOrDefaultAsync(e => e.Id == id, ct);
-        return ev is null
-            ? Results.Json(ApiResponse<object>.Fail("Event not found."), statusCode: 404)
-            : Results.Json(ApiResponse<EventDto>.Ok(ToDto(ev)));
+        if (ev is null)
+            return Results.Json(ApiResponse<object>.Fail("Event not found."), statusCode: 404);
+
+        if (!ev.IsPublic)
+        {
+            var user = await db.Users.CurrentUserAsync(principal, ct);
+            if (user is null)
+                return Results.Json(ApiResponse<object>.Fail("Unauthorized."), statusCode: 401);
+            var isAttendee = await db.Rsvps.AsNoTracking().AnyAsync(r => r.EventId == ev.Id && r.UserId == user.Id, ct);
+            if (ev.OrganizerId != user.Id && !isAttendee)
+                return Results.Json(ApiResponse<object>.Fail("Forbidden."), statusCode: 403);
+        }
+
+        return Results.Json(ApiResponse<EventDto>.Ok(ToDto(ev)));
     }
 
     private static async Task<IResult> MyRsvpsAsync(
@@ -219,32 +230,42 @@ public static class EventEndpoints
             return Results.Json(ApiResponse<object>.Fail("Event not found."), statusCode: 404);
 
         var status = request.Status!;
-        var existing = await db.Rsvps.FirstOrDefaultAsync(r => r.EventId == id && r.UserId == user.Id, ct);
         var now = DateTime.UtcNow;
 
-        if (existing is null)
+        await using var tx = await db.Database.BeginTransactionAsync(ct);
+        try
         {
-            existing = new Rsvp
+            var existing = await db.Rsvps.FirstOrDefaultAsync(r => r.EventId == id && r.UserId == user.Id, ct);
+            if (existing is null)
             {
-                Id = Guid.NewGuid(),
-                EventId = id,
-                UserId = user.Id,
-                Status = status,
-                CreatedAt = now,
-                UpdatedAt = now,
-            };
-            db.Rsvps.Add(existing);
-            if (status == "attending") ev.AttendeeCount++;
+                existing = new Rsvp
+                {
+                    Id = Guid.NewGuid(),
+                    EventId = id,
+                    UserId = user.Id,
+                    Status = status,
+                    CreatedAt = now,
+                    UpdatedAt = now,
+                };
+                db.Rsvps.Add(existing);
+            }
+            else
+            {
+                existing.Status = status;
+                existing.UpdatedAt = now;
+            }
+
+            await db.SaveChangesAsync(ct);
+            ev.AttendeeCount = await db.Rsvps.CountAsync(r => r.EventId == id && r.Status == "attending", ct);
+            await db.SaveChangesAsync(ct);
+            await tx.CommitAsync(ct);
         }
-        else
+        catch
         {
-            if (existing.Status != "attending" && status == "attending") ev.AttendeeCount++;
-            if (existing.Status == "attending" && status != "attending") ev.AttendeeCount = Math.Max(0, ev.AttendeeCount - 1);
-            existing.Status = status;
-            existing.UpdatedAt = now;
+            await tx.RollbackAsync(ct);
+            throw;
         }
 
-        await db.SaveChangesAsync(ct);
         return Results.Json(ApiResponse<AttendeeDto>.Ok(
             new AttendeeDto(user.Id, user.FullName, status, now), "RSVP saved."));
     }
@@ -263,19 +284,37 @@ public static class EventEndpoints
         var existing = await db.Rsvps.FirstOrDefaultAsync(r => r.EventId == id && r.UserId == user.Id, ct);
         if (existing is not null)
         {
-            if (existing.Status == "attending") ev.AttendeeCount = Math.Max(0, ev.AttendeeCount - 1);
-            db.Rsvps.Remove(existing);
-            await db.SaveChangesAsync(ct);
+            await using var tx = await db.Database.BeginTransactionAsync(ct);
+            try
+            {
+                db.Rsvps.Remove(existing);
+                await db.SaveChangesAsync(ct);
+                ev.AttendeeCount = await db.Rsvps.CountAsync(r => r.EventId == id && r.Status == "attending", ct);
+                await db.SaveChangesAsync(ct);
+                await tx.CommitAsync(ct);
+            }
+            catch
+            {
+                await tx.RollbackAsync(ct);
+                throw;
+            }
         }
 
         return Results.Json(ApiResponse<object>.Ok(new { }, "RSVP removed."));
     }
 
-    private static async Task<IResult> AttendeesAsync(Guid id, AppDbContext db, CancellationToken ct)
+    private static async Task<IResult> AttendeesAsync(Guid id, ClaimsPrincipal principal, AppDbContext db, CancellationToken ct)
     {
         var ev = await db.Events.AsNoTracking().FirstOrDefaultAsync(e => e.Id == id, ct);
         if (ev is null)
             return Results.Json(ApiResponse<object>.Fail("Event not found."), statusCode: 404);
+
+        var user = await db.Users.CurrentUserAsync(principal, ct);
+        if (user is null)
+            return Results.Json(ApiResponse<object>.Fail("Unauthorized."), statusCode: 401);
+
+        if (!ev.IsPublic && ev.OrganizerId != user.Id)
+            return Results.Json(ApiResponse<object>.Fail("Forbidden."), statusCode: 403);
 
         var rsvps = await db.Rsvps
             .AsNoTracking()
