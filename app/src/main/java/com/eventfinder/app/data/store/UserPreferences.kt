@@ -143,7 +143,20 @@ class UserPreferences(private val context: Context) : SessionProvider {
         context.eventFinderDataStore.edit {
             it[userBoolKey("reminders_enabled", userId)] = enabled
         }
+        AppLogger.i("UserPreferences", "Reminders preference saved: $enabled")
     }
+
+    /** Saves the last synced event startDate checkpoint for cursor-based pagination. */
+    suspend fun setSyncCheckpoint(userId: String, startDate: Long) {
+        context.eventFinderDataStore.edit { prefs ->
+            prefs[userStringKey("sync_checkpoint", userId)] = startDate.toString()
+        }
+        AppLogger.i("UserPreferences", "Sync checkpoint saved for user $userId: $startDate")
+    }
+
+    /** Returns the last synced event startDate checkpoint, or null if none. */
+    suspend fun getSyncCheckpoint(userId: String): String? =
+        context.eventFinderDataStore.data[userStringKey("sync_checkpoint", userId)]
 
     val newEventAlertsEnabled: Flow<Boolean> = sessionUserId.flatMapLatest { userId ->
         if (userId.isNullOrBlank()) {

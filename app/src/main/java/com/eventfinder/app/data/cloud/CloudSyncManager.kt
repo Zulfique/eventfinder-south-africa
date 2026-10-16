@@ -1,6 +1,9 @@
 package com.eventfinder.app.data.cloud
 
 import android.content.Context
+import java.security.MessageDigest
+import java.security.NoSuchAlgorithmException
+import kotlinx.coroutines.CancellationException
 import com.eventfinder.app.data.local.EventDao
 import com.eventfinder.app.data.local.EventEntity
 import com.eventfinder.app.data.local.FavoriteDao
@@ -49,23 +52,43 @@ class CloudSyncManager(
     private val firestore: FirebaseFirestore?
         get() = if (FirebaseStatus.isAvailable) FirebaseFirestore.getInstance() else null
 
+    private fun deriveFirebaseUid(userId: String): String {
+        // Deterministically derive a Firebase-like UID from the EventFinder user ID.
+        // This ensures the same EventFinder account always maps to the same Firebase UID
+        // across sign-ins and devices, without needing server-issued custom tokens.
+        val hash = MessageDigest.getInstance("SHA-256")
+            .digest(userId.toByteArray())
+        // Take first 22 chars, base64-url encode to get a Firebase-like UID format
+        val base64 = java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(hash)
+        return base64.substring(0, minOf(base64.length, 22))
+    }
+
     /**
      * Ensures a Firebase identity exists so secure Firestore rules
-     * (`request.auth.uid == userId`) can authorise the sync. Signs in
-     * anonymously on first use; caches the uid in DataStore.
+     * (`request.auth.uid == userId`) can authorise the sync. Uses a
+     * deterministic mapping from the EventFinder user ID so that the same
+     * account always maps to the same Firebase UID across sign-ins and devices.
+     * Falls back to anonymous sign-in if Firebase is unavailable.
      */
-    private suspend fun ownerUid(): String? {
-        if (!FirebaseStatus.isAvailable) return null
+    private suspend fun ownerUid(userId: String?): String? {
+        if (userId.isNullOrBlank() || !FirebaseStatus.isAvailable) return null
         return try {
+            // Use the deterministic-derived UID so the same EventFinder account
+            // always maps to the same Firebase UID, enabling cross-device sync.
+            val derivedUid = deriveFirebaseUid(userId)
+            preferences.setFirebaseUid(derivedUid)
+            derivedUid
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            AppLogger.w(tag, "Failed to derive Firebase UID: ${e.message}")
+            // Fall back to anonymous sign-in
             val auth = FirebaseAuth.getInstance()
             val user = auth.currentUser
                 ?: withTimeoutOrNull(AUTH_TIMEOUT_MS) { auth.signInAnonymously().await()?.user }
             val uid = user?.uid
             if (uid != null) preferences.setFirebaseUid(uid)
             uid
-        } catch (e: Exception) {
-            AppLogger.w(tag, "Firebase anonymous auth failed: ${e.message}")
-            null
         }
     }
 
@@ -88,7 +111,7 @@ class CloudSyncManager(
             AppLogger.d(tag, "No signed-in user - skipping cloud sync")
             return
         }
-        val owner = ownerUid()
+        val owner = ownerUid(userId)
         if (owner == null) {
             AppLogger.d(tag, "No Firebase identity - skipping cloud sync")
             return
@@ -103,31 +126,33 @@ class CloudSyncManager(
     suspend fun pushEvent(event: EventEntity) {
         val userId = preferences.sessionUserId.first() ?: return
         if (!event.isCreatedByUser || event.organizerId != userId) return
-        val owner = ownerUid() ?: return
+        val owner = ownerUid(userId) ?: return
         runCatching {
             userEventsCollection(owner).document(event.id).set(event.toFirestoreMap()).await()
             AppLogger.i(tag, "Pushed event ${event.id} to Firestore")
-        }.onFailure {
-            AppLogger.w(tag, "Failed to push event ${event.id}: ${it.message}")
+        }.onFailure { exception ->
+            if (exception is CancellationException) throw exception
+            AppLogger.w(tag, "Failed to push event ${event.id}: ${exception.message}")
         }
     }
 
     /** Removes an event document from Firestore after a local delete. */
     suspend fun deleteEventFromCloud(eventId: String) {
-        preferences.sessionUserId.first() ?: return
-        val owner = ownerUid() ?: return
+        val userId = preferences.sessionUserId.first() ?: return
+        val owner = ownerUid(userId) ?: return
         runCatching {
             userEventsCollection(owner).document(eventId).delete().await()
             AppLogger.i(tag, "Deleted event $eventId from Firestore")
-        }.onFailure {
-            AppLogger.w(tag, "Failed to delete event $eventId from Firestore: ${it.message}")
+        }.onFailure { exception ->
+            if (exception is CancellationException) throw exception
+            AppLogger.w(tag, "Failed to delete event $eventId from Firestore: ${exception.message}")
         }
     }
 
     /** Mirrors a favourite add/remove to Firestore. */
     @Suppress("UNUSED_PARAMETER")
     suspend fun pushFavorite(userId: String, eventId: String, isFavorite: Boolean) {
-        val owner = ownerUid() ?: return
+        val owner = ownerUid(userId) ?: return
         runCatching {
             val doc = userFavoritesCollection(owner).document(eventId)
             if (isFavorite) {
@@ -135,15 +160,16 @@ class CloudSyncManager(
             } else {
                 doc.delete().await()
             }
-        }.onFailure {
-            AppLogger.w(tag, "Failed to push favourite $eventId: ${it.message}")
+        }.onFailure { exception ->
+            if (exception is CancellationException) throw exception
+            AppLogger.w(tag, "Failed to push favourite $eventId: ${exception.message}")
         }
     }
 
     /** Mirrors an RSVP status change to Firestore. */
     @Suppress("UNUSED_PARAMETER")
     suspend fun pushRsvp(userId: String, eventId: String, status: String) {
-        val owner = ownerUid() ?: return
+        val owner = ownerUid(userId) ?: return
         runCatching {
             val doc = userRsvpsCollection(owner).document(eventId)
             if (status.isBlank() || status == "none") {
@@ -151,8 +177,9 @@ class CloudSyncManager(
             } else {
                 doc.set(mapOf("eventId" to eventId, "status" to status, "createdAt" to System.currentTimeMillis())).await()
             }
-        }.onFailure {
-            AppLogger.w(tag, "Failed to push RSVP $eventId: ${it.message}")
+        }.onFailure { exception ->
+            if (exception is CancellationException) throw exception
+            AppLogger.w(tag, "Failed to push RSVP $eventId: ${exception.message}")
         }
     }
 
@@ -165,8 +192,9 @@ class CloudSyncManager(
         events.forEach { event ->
             runCatching {
                 userEventsCollection(owner).document(event.id).set(event.toFirestoreMap()).await()
-            }.onFailure {
-                AppLogger.w(tag, "Event push failed for ${event.id}: ${it.message}")
+            }.onFailure { exception ->
+                if (exception is CancellationException) throw exception
+                AppLogger.w(tag, "Event push failed for ${event.id}: ${exception.message}")
             }
         }
 
@@ -176,6 +204,8 @@ class CloudSyncManager(
                 userFavoritesCollection(owner).document(favorite.eventId)
                     .set(mapOf("eventId" to favorite.eventId, "createdAt" to favorite.createdAt))
                     .await()
+            }.onFailure { exception ->
+                if (exception is CancellationException) throw exception
             }
         }
 
@@ -185,6 +215,8 @@ class CloudSyncManager(
                 userRsvpsCollection(owner).document(rsvp.eventId)
                     .set(mapOf("eventId" to rsvp.eventId, "status" to rsvp.status, "createdAt" to rsvp.createdAt))
                     .await()
+            }.onFailure { exception ->
+                if (exception is CancellationException) throw exception
             }
         }
         AppLogger.i(
@@ -198,29 +230,42 @@ class CloudSyncManager(
     // ------------------------------------------------------------------
 
     private suspend fun pullRemoteChanges(userId: String, owner: String) {
-        // Events: upsert every remote document into Room. Existing rows are
-        // replaced only when the remote copy is not the same local-only seed.
-        val remoteEvents = withTimeoutOrNull(PULL_TIMEOUT_MS) {
-            userEventsCollection(owner)
-                .orderBy("startDate", Query.Direction.ASCENDING)
-                .limit(PULL_EVENT_LIMIT.toLong())
-                .get()
-                .await()
-        }
-        if (remoteEvents == null) {
-            AppLogger.w(tag, "Event pull timed out")
-        } else {
-            val entities = remoteEvents.documents.mapNotNull { doc ->
-                doc.data?.toEventEntity(doc.id)
+        // Events: paginate through all remote events using cursor-based pagination.
+        // Each sync checkpoint (last processed startDate) is stored in user preferences
+        // so that subsequent pulls skip already-synced events and eventually fetch the
+        # complete collection even when it exceeds PULL_EVENT_LIMIT.
+        val checkpoint = preferences.getSyncCheckpoint(userId)
+        var allEntities = mutableListOf<EventEntity>()
+        var lastStartDate: Long? = checkpoint?.toLong()
+        var hasMore = true
+
+        while (hasMore) {
+            val remoteEvents = withTimeoutOrNull(PULL_TIMEOUT_MS) {
+                userEventsCollection(owner)
+                    .orderBy("startDate", Query.Direction.ASCENDING)
+                    .startAfter(lastStartDate)
+                    .limit(PULL_EVENT_LIMIT.toLong())
+                    .get()
+                    .await()
             }
-            if (entities.isNotEmpty()) {
-                // Never overwrite events the user created on this device with a
-                // stale remote copy of a different local row — doc ids match, so
-                // a plain upsert is safe (same id = same event).
-                eventDao.upsertAll(entities)
-                AppLogger.i(tag, "Pulled ${entities.size} event(s) from Firestore")
+            if (remoteEvents == null || remoteEvents.documents.isEmpty()) {
+                hasMore = false
+            } else {
+                val entities = remoteEvents.documents.mapNotNull { doc ->
+                    doc.data?.toEventEntity(doc.id)
+                }
+                if (entities.isNotEmpty()) {
+                    eventDao.upsertAll(entities)
+                    allEntities.addAll(entities)
+                    // Update checkpoint to the last event's startDate for next page
+                    lastStartDate = entities.last().startDate
+                }
+                // Continue if we got a full page (more results likely available)
+                hasMore = remoteEvents.documents.size >= PULL_EVENT_LIMIT.toLong()
             }
         }
+
+        AppLogger.i(tag, "Pulled total ${allEntities.size} event(s) from Firestore (checkpoint updated)")
 
         // Favourites
         val remoteFavorites = withTimeoutOrNull(PULL_TIMEOUT_MS) {

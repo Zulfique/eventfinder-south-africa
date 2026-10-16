@@ -91,6 +91,11 @@ builder.Services.AddAuthorization();
 builder.Services.Configure<ForwardedHeadersOptions>(o =>
 {
     o.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    // Configure trusted proxy addresses for the actual hosting environment.
+    // When deployed on Render (or another proxy), add the proxy's IP addresses/nets here
+    // so that RateLimiter correctly partitions requests by the real client IP.
+    // Example for Render: o.ForwardedAddresses.Add(IPAddress.Parse("10.0.0.1"));
+    // Never trust arbitrary forwarded IP headers from untrusted clients.
 });
 
 builder.Services.AddRateLimiter(options =>

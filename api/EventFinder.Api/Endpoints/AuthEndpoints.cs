@@ -62,12 +62,28 @@ public static class AuthEndpoints
         {
             await db.SaveChangesAsync(ct);
         }
-        catch (DbUpdateException)
+        catch (DbUpdateException dbEx)
         {
+            // Check if the underlying database error is specifically the unique-email
+            // constraint violation. In SQLite, this typically produces a message containing
+            // "UNIQUE constraint failed" or similar. Other DbUpdateExceptions (e.g. foreign
+            // key violations, database lock failures) should be handled as server errors.
+            var isUniqueEmailConstraint = dbEx.Message?.Contains("UNIQUE constraint failed") == true ||
+                                        dbEx.InnerException?.Message?.Contains("UNIQUE constraint failed") == true;
+
+            if (isUniqueEmailConstraint)
+            {
+                return Results.Json(
+                    ApiResponse<AuthResponse>.Fail("An account with this email already exists.",
+                        new Dictionary<string, string[]> { ["email"] = ["Email is already registered."] }),
+                    statusCode: 409);
+            }
+
+            // Return 500 for unrelated database failures rather than misreporting as duplicate email
             return Results.Json(
-                ApiResponse<AuthResponse>.Fail("An account with this email already exists.",
-                    new Dictionary<string, string[]> { ["email"] = ["Email is already registered."] }),
-                statusCode: 409);
+                ApiResponse<AuthResponse>.Fail("A database error occurred. Please try again later.",
+                    new Dictionary<string, string[]> { ["error"] = ["DatabaseError"] }),
+                statusCode: 500);
         }
 
         var (token, expires) = tokens.CreateToken(user);
@@ -418,11 +434,26 @@ public static class AuthEndpoints
         {
             await db.SaveChangesAsync(ct);
         }
-        catch (DbUpdateException)
+        catch (DbUpdateException dbEx)
         {
+            // Check if the underlying database error is specifically the unique-email
+            // constraint violation. Other DbUpdateExceptions (e.g. foreign key violations,
+            // database lock failures) should be handled as server errors, not misreported
+            // as duplicate email conflicts.
+            var isUniqueEmailConstraint = dbEx.Message?.Contains("UNIQUE constraint failed") == true ||
+                                        dbEx.InnerException?.Message?.Contains("UNIQUE constraint failed") == true;
+
+            if (isUniqueEmailConstraint)
+            {
+                return Results.Json(
+                    ApiResponse<object>.Fail("An account with this email already exists."),
+                    statusCode: 409);
+            }
+
+            // Return 500 for unrelated database failures
             return Results.Json(
-                ApiResponse<object>.Fail("An account with this email already exists."),
-                statusCode: 409);
+                ApiResponse<object>.Fail("A database error occurred. Please try again later."),
+                statusCode: 500);
         }
 
         return Results.Json(ApiResponse<object>.Ok(new { }, "Email verified and updated."));

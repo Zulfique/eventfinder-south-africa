@@ -42,17 +42,26 @@ class SyncCoordinator(
                         AppLogger.i(tag, "Connection restored - starting automatic sync")
                         // Debounce flapping radios.
                         delay(DEBOUNCE_MS)
-                        runCatching { cloudSyncManager.syncNow() }
-                            .onFailure { AppLogger.w(tag, "Cloud sync failed: ${it.message}") }
-                        runCatching { eventDiscoveryRepository.refresh() }
-                            .onFailure { AppLogger.w(tag, "Feed refresh failed: ${it.message}") }
+runCatching { cloudSyncManager.syncNow() }
+                    .onFailure { exception ->
+                        if (exception is CancellationException) throw exception
+                        AppLogger.w(tag, "Cloud sync failed: ${exception.message}")
+                    }
+runCatching { eventDiscoveryRepository.refresh() }
+                    .onFailure { exception ->
+                        if (exception is CancellationException) throw exception
+                        AppLogger.w(tag, "Feed refresh failed: ${exception.message}")
+                    }
                         AppLogger.i(tag, "Automatic sync finished")
                     } else if (online && previous == null) {
                         // First observation: already online at launch — the
                         // HomeViewModel already refreshes on init, so only do
                         // the cloud catch-up here.
-                        runCatching { cloudSyncManager.syncNow() }
-                            .onFailure { AppLogger.w(tag, "Initial cloud sync failed: ${it.message}") }
+runCatching { cloudSyncManager.syncNow() }
+                    .onFailure { exception ->
+                        if (exception is CancellationException) throw exception
+                        AppLogger.w(tag, "Initial cloud sync failed: ${exception.message}")
+                    }
                     }
                 }
         }
