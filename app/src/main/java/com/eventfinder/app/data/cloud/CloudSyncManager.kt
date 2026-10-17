@@ -247,98 +247,143 @@ class CloudSyncManager(
 
     private suspend fun pullRemoteChanges(userId: String, owner: String) {
         val checkpoint = preferences.getSyncCheckpoint(userId)
-        var allEntities = mutableListOf<EventEntity>()
+
+
         var lastStartDate: Long? = null
         var lastDocId: String? = null
-        var hasMore = true
-        var timeoutOccurred = false
 
-        if (checkpoint != null) {
-            val parts = checkpoint.split(":", limit = 2)
-            if (parts.size >= 1) {
-                lastStartDate = parts[0].toLongOrNull()
+
+        if (!checkpoint.isNullOrBlank()) {
+            val separator = checkpoint.indexOf(':')
+            if (separator > 0 && separator < checkpoint.lastIndex) {
+                lastStartDate = checkpoint.substring(0, separator).toLongOrNull()
+                lastDocId = checkpoint.substring(separator + 1)
             }
-            if (parts.size >= 2) {
-                lastDocId = parts[1]
+
+
+            // A corrupt checkpoint must not silently skip the event catalogue.
+            if (lastStartDate == null || lastDocId.isNullOrBlank()) {
+                AppLogger.w(tag, "Invalid event sync checkpoint for user $userId; restarting pagination")
+                preferences.setSyncCheckpoint(userId, "")
+                lastStartDate = null
+                lastDocId = null
             }
         }
 
+
+        var totalPulled = 0
+        var hasMore = true
+
+
         while (hasMore) {
-            val remoteEvents = withTimeoutOrNull(PULL_TIMEOUT_MS) {
-                userEventsCollection(owner)
-                    .orderBy("startDate", Query.Direction.ASCENDING)
-                    .startAfter(lastStartDate, lastDocId)
+            val query = userEventsCollection(owner)
+                .orderBy("startDate", com.google.firebase.firestore.Query.Direction.ASCENDING)
+                .orderBy(
+                    com.google.firebase.firestore.FieldPath.documentId(),
+                    com.google.firebase.firestore.Query.Direction.ASCENDING
+                )
+
+
+            val page = withTimeoutOrNull(PULL_TIMEOUT_MS) {
+                val pagedQuery = if (lastStartDate != null && lastDocId != null) {
+                    query.startAfter(lastStartDate, lastDocId)
+                } else {
+                    query
+                }
+
+
+                pagedQuery
                     .limit(PULL_EVENT_LIMIT.toLong())
                     .get()
                     .await()
             }
-            if (remoteEvents == null) {
-                timeoutOccurred = true
-                hasMore = false
-            } else if (remoteEvents.documents.isEmpty()) {
-                hasMore = false
-            } else {
-                timeoutOccurred = false
-                val rawDocs = remoteEvents.documents
-                var anyMapped = false
-                for (doc in rawDocs) {
-                    val mapped = doc.data?.toEventEntity(doc.id)
-                    if (mapped != null) {
-                        allEntities.add(mapped)
-                        anyMapped = true
-                        lastStartDate = doc.getLong("startDate") ?: lastStartDate
-                        lastDocId = doc.id
-                    } else {
-                        AppLogger.w(tag, "Malformed event document skipped: ${doc.id}")
-                    }
-                }
-                if (anyMapped) {
-                    eventDao.upsertAll(allEntities)
-                    lastDocId = rawDocs.last().id
-                    lastStartDate = rawDocs.last().getLong("startDate") ?: lastStartDate
-                    preferences.setSyncCheckpoint(userId, "$lastStartDate:$lastDocId")
-                }
-                hasMore = rawDocs.size >= PULL_EVENT_LIMIT.toLong()
+
+
+            if (page == null) {
+                AppLogger.w(tag, "Cloud event pull timed out; retrying on next sync")
+                return
             }
+
+
+            val documents = page.documents
+            if (documents.isEmpty()) {
+                hasMore = false
+                continue
+            }
+
+
+            val mappedEvents = mutableListOf<EventEntity>()
+
+
+            for (doc in documents) {
+                val mapped = doc.data?.toEventEntity(doc.id)
+                if (mapped != null) {
+                    mappedEvents.add(mapped)
+                } else {
+                    AppLogger.w(tag, "Malformed event document skipped: ${doc.id}")
+                }
+            }
+
+
+            // Save valid records before advancing the checkpoint.
+            if (mappedEvents.isNotEmpty()) {
+                eventDao.upsertAll(mappedEvents)
+                totalPulled += mappedEvents.size
+            }
+
+
+            // Advance using the actual last document in the ordered page,
+            // including when that document is malformed and intentionally skipped.
+            val lastDocument = documents.last()
+            val pageStartDate = lastDocument.getLong("startDate")
+
+
+            if (pageStartDate == null) {
+                // Without the ordering field we cannot create a safe cursor.
+                // Stop rather than risk skipping later records.
+                AppLogger.w(
+                    tag,
+                    "Last event document ${lastDocument.id} has no numeric startDate; stopping pagination"
+                )
+                return
+            }
+
+
+            lastStartDate = pageStartDate
+            lastDocId = lastDocument.id
+            preferences.setSyncCheckpoint(userId, "$lastStartDate:$lastDocId")
+
+
+            hasMore = documents.size >= PULL_EVENT_LIMIT
         }
 
-        if (timeoutOccurred) {
-            AppLogger.w(tag, "Cloud sync timeout - checkpoint not advanced, will retry on next sync")
-        } else {
-            AppLogger.i(tag, "Pulled total ${allEntities.size} event(s) from Firestore (checkpoint updated)")
-        }
 
-        // Favourites
+        AppLogger.i(tag, "Pulled $totalPulled event(s) from Firestore")
+
+
+        // Pull favourites. This remains an additive merge; see the deletion note below.
         val remoteFavorites = withTimeoutOrNull(PULL_TIMEOUT_MS) {
             userFavoritesCollection(owner).get().await()
         }
+
+
         remoteFavorites?.documents?.forEach { doc ->
             val eventId = doc.getString("eventId") ?: doc.id
             val createdAt = doc.getLong("createdAt") ?: System.currentTimeMillis()
-            if (!favoriteDao.exists(userId, eventId)) {
-                favoriteDao.insert(FavoriteEntity(userId = userId, eventId = eventId, createdAt = createdAt))
-            }
-        }
 
-        // RSVPs
-        val remoteRsvps = withTimeoutOrNull(PULL_TIMEOUT_MS) {
-            userRsvpsCollection(owner).get().await()
-        }
-        remoteRsvps?.documents?.forEach { doc ->
-            val eventId = doc.getString("eventId") ?: doc.id
-            val status = doc.getString("status") ?: return@forEach
-            if (rsvpDao.statusFor(userId, eventId) == null) {
-                rsvpDao.upsert(
-                    RsvpEntity(
+
+            if (!favoriteDao.exists(userId, eventId)) {
+                favoriteDao.insert(
+                    FavoriteEntity(
                         userId = userId,
                         eventId = eventId,
-                        status = status,
-                        createdAt = doc.getLong("createdAt") ?: System.currentTimeMillis()
+                        createdAt = createdAt
                     )
                 )
             }
         }
     }
+
 
     // ------------------------------------------------------------------
     // Collections
