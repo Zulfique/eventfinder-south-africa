@@ -3,6 +3,7 @@ package com.eventfinder.app.data.cloud
 import com.eventfinder.app.data.repository.EventDiscoveryRepository
 import com.eventfinder.app.utils.AppLogger
 import com.eventfinder.app.utils.NetworkMonitor
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch

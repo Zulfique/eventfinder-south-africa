@@ -156,7 +156,9 @@ class UserPreferences(private val context: Context) : SessionProvider {
 
     /** Returns the last synced event startDate checkpoint, or null if none. */
     suspend fun getSyncCheckpoint(userId: String): String? =
-        context.eventFinderDataStore.data[userStringKey("sync_checkpoint", userId)]
+        runCatching {
+            context.eventFinderDataStore.data.first()[userStringKey("sync_checkpoint", userId)] as? String
+        }.getOrNull()
 
     val newEventAlertsEnabled: Flow<Boolean> = sessionUserId.flatMapLatest { userId ->
         if (userId.isNullOrBlank()) {
