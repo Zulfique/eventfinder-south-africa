@@ -382,6 +382,33 @@ class CloudSyncManager(
                 )
             }
         }
+
+        // Pull RSVPs from Firestore so this device receives remote RSVP records.
+        val remoteRsvps = withTimeoutOrNull(PULL_TIMEOUT_MS) {
+            userRsvpsCollection(owner).get().await()
+        }
+
+        if (remoteRsvps == null) {
+            AppLogger.w(tag, "Remote RSVP pull timed out; will retry on next sync")
+        } else {
+            remoteRsvps.documents.forEach { doc ->
+                val eventId = doc.getString("eventId") ?: doc.id
+                val status = doc.getString("status") ?: return@forEach
+                val createdAt = doc.getLong("createdAt")
+                    ?: System.currentTimeMillis()
+
+                if (rsvpDao.statusFor(userId, eventId) == null) {
+                    rsvpDao.upsert(
+                        RsvpEntity(
+                            userId = userId,
+                            eventId = eventId,
+                            status = status,
+                            createdAt = createdAt
+                        )
+                    )
+                }
+            }
+        }
     }
 
 
