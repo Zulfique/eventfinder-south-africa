@@ -1,9 +1,9 @@
 # Render blueprint — deploys the EventFinder ASP.NET Core 8 API on the
 # free hobby tier (no credit card required). Services sleep after 15 minutes
 # of inactivity and wake on the next request.
-# NOTE: Persistent storage added below to prevent data loss at redeploy.
-# If the free tier does not support persistent disks, upgrade to a paid plan
-# or switch to a managed database (e.g. SQLite hosted externally, PostgreSQL).
+# Persistent disks are not available on the free plan. For production data
+# persistence, upgrade to a paid plan or use a managed database (e.g. PostgreSQL).
+# Before redeploy, back up any existing production data from /app/data.
 services:
   - type: web
     name: eventfinder-api
@@ -12,10 +12,6 @@ services:
     dockerfilePath: ./api/EventFinder.Api/Dockerfile
     dockerContext: ./api/EventFinder.Api
     healthCheckPath: /health
-    disk:
-      name: eventfinder-data
-      mountPath: /app/data
-      sizeGB: 1
     envVars:
       - key: ASPNETCORE_ENVIRONMENT
         value: Production

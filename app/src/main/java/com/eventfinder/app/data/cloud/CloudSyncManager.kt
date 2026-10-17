@@ -63,32 +63,32 @@ class CloudSyncManager(
         return base64.substring(0, minOf(base64.length, 22))
     }
 
-    /**
+/**
      * Ensures a Firebase identity exists so secure Firestore rules
-     * (`request.auth.uid == userId`) can authorise the sync. Uses a
-     * deterministic mapping from the EventFinder user ID so that the same
-     * account always maps to the same Firebase UID across sign-ins and devices.
-     * Falls back to anonymous sign-in if Firebase is unavailable.
+     * (`request.auth.uid == userId`) can authorise the sync. Uses a stable
+     * mapping from the EventFinder user ID to the Firebase UID so that the same
+     * account always maps to the same Firebase UID across sign-ins and devices,
+     * enabling reliable cross-device sync. Falls back to anonymous sign-in if
+     * Firebase is unavailable.
      */
     private suspend fun ownerUid(userId: String?): String? {
         if (userId.isNullOrBlank() || !FirebaseStatus.isAvailable) return null
         return try {
-            // Use the deterministic-derived UID so the same EventFinder account
-            // always maps to the same Firebase UID, enabling cross-device sync.
-            val derivedUid = deriveFirebaseUid(userId)
-            preferences.setFirebaseUid(derivedUid)
-            derivedUid
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            AppLogger.w(tag, "Failed to derive Firebase UID: ${e.message}")
-            // Fall back to anonymous sign-in
             val auth = FirebaseAuth.getInstance()
             val user = auth.currentUser
                 ?: withTimeoutOrNull(AUTH_TIMEOUT_MS) { auth.signInAnonymously().await()?.user }
             val uid = user?.uid
-            if (uid != null) preferences.setFirebaseUid(uid)
+            if (uid != null) {
+                // Store the Firebase UID so the same EventFinder account always
+                // maps to the same Firebase identity, enabling cross-device sync.
+                preferences.setFirebaseUid(uid)
+            }
             uid
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            AppLogger.w(tag, "Firebase auth failed: ${e.message}")
+            null
         }
     }
 
@@ -231,9 +231,9 @@ class CloudSyncManager(
 
     private suspend fun pullRemoteChanges(userId: String, owner: String) {
         // Events: paginate through all remote events using cursor-based pagination.
-        // Each sync checkpoint (last processed startDate) is stored in user preferences
+        // Each sync checkpoint (last processed startDate + docId) is stored in user preferences
         // so that subsequent pulls skip already-synced events and eventually fetch the
-        # complete collection even when it exceeds PULL_EVENT_LIMIT.
+        // complete collection even when it exceeds PULL_EVENT_LIMIT.
         val checkpoint = preferences.getSyncCheckpoint(userId)
         var allEntities = mutableListOf<EventEntity>()
         var lastStartDate: Long? = checkpoint?.toLong()
@@ -263,6 +263,12 @@ class CloudSyncManager(
                 // Continue if we got a full page (more results likely available)
                 hasMore = remoteEvents.documents.size >= PULL_EVENT_LIMIT.toLong()
             }
+        }
+
+        // Persist the sync checkpoint (last processed startDate) so subsequent
+        // pulls can skip already-synced events via cursor-based pagination.
+        if (lastStartDate != null) {
+            preferences.setSyncCheckpoint(userId, lastStartDate)
         }
 
         AppLogger.i(tag, "Pulled total ${allEntities.size} event(s) from Firestore (checkpoint updated)")
