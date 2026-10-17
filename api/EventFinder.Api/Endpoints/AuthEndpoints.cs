@@ -26,8 +26,25 @@ public static class AuthEndpoints
         group.MapPost("/verify-email-change", VerifyEmailChangeAsync);
         group.MapDelete("/me", DeleteAccountAsync).RequireAuthorization();
         group.MapGet("/me", MeAsync).RequireAuthorization();
+        group.MapGet("/firebase-token", FirebaseTokenAsync).RequireAuthorization();
 
         return group;
+    }
+
+    private static async Task<IResult> FirebaseTokenAsync(
+        ClaimsPrincipal principal, AppDbContext db, FirebaseTokenService firebaseTokens, CancellationToken ct)
+    {
+        var user = await db.Users.CurrentUserAsync(principal, ct);
+        if (user is null)
+            return Results.Json(ApiResponse<object>.Fail("Unauthorized."), statusCode: 401);
+
+        if (!firebaseTokens.IsAvailable)
+            return Results.Json(
+                ApiResponse<object>.Fail("Firebase custom tokens are not available on this deployment."),
+                statusCode: 503);
+
+        var customToken = firebaseTokens.CreateCustomToken(user.Id);
+        return Results.Json(ApiResponse<object>.Ok(new { firebaseToken = customToken }));
     }
 
     private static async Task<IResult> RegisterAsync(

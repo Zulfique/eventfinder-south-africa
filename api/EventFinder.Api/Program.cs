@@ -4,6 +4,8 @@ using System.Threading.RateLimiting;
 using EventFinder.Api.Data;
 using EventFinder.Api.Endpoints;
 using EventFinder.Api.Services;
+using FirebaseAdmin;
+using Google.Apis.Auth.OAuth2;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.RateLimiting;
@@ -114,8 +116,34 @@ builder.Services.AddRateLimiter(options =>
 });
 
 builder.Services.AddSingleton<TokenService>();
+builder.Services.AddSingleton<FirebaseTokenService>();
 builder.Services.AddHttpClient<GoogleTokenVerifier>();
 builder.Services.AddHttpClient<IEmailService, EmailService>();
+
+// Initialize Firebase Admin SDK for custom token generation.
+// The service account JSON can be provided via Firebase:ServiceAccountJson configuration,
+// otherwise default credentials are used (e.g., on Google Cloud / Render managed environments).
+// In test environments without credentials, Firebase auth features will be unavailable
+// but the rest of the API remains functional.
+try
+{
+    var serviceAccountJson = builder.Configuration["Firebase:ServiceAccountJson"];
+    if (!string.IsNullOrWhiteSpace(serviceAccountJson))
+    {
+        FirebaseApp.Create(new AppOptions
+        {
+            Credential = GoogleCredential.FromJson(serviceAccountJson)
+        });
+    }
+    else
+    {
+        FirebaseApp.Create();
+    }
+}
+catch
+{
+    // Firebase unavailable — custom token endpoint will return 503
+}
 
 var app = builder.Build();
 
