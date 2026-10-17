@@ -43,6 +43,10 @@ data class ApiUserDto(
     @SerializedName("hasGoogleAccount") val hasGoogleAccount: Boolean = false
 )
 
+data class FirebaseTokenResponse(
+    @SerializedName("firebaseToken") val firebaseToken: String
+)
+
 data class ApiAuthResponse(
     val user: ApiUserDto,
     val token: String,
@@ -143,6 +147,11 @@ interface EventFinderApiService {
     suspend fun me(
         @Header("Authorization") bearer: String
     ): retrofit2.Response<ApiEnvelope<ApiUserDto>>
+
+    @GET("api/auth/firebase-token")
+    suspend fun getFirebaseToken(
+        @Header("Authorization") bearer: String
+    ): retrofit2.Response<ApiEnvelope<FirebaseTokenResponse>>
 
     @POST("api/auth/request-email-change")
     suspend fun requestEmailChange(
