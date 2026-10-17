@@ -8,6 +8,7 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.eventfinder.app.utils.AppLogger
 import com.google.gson.Gson
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
@@ -146,19 +147,24 @@ class UserPreferences(private val context: Context) : SessionProvider {
         AppLogger.i("UserPreferences", "Reminders preference saved: $enabled")
     }
 
-    /** Saves the last synced event startDate checkpoint for cursor-based pagination. */
-    suspend fun setSyncCheckpoint(userId: String, startDate: Long) {
+    /** Saves the last synced event checkpoint for cursor-based pagination. */
+    suspend fun setSyncCheckpoint(userId: String, checkpoint: String) {
         context.eventFinderDataStore.edit { prefs ->
-            prefs[userStringKey("sync_checkpoint", userId)] = startDate.toString()
+            prefs[userStringKey("sync_checkpoint", userId)] = checkpoint
         }
-        AppLogger.i("UserPreferences", "Sync checkpoint saved for user $userId: $startDate")
+        AppLogger.i("UserPreferences", "Sync checkpoint saved for user $userId: $checkpoint")
     }
 
     /** Returns the last synced event startDate checkpoint, or null if none. */
-    suspend fun getSyncCheckpoint(userId: String): String? =
-        runCatching {
-            context.eventFinderDataStore.data.first()[userStringKey("sync_checkpoint", userId)] as? String
-        }.getOrNull()
+    suspend fun getSyncCheckpoint(userId: String): String? {
+        try {
+            return context.eventFinderDataStore.data.first()[userStringKey("sync_checkpoint", userId)] as? String
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            return null
+        }
+    }
 
     val newEventAlertsEnabled: Flow<Boolean> = sessionUserId.flatMapLatest { userId ->
         if (userId.isNullOrBlank()) {

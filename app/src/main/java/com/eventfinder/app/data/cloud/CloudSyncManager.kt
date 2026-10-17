@@ -67,23 +67,39 @@ class CloudSyncManager(
      * Ensures a Firebase identity exists so secure Firestore rules
      * (`request.auth.uid == userId`) can authorise the sync. Uses a stable
      * mapping from the EventFinder user ID to the Firebase UID so that the same
-     * account always maps to the same Firebase UID across sign-ins and devices,
-     * enabling reliable cross-device sync. Falls back to anonymous sign-in if
+     * account always maps to the same Firebase UID across sign-ins on the same
+     * device, enabling per-device consistency. Falls back to anonymous sign-in if
      * Firebase is unavailable.
+     * <p>
+     * <b>Important:</b> True cross-device sync requires server-issued Firebase
+     * custom tokens that bind the Firebase UID to the EventFinder account ID.
+     * Without custom tokens, the same account on different devices may get
+     * different Firebase namespaces. This function does not provide reliable
+     * cross-device sync on its own.
      */
     private suspend fun ownerUid(userId: String?): String? {
         if (userId.isNullOrBlank() || !FirebaseStatus.isAvailable) return null
         return try {
-            val auth = FirebaseAuth.getInstance()
-            val user = auth.currentUser
-                ?: withTimeoutOrNull(AUTH_TIMEOUT_MS) { auth.signInAnonymously().await()?.user }
-            val uid = user?.uid
-            if (uid != null) {
-                // Store the Firebase UID so the same EventFinder account always
-                // maps to the same Firebase identity, enabling cross-device sync.
-                preferences.setFirebaseUid(uid)
+            // Check if we already have a stored Firebase UID for this EventFinder
+            // user ID from a previous sign-in on this device. This ensures the same
+            // account always uses the same Firebase identity within a device/installation.
+            val storedUid = preferences.firebaseUid.first()
+            if (storedUid != null) {
+                // We have a stored UID — use it for per-device consistency.
+                storedUid
+            } else {
+                // No stored mapping — sign in anonymously and cache the UID
+                val auth = FirebaseAuth.getInstance()
+                val user = auth.currentUser
+                    ?: withTimeoutOrNull(AUTH_TIMEOUT_MS) { auth.signInAnonymously().await()?.user }
+                val uid = user?.uid
+                if (uid != null) {
+                    // Cache the Firebase UID so the same EventFinder account
+                    // always maps to the same Firebase identity on this device.
+                    preferences.setFirebaseUid(uid)
+                }
+                uid
             }
-            uid
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -230,48 +246,67 @@ class CloudSyncManager(
     // ------------------------------------------------------------------
 
     private suspend fun pullRemoteChanges(userId: String, owner: String) {
-        // Events: paginate through all remote events using cursor-based pagination.
-        // Each sync checkpoint (last processed startDate + docId) is stored in user preferences
-        // so that subsequent pulls skip already-synced events and eventually fetch the
-        // complete collection even when it exceeds PULL_EVENT_LIMIT.
         val checkpoint = preferences.getSyncCheckpoint(userId)
         var allEntities = mutableListOf<EventEntity>()
-        var lastStartDate: Long? = checkpoint?.toLong()
+        var lastStartDate: Long? = null
+        var lastDocId: String? = null
         var hasMore = true
+        var timeoutOccurred = false
+
+        if (checkpoint != null) {
+            val parts = checkpoint.split(":", limit = 2)
+            if (parts.size >= 1) {
+                lastStartDate = parts[0].toLongOrNull()
+            }
+            if (parts.size >= 2) {
+                lastDocId = parts[1]
+            }
+        }
 
         while (hasMore) {
             val remoteEvents = withTimeoutOrNull(PULL_TIMEOUT_MS) {
                 userEventsCollection(owner)
                     .orderBy("startDate", Query.Direction.ASCENDING)
-                    .startAfter(lastStartDate)
+                    .startAfter(lastStartDate, lastDocId)
                     .limit(PULL_EVENT_LIMIT.toLong())
                     .get()
                     .await()
             }
-            if (remoteEvents == null || remoteEvents.documents.isEmpty()) {
+            if (remoteEvents == null) {
+                timeoutOccurred = true
+                hasMore = false
+            } else if (remoteEvents.documents.isEmpty()) {
                 hasMore = false
             } else {
-                val entities = remoteEvents.documents.mapNotNull { doc ->
-                    doc.data?.toEventEntity(doc.id)
+                timeoutOccurred = false
+                val rawDocs = remoteEvents.documents
+                var anyMapped = false
+                for (doc in rawDocs) {
+                    val mapped = doc.data?.toEventEntity(doc.id)
+                    if (mapped != null) {
+                        allEntities.add(mapped)
+                        anyMapped = true
+                        lastStartDate = doc.getLong("startDate") ?: lastStartDate
+                        lastDocId = doc.id
+                    } else {
+                        AppLogger.w(tag, "Malformed event document skipped: ${doc.id}")
+                    }
                 }
-                if (entities.isNotEmpty()) {
-                    eventDao.upsertAll(entities)
-                    allEntities.addAll(entities)
-                    // Update checkpoint to the last event's startDate for next page
-                    lastStartDate = entities.last().startDate
+                if (anyMapped) {
+                    eventDao.upsertAll(allEntities)
+                    lastDocId = rawDocs.last().id
+                    lastStartDate = rawDocs.last().getLong("startDate") ?: lastStartDate
+                    preferences.setSyncCheckpoint(userId, "$lastStartDate:$lastDocId")
                 }
-                // Continue if we got a full page (more results likely available)
-                hasMore = remoteEvents.documents.size >= PULL_EVENT_LIMIT.toLong()
+                hasMore = rawDocs.size >= PULL_EVENT_LIMIT.toLong()
             }
         }
 
-        // Persist the sync checkpoint (last processed startDate) so subsequent
-        // pulls can skip already-synced events via cursor-based pagination.
-        if (lastStartDate != null) {
-            preferences.setSyncCheckpoint(userId, lastStartDate)
+        if (timeoutOccurred) {
+            AppLogger.w(tag, "Cloud sync timeout - checkpoint not advanced, will retry on next sync")
+        } else {
+            AppLogger.i(tag, "Pulled total ${allEntities.size} event(s) from Firestore (checkpoint updated)")
         }
-
-        AppLogger.i(tag, "Pulled total ${allEntities.size} event(s) from Firestore (checkpoint updated)")
 
         // Favourites
         val remoteFavorites = withTimeoutOrNull(PULL_TIMEOUT_MS) {
