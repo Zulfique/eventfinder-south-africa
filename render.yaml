@@ -28,7 +28,8 @@ services:
       # Optional: enables real password-reset emails via Brevo (free 300/day).
       - key: Brevo__ApiKey
         value: ""
-      # Enables Google sign-in (OAuth web client ID — public value, verified
-      # as the ID-token audience; must match GOOGLE_SERVER_CLIENT_ID in the app).
-      - key: Google__ServerClientId
-        value: "690167106186-o9bolqrekmkv8bpbfrqd532iqe6r5m3c.apps.googleusercontent.com"
+      # Firebase Admin SDK service account credentials for custom token generation.
+      # Provide the full service account JSON as a secret string. Without this,
+      # the /api/auth/firebase-token endpoint will return HTTP 503.
+      - key: Firebase__ServiceAccountJson
+        value: ""
