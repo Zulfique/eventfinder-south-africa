@@ -1,4 +1,4 @@
-package com.eventfinder.app.data.cloud
+﻿package com.eventfinder.app.data.cloud
 
 import android.content.Context
 import java.security.MessageDigest
@@ -10,6 +10,7 @@ import com.eventfinder.app.data.local.FavoriteDao
 import com.eventfinder.app.data.local.FavoriteEntity
 import com.eventfinder.app.data.local.RsvpDao
 import com.eventfinder.app.data.local.RsvpEntity
+import com.eventfinder.app.data.remote.EventFinderApiClient
 import com.eventfinder.app.data.store.UserPreferences
 import com.eventfinder.app.utils.AppLogger
 import com.google.firebase.auth.FirebaseAuth
@@ -24,17 +25,17 @@ import kotlinx.coroutines.withTimeoutOrNull
  * truth for the UI) and Cloud Firestore, Google's NoSQL document database.
  *
  * POE requirements covered here:
- *  - "Use a NoSQL database to store data"  → [pushLocalChanges]
- *  - "Use a NoSQL database to read data"   → [pullRemoteChanges]
- *  - Offline mode + automatic synchronisation when connectivity returns →
- *    [SyncCoordinator] invokes [syncNow] on every offline→online transition.
+ *  - "Use a NoSQL database to store data"  â†’ [pushLocalChanges]
+ *  - "Use a NoSQL database to read data"   â†’ [pullRemoteChanges]
+ *  - Offline mode + automatic synchronisation when connectivity returns â†’
+ *    [SyncCoordinator] invokes [syncNow] on every offlineâ†’online transition.
  *
  * Firestore layout (all reads/writes are scoped to the signed-in user;
  * the path key is the Firebase anonymous-auth uid so secure rules
  * `request.auth.uid == userId` authorise every operation):
- *   users/{uid}/events/{eventId}      — user-created events
- *   users/{uid}/favorites/{eventId}   — favourite links
- *   users/{uid}/rsvps/{eventId}       — RSVP links
+ *   users/{uid}/events/{eventId}      â€” user-created events
+ *   users/{uid}/favorites/{eventId}   â€” favourite links
+ *   users/{uid}/rsvps/{eventId}       â€” RSVP links
  *
  * Every public method no-ops when Firebase is uninitialised (no real
  * google-services.json) so the app remains fully functional offline-only.
@@ -52,59 +53,43 @@ class CloudSyncManager(
     private val firestore: FirebaseFirestore?
         get() = if (FirebaseStatus.isAvailable) FirebaseFirestore.getInstance() else null
 
-    private fun deriveFirebaseUid(userId: String): String {
-        // Deterministically derive a Firebase-like UID from the EventFinder user ID.
-        // This ensures the same EventFinder account always maps to the same Firebase UID
-        // across sign-ins and devices, without needing server-issued custom tokens.
-        val hash = MessageDigest.getInstance("SHA-256")
-            .digest(userId.toByteArray())
-        // Take first 22 chars, base64-url encode to get a Firebase-like UID format
-        val base64 = java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(hash)
-        return base64.substring(0, minOf(base64.length, 22))
-    }
-
-/**
-     * Ensures a Firebase identity exists so secure Firestore rules
-     * (`request.auth.uid == userId`) can authorise the sync. Uses a stable
-     * mapping from the EventFinder user ID to the Firebase UID so that the same
-     * account always maps to the same Firebase UID across sign-ins on the same
-     * device, enabling per-device consistency. Falls back to anonymous sign-in if
-     * Firebase is unavailable.
-     * <p>
-     * <b>Important:</b> True cross-device sync requires server-issued Firebase
-     * custom tokens that bind the Firebase UID to the EventFinder account ID.
-     * Without custom tokens, the same account on different devices may get
-     * different Firebase namespaces. This function does not provide reliable
-     * cross-device sync on its own.
-     */
     private suspend fun ownerUid(userId: String?): String? {
         if (userId.isNullOrBlank() || !FirebaseStatus.isAvailable) return null
         return try {
-            // Check if we already have a stored Firebase UID for this EventFinder
-            // user ID from a previous sign-in on this device. This ensures the same
-            // account always uses the same Firebase identity within a device/installation.
+            val bearer = preferences.authToken.first()
+            if (!bearer.isNullOrBlank()) {
+                val tokenResult = EventFinderApiClient.default.firebaseToken("Bearer $bearer")
+                val firebaseToken = tokenResult.getOrNull()?.firebaseToken
+                if (!firebaseToken.isNullOrBlank()) {
+                    val user = withTimeoutOrNull(AUTH_TIMEOUT_MS) {
+                        FirebaseAuth.getInstance().signInWithCustomToken(firebaseToken).await()?.user
+                    }
+                    val uid = user?.uid
+                    if (uid != null) {
+                        preferences.setFirebaseUid(uid)
+                        return uid
+                    }
+                }
+            }
+
             val storedUid = preferences.firebaseUid.first()
             if (storedUid != null) {
-                // We have a stored UID — use it for per-device consistency.
-                storedUid
-            } else {
-                // No stored mapping — sign in anonymously and cache the UID
-                val auth = FirebaseAuth.getInstance()
-                val user = auth.currentUser
-                    ?: withTimeoutOrNull(AUTH_TIMEOUT_MS) { auth.signInAnonymously().await()?.user }
-                val uid = user?.uid
-                if (uid != null) {
-                    // Cache the Firebase UID so the same EventFinder account
-                    // always maps to the same Firebase identity on this device.
-                    preferences.setFirebaseUid(uid)
-                }
-                uid
+                return storedUid
             }
+
+            val auth = FirebaseAuth.getInstance()
+            val user = auth.currentUser
+                ?: withTimeoutOrNull(AUTH_TIMEOUT_MS) { auth.signInAnonymously().await()?.user }
+            val uid = user?.uid
+            if (uid != null) {
+                preferences.setFirebaseUid(uid)
+            }
+            uid
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
             AppLogger.w(tag, "Firebase auth failed: ${e.message}")
-            null
+            preferences.firebaseUid.first()
         }
     }
 
@@ -115,7 +100,7 @@ class CloudSyncManager(
     /**
      * Full bidirectional sync: push local changes first (so nothing created
      * offline is lost), then pull remote changes into Room. Safe to call
-     * repeatedly — every operation is an idempotent upsert keyed by document id.
+     * repeatedly â€” every operation is an idempotent upsert keyed by document id.
      */
     suspend fun syncNow() {
         if (!FirebaseStatus.isAvailable) {

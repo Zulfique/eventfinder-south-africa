@@ -23,12 +23,35 @@ public class GoogleTokenVerifier(HttpClient http, IConfiguration configuration)
             return null;
         }
 
-        using var response = await http.GetAsync(
-            $"https://oauth2.googleapis.com/tokeninfo?id_token={Uri.EscapeDataString(idToken)}", ct);
-        if (!response.IsSuccessStatusCode) return null;
+        HttpResponseMessage response;
+        try
+        {
+            response = await http.GetAsync(
+                $"https://oauth2.googleapis.com/tokeninfo?id_token={Uri.EscapeDataString(idToken)}", ct);
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+        if (!response.IsSuccessStatusCode)
+        {
+            response.Dispose();
+            return null;
+        }
 
-        using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync(ct));
-        var root = doc.RootElement;
+        JsonDocument doc;
+        try
+        {
+            doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync(ct));
+        }
+        catch
+        {
+            response.Dispose();
+            return null;
+        }
+        using (doc)
+        {
+            var root = doc.RootElement;
 
         string Get(string name) =>
             root.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.String
@@ -51,5 +74,6 @@ public class GoogleTokenVerifier(HttpClient http, IConfiguration configuration)
 
         if (!info.EmailVerified) return null;
         return info;
+        }
     }
 }

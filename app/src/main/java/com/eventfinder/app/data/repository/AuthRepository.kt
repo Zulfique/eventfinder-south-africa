@@ -267,6 +267,8 @@ class AuthRepositoryImpl(
         }
         preferences.setSessionUserId(null)
         preferences.setAuthToken(null)
+        (preferences as? com.eventfinder.app.data.store.UserPreferences)?.setFirebaseUid(null)
+        runCatching { com.google.firebase.auth.FirebaseAuth.getInstance().signOut() }
         AppLogger.i("AuthRepository", "User logged out - session cleared")
     }
 

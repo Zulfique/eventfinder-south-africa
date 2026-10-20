@@ -267,6 +267,9 @@ class EventFinderApiClient(
     suspend fun me(bearer: String): Result<ApiUserDto> =
         wrap("me") { service.me(bearer) }
 
+    suspend fun firebaseToken(bearer: String): Result<FirebaseTokenResponse> =
+        wrap("firebaseToken") { service.getFirebaseToken(bearer) }
+
     suspend fun requestEmailChange(bearer: String, newEmail: String): Result<Unit> =
         wrap("requestEmailChange") { service.requestEmailChange(bearer, RequestEmailChangeBody(newEmail)) }
 

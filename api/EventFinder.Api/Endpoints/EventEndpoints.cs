@@ -33,8 +33,8 @@ public static class EventEndpoints
 
         if (!string.IsNullOrWhiteSpace(city))
         {
-            var needle = city.Trim();
-            query = query.Where(e => EF.Functions.Like(e.City, $"%{needle}%"));
+            var needle = city.Trim().ToLowerInvariant();
+            query = query.Where(e => e.City.ToLower().Contains(needle));
         }
 
         if (lat is not null && lng is not null && radiusKm is > 0)

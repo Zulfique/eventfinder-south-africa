@@ -33,7 +33,7 @@ public static class AuthEndpoints
     }
 
     private static async Task<IResult> FirebaseTokenAsync(
-        ClaimsPrincipal principal, AppDbContext db, FirebaseTokenService firebaseTokens, CancellationToken ct)
+        ClaimsPrincipal principal, AppDbContext db, FirebaseTokenService firebaseTokens, ILoggerFactory lf, CancellationToken ct)
     {
         var user = await db.Users.CurrentUserAsync(principal, ct);
         if (user is null)
@@ -44,8 +44,24 @@ public static class AuthEndpoints
                 ApiResponse<object>.Fail("Firebase custom tokens are not available on this deployment."),
                 statusCode: 503);
 
-        var customToken = firebaseTokens.CreateCustomToken(user.Id);
-        return Results.Json(ApiResponse<object>.Ok(new { firebaseToken = customToken }));
+        try
+        {
+            var customToken = firebaseTokens.CreateCustomToken(user.Id);
+            if (string.IsNullOrWhiteSpace(customToken))
+            {
+                return Results.Json(
+                    ApiResponse<object>.Fail("Firebase custom tokens are not available on this deployment."),
+                    statusCode: 503);
+            }
+            return Results.Json(ApiResponse<object>.Ok(new { firebaseToken = customToken }));
+        }
+        catch (Exception ex)
+        {
+            lf.CreateLogger("AuthEndpoints").LogError(ex, "Firebase custom token generation failed for {UserId}", user.Id);
+            return Results.Json(
+                ApiResponse<object>.Fail("Firebase custom tokens are not available on this deployment."),
+                statusCode: 503);
+        }
     }
 
     private static async Task<IResult> RegisterAsync(
