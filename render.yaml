@@ -1,9 +1,9 @@
-# Render blueprint — deploys the EventFinder ASP.NET Core 8 API on the
-# free hobby tier (no credit card required). Services sleep after 15 minutes
-# of inactivity and wake on the next request.
-# Persistent disks are not available on the free plan. For production data
-# persistence, upgrade to a paid plan or use a managed database (e.g. PostgreSQL).
-# Before redeploy, back up any existing production data from /app/data.
+databases:
+  - name: eventfinder-db
+    databaseName: eventfinder
+    user: eventfinder
+    plan: free
+
 services:
   - type: web
     name: eventfinder-api
@@ -12,24 +12,39 @@ services:
     dockerfilePath: ./api/EventFinder.Api/Dockerfile
     dockerContext: ./api/EventFinder.Api
     healthCheckPath: /health
+
     envVars:
       - key: ASPNETCORE_ENVIRONMENT
         value: Production
+
       - key: Jwt__Secret
         generateValue: true
+
       - key: Jwt__Issuer
         value: eventfinder-api
+
       - key: Jwt__Audience
         value: eventfinder-app
+
       - key: Jwt__ExpiryHours
         value: "168"
+
       - key: ConnectionStrings__Default
-        value: "Data Source=/app/data/eventfinder.db"
-      # Optional: enables real password-reset emails via Brevo (free 300/day).
+        fromDatabase:
+          name: eventfinder-db
+          property: connectionString
+
+      - key: Google__ServerClientId
+        sync: false
+
       - key: Brevo__ApiKey
-        value: ""
-      # Firebase Admin SDK service account credentials for custom token generation.
-      # Provide the full service account JSON as a secret string. Without this,
-      # the /api/auth/firebase-token endpoint will return HTTP 503.
+        sync: false
+
+      - key: Brevo__FromEmail
+        sync: false
+
+      - key: Brevo__FromName
+        value: EventFinder
+
       - key: Firebase__ServiceAccountJson
-        value: ""
+        sync: false

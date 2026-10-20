@@ -53,7 +53,7 @@ android {
         buildConfigField(
             "String",
             "GOOGLE_SERVER_CLIENT_ID",
-            "\"${project.findProperty("GOOGLE_SERVER_CLIENT_ID") ?: ""}\""
+            "\"${project.findProperty("GOOGLE_SERVER_CLIENT_ID") ?: "690167106186-o9bolqrekmkv8bpbfrqd532iqe6r5m3c.apps.googleusercontent.com"}\""
         )
     }
 
