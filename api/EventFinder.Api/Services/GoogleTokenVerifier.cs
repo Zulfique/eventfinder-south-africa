@@ -1,3 +1,4 @@
+﻿using System.Net.Http;
 using System.Text.Json;
 
 namespace EventFinder.Api.Services;
@@ -18,8 +19,6 @@ public class GoogleTokenVerifier(HttpClient http, IConfiguration configuration)
         var expectedAudience = configuration["Google:ServerClientId"];
         if (string.IsNullOrWhiteSpace(expectedAudience))
         {
-            // Not configured — treat every token as invalid rather than
-            // accidentally accepting any audience.
             return null;
         }
 
@@ -29,51 +28,64 @@ public class GoogleTokenVerifier(HttpClient http, IConfiguration configuration)
             response = await http.GetAsync(
                 $"https://oauth2.googleapis.com/tokeninfo?id_token={Uri.EscapeDataString(idToken)}", ct);
         }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
         catch (Exception)
         {
             return null;
         }
-        if (!response.IsSuccessStatusCode)
+
+        using (response)
         {
-            response.Dispose();
-            return null;
-        }
+            if (!response.IsSuccessStatusCode) return null;
 
-        JsonDocument doc;
-        try
-        {
-            doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync(ct));
-        }
-        catch
-        {
-            response.Dispose();
-            return null;
-        }
-        using (doc)
-        {
-            var root = doc.RootElement;
+            string body;
+            try
+            {
+                body = await response.Content.ReadAsStringAsync(ct);
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception)
+            {
+                return null;
+            }
 
-        string Get(string name) =>
-            root.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.String
-                ? v.GetString() ?? string.Empty
-                : string.Empty;
+            try
+            {
+                using var doc = JsonDocument.Parse(body);
+                var root = doc.RootElement;
 
-        var info = new GoogleTokenInfo(
-            Sub: Get("sub"),
-            Email: Get("email"),
-            Name: Get("name"),
-            EmailVerified: Get("email_verified") is "true" or "True");
+                string Get(string name) =>
+                    root.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.String
+                        ? v.GetString() ?? string.Empty
+                        : string.Empty;
 
-        if (string.IsNullOrEmpty(info.Sub) || string.IsNullOrEmpty(info.Email)) return null;
-        if (!string.Equals(Get("aud"), expectedAudience, StringComparison.Ordinal)) return null;
+                var info = new GoogleTokenInfo(
+                    Sub: Get("sub"),
+                    Email: Get("email"),
+                    Name: Get("name"),
+                    EmailVerified: Get("email_verified") is "true" or "True");
 
-        var exp = root.TryGetProperty("exp", out var expEl) && expEl.TryGetInt64(out var expSec)
-            ? DateTimeOffset.FromUnixTimeSeconds(expSec)
-            : DateTimeOffset.MinValue;
-        if (exp <= DateTimeOffset.UtcNow) return null;
+                if (string.IsNullOrEmpty(info.Sub) || string.IsNullOrEmpty(info.Email)) return null;
+                if (!string.Equals(Get("aud"), expectedAudience, StringComparison.Ordinal)) return null;
 
-        if (!info.EmailVerified) return null;
-        return info;
+                var exp = root.TryGetProperty("exp", out var expEl) && expEl.TryGetInt64(out var expSec)
+                    ? DateTimeOffset.FromUnixTimeSeconds(expSec)
+                    : DateTimeOffset.MinValue;
+                if (exp <= DateTimeOffset.UtcNow) return null;
+
+                if (!info.EmailVerified) return null;
+                return info;
+            }
+            catch (Exception)
+            {
+                return null;
+            }
         }
     }
 }

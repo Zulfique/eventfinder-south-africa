@@ -55,41 +55,41 @@ class CloudSyncManager(
 
     private suspend fun ownerUid(userId: String?): String? {
         if (userId.isNullOrBlank() || !FirebaseStatus.isAvailable) return null
+
+        val bearer = preferences.authToken.first()
+        if (bearer.isNullOrBlank()) {
+            AppLogger.w(tag, "No authenticated EventFinder session; skipping cloud sync")
+            return null
+        }
+
+        // A cached Firebase identity belongs to the previous account if the
+        // session changed. Clear it before requesting a server-issued identity.
+        preferences.setFirebaseUid(null)
+
         return try {
-            val bearer = preferences.authToken.first()
-            if (!bearer.isNullOrBlank()) {
-                val tokenResult = EventFinderApiClient.default.firebaseToken("Bearer $bearer")
-                val firebaseToken = tokenResult.getOrNull()?.firebaseToken
-                if (!firebaseToken.isNullOrBlank()) {
-                    val user = withTimeoutOrNull(AUTH_TIMEOUT_MS) {
-                        FirebaseAuth.getInstance().signInWithCustomToken(firebaseToken).await()?.user
-                    }
-                    val uid = user?.uid
-                    if (uid != null) {
-                        preferences.setFirebaseUid(uid)
-                        return uid
-                    }
-                }
+            val tokenResult = EventFinderApiClient.default.firebaseToken("Bearer $bearer")
+            val firebaseToken = tokenResult.getOrNull()?.firebaseToken
+            if (firebaseToken.isNullOrBlank()) {
+                AppLogger.w(tag, "Failed to obtain Firebase custom token: ${tokenResult.exceptionOrNull()?.message}")
+                return null
             }
 
-            val storedUid = preferences.firebaseUid.first()
-            if (storedUid != null) {
-                return storedUid
+            val user = withTimeoutOrNull(AUTH_TIMEOUT_MS) {
+                FirebaseAuth.getInstance().signInWithCustomToken(firebaseToken).await()?.user
             }
-
-            val auth = FirebaseAuth.getInstance()
-            val user = auth.currentUser
-                ?: withTimeoutOrNull(AUTH_TIMEOUT_MS) { auth.signInAnonymously().await()?.user }
             val uid = user?.uid
-            if (uid != null) {
-                preferences.setFirebaseUid(uid)
+            if (uid.isNullOrBlank()) {
+                AppLogger.w(tag, "Firebase custom-token sign-in failed")
+                return null
             }
+
+            preferences.setFirebaseUid(uid)
             uid
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            AppLogger.w(tag, "Firebase auth failed: ${e.message}")
-            preferences.firebaseUid.first()
+            AppLogger.w(tag, "Firebase authentication failed: ${e.message}")
+            null
         }
     }
 
