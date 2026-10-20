@@ -1,9 +1,3 @@
-databases:
-  - name: eventfinder-db
-    databaseName: eventfinder
-    user: eventfinder
-    plan: free
-
 services:
   - type: web
     name: eventfinder-api
@@ -30,9 +24,7 @@ services:
         value: "168"
 
       - key: ConnectionStrings__Default
-        fromDatabase:
-          name: eventfinder-db
-          property: connectionString
+        sync: false
 
       - key: Google__ServerClientId
         sync: false

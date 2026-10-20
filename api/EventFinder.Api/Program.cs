@@ -39,8 +39,17 @@ else
 
 builder.Services.AddDbContext<AppDbContext>(options =>
 {
-    var connectionString = builder.Configuration.GetConnectionString("Default")
-        ?? "Data Source=data/eventfinder.db";
+    var connectionString =
+        builder.Configuration.GetConnectionString("Default");
+
+
+    if (string.IsNullOrWhiteSpace(connectionString))
+    {
+        throw new InvalidOperationException(
+            "ConnectionStrings:Default must be configured.");
+    }
+
+
     options.UseNpgsql(connectionString);
 });
 
@@ -151,7 +160,17 @@ var app = builder.Build();
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    db.Database.EnsureCreated();
+    // Tests run in the Development environment and use an isolated SQLite
+    // database; creating the schema directly avoids applying
+    // provider-specific migrations there. Deployments apply migrations.
+    if (app.Environment.IsDevelopment())
+    {
+        db.Database.EnsureCreated();
+    }
+    else
+    {
+        db.Database.Migrate();
+    }
 }
 
 var emailConfigured = !string.IsNullOrWhiteSpace(app.Configuration["Brevo:ApiKey"]);
