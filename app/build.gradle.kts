@@ -187,6 +187,9 @@ dependencies {
     androidTestImplementation("androidx.test.espresso:espresso-core:3.5.1")
     androidTestImplementation(platform("androidx.compose:compose-bom:2024.02.00"))
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")
+    // ui-test-manifest provides the ComponentActivity used by createComposeRule()
+    // on the instrumented test APK.
+    androidTestImplementation("androidx.compose.ui:ui-test-manifest")
 
     // ---- Compose tooling ----
     debugImplementation("androidx.compose.ui:ui-tooling")

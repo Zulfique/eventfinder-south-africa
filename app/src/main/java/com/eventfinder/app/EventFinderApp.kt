@@ -63,9 +63,12 @@ class EventFinderApp : Application() {
      *  - osmdroid wiki: https://github.com/osmdroid/osmdroid/wiki/How-to-use-the-osmdroid-library
      */
     private fun initialiseMapSdk() {
+        // Use device-protected storage so osmdroid can be initialised before the
+        // user unlocks credential-encrypted storage (e.g. during direct boot or
+        // from instrumented test runners).
         Configuration.getInstance().load(
-            this,
-            getSharedPreferences("${packageName}_preferences", Context.MODE_PRIVATE)
+            createDeviceProtectedStorageContext(),
+            createDeviceProtectedStorageContext().getSharedPreferences("${packageName}_preferences", Context.MODE_PRIVATE)
         )
         Configuration.getInstance().userAgentValue =
             "EventFinder/1.1 (https://github.com/Zulfique/eventfinder-south-africa)"
