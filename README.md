@@ -1,4 +1,4 @@
-# EventFinder South Africa
+﻿# EventFinder South Africa
 
 [![Android CI](https://github.com/Zulfique/eventfinder-south-africa/actions/workflows/android-ci.yml/badge.svg)](https://github.com/Zulfique/eventfinder-south-africa/actions/workflows/android-ci.yml)
 ![Kotlin](https://img.shields.io/badge/Kotlin-1.9.22-7F52FF?logo=kotlin&logoColor=white)
@@ -91,7 +91,7 @@ emulator at 1080 × 2340.
 | DI | **Manual `AppContainer`** | Transparent, dependency-free alternative to Hilt for a prototype. |
 | Local DB | **Room 2.6.1** | Compile-time verified SQLite for the offline event cache. |
 | Cloud NoSQL | **Cloud Firestore** | Bidirectional sync of user-created events, favourites and RSVPs. Free Spark plan, owner-scoped secure rules + anonymous auth. |
-| Backend | **ASP.NET Core 8 Minimal API** (`api/`) | Verified auth (register / login / Google), two-step password reset, public event catalogue, multi-user RSVP. EF Core + SQLite, deploys on Render free tier. |
+| Backend | **ASP.NET Core 8 Minimal API** (`api/`) | Verified auth (register / login / Google), two-step password reset, public event catalogue, multi-user RSVP. EF Core + Npgsql (PostgreSQL), deploys on Render free tier. |
 | Google sign-in | **AndroidX Credential Manager** | Returns a Google ID token verified server-side (audience + signature) before a JWT is issued. |
 | Blob storage | **Firebase Cloud Storage** | Event photos stored as blobs; graceful fallback to local internal storage when Storage is not enabled (requires Blaze). |
 | Push notifications | **Firebase Cloud Messaging** | Real-time `new_events` topic pushes; free, no server needed for console sends. |
@@ -307,7 +307,7 @@ the app falls back to purely local auth when they are blank):
 ```properties
 # local.properties (gitignored) — used by app/build.gradle.kts
 GOOGLE_SERVER_CLIENT_ID=<OAuth web client ID from Google Cloud console>
-EVENTFINDER_API_URL=https://eventfinder-api.onrender.com/
+EVENTFINDER_API_URL=https://eventfinder-api-nlc2.onrender.com/
 ```
 
 ### 4. Build & install
@@ -420,7 +420,7 @@ app/src/main/java/com/eventfinder/app/
 └── utils/              Logging, date/time, distance, validation, hashing, locale, network
 app/src/test/java/com/eventfinder/app/   JVM unit tests
 app/src/androidTest/java/com/eventfinder/app/   Compose instrumented UI tests
-api/EventFinder.Api/                     ASP.NET Core 8 backend (Minimal API + EF Core + SQLite)
+api/EventFinder.Api/                     ASP.NET Core 8 backend (Minimal API + EF Core + Npgsql/PostgreSQL)
 api/EventFinder.Api.Tests/               13 xUnit integration tests (WebApplicationFactory)
 render.yaml                              Render free-tier deploy blueprint (Docker)
 docs/screenshots/                        Real device screenshots
@@ -456,7 +456,7 @@ multi-user product while staying 100% free:
 
 | Capability | Detail |
 | --- | --- |
-| Stack | ASP.NET Core 8, EF Core 8 + SQLite, JWT bearer auth, xUnit integration tests |
+| Stack | ASP.NET Core 8, EF Core 8 + Npgsql/PostgreSQL, JWT bearer auth, xUnit integration tests |
 | Auth | Register / login / Google (ID-token verified via `oauth2.googleapis.com/tokeninfo`), change password, profile update (`PUT /api/auth/me`), account deletion (`DELETE /api/auth/me`), `/me` |
 | Password reset | Two-step: `forgot-password` emails a SHA-256-hashed, single-use 60-minute token (Brevo free 300/day); missing Brevo key fails visibly instead of logging the token → `reset-password` |
 | Events | Public catalogue (`GET /api/events/public`) with city + Haversine radius filters, owner-guarded CRUD |
@@ -566,9 +566,8 @@ them means you can never update the published app.
   project with Google sign-in enabled; the button is hidden until configured.
 - **Firebase Cloud Storage** requires the Blaze plan (item 21) — event photos use local
   internal storage fallback, or can be served by the API itself.
-- **Render free tier** — the backend sleeps after ~15 min idle (30–60 s cold start); the SQLite
-  file lives on ephemeral disk and can reset on redeploy (use a persistent disk or managed DB
-  for durable user data).
+- **Render free tier** – the backend sleeps after ~15 min idle (30–60 s cold start); persistent user
+  data lives in the configured Neon PostgreSQL database, not the Render container filesystem.
 - **Password reset email** requires a Brevo API key in production (`Brevo__ApiKey`); without it
   `forgot-password` returns a controlled 502 and the service never logs raw tokens.
 - **Public event feeds** — the architecture supports keyless public JSON, RSS and ICS event

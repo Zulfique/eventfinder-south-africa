@@ -11,8 +11,8 @@ RUN dotnet publish EventFinder.Api.csproj -c Release -o /app/publish /p:UseAppHo
 FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS runtime
 WORKDIR /app
 
-# SQLite database directory (mount a Render disk here for persistence).
-RUN mkdir -p /app/data && chown -R app:app /app/data
+# The API uses PostgreSQL through ConnectionStrings__Default;
+# no local SQLite database directory is required.
 USER app
 
 COPY --from=build /app/publish .

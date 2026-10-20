@@ -6,6 +6,7 @@ using EventFinder.Api.Data;
 using EventFinder.Api.Dtos;
 using EventFinder.Api.Services;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 
 namespace EventFinder.Api.Endpoints;
 
@@ -85,8 +86,7 @@ public static class AuthEndpoints
             // constraint violation. In SQLite, this typically produces a message containing
             // "UNIQUE constraint failed" or similar. Other DbUpdateExceptions (e.g. foreign
             // key violations, database lock failures) should be handled as server errors.
-            var isUniqueEmailConstraint = dbEx.Message?.Contains("UNIQUE constraint failed") == true ||
-                                        dbEx.InnerException?.Message?.Contains("UNIQUE constraint failed") == true;
+var isUniqueEmailConstraint = IsUniqueConstraintViolation(dbEx);
 
             if (isUniqueEmailConstraint)
             {
@@ -457,8 +457,7 @@ public static class AuthEndpoints
             // constraint violation. Other DbUpdateExceptions (e.g. foreign key violations,
             // database lock failures) should be handled as server errors, not misreported
             // as duplicate email conflicts.
-            var isUniqueEmailConstraint = dbEx.Message?.Contains("UNIQUE constraint failed") == true ||
-                                        dbEx.InnerException?.Message?.Contains("UNIQUE constraint failed") == true;
+var isUniqueEmailConstraint = IsUniqueConstraintViolation(dbEx);
 
             if (isUniqueEmailConstraint)
             {
@@ -489,6 +488,27 @@ public static class AuthEndpoints
     {
         var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(rawToken));
         return Convert.ToHexString(bytes);
+    }
+
+    private static bool IsUniqueConstraintViolation(DbUpdateException exception)
+    {
+        for (Exception? current = exception; current is not null; current = current.InnerException)
+        {
+            if (current is PostgresException postgresException &&
+                postgresException.SqlState == PostgresErrorCodes.UniqueViolation)
+            {
+                return true;
+            }
+
+            if (current.Message.Contains(
+                    "UNIQUE constraint failed",
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 }
 
