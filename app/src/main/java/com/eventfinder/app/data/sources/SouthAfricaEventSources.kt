@@ -10,10 +10,17 @@ import okhttp3.OkHttpClient
  * unavailable, the per-source error handling in EventDiscoveryRepository
  * ensures other sources continue to work and cached events are preserved.
  *
- * Verified sources (as of Sep 2026):
+ * Verified sources (as of Oct 2026):
  * - Aticket RSS: SA concerts/theatre/events with explicit eventStartDate/eventEndDate/eventVenue tags
  * - Motorsport SA ICS: SA motorsport events with VEVENT data (dates, locations, organizers)
- * - Ardent Africa JSON: SA events API (may return empty results intermittently)
+ *
+ * The Ardent Africa JSON feed was removed from this list: the platform retired
+ * its public API and `https://api.ardent.africa/public/v1/events` now answers
+ * `404 {"code":404,"message":"Application not found"}` for every path, so the
+ * source only produced a permanent failure on each discovery run. The generic
+ * JSON adapter ([PublicJsonEventSource] / [PublicJsonEventClient]) is still
+ * wired up and unit tested — re-enable the feed by adding a
+ * `PublicJsonEventSource` with a live URL to the list below.
  */
 object SouthAfricaEventSources {
 
@@ -33,12 +40,6 @@ object SouthAfricaEventSources {
                 displayName = "Motorsport South Africa Events",
                 url = "https://www.motorsport.co.za/events/list/?ical=1",
                 httpClient = httpClient
-            ),
-            PublicJsonEventSource(
-                id = "ardent-africa",
-                displayName = "Ardent Africa Events (South Africa)",
-                url = "https://api.ardent.africa/public/v1/events?location=South+Africa&limit=50",
-                client = client
             )
         )
     }

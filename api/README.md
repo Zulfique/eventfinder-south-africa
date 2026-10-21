@@ -20,6 +20,10 @@ free plan, and the service deploys to Render's free web tier (no credit card).
 
 ## Run locally
 
+A **valid PostgreSQL connection string is required** — the API has no SQLite fallback
+any more, and `api/EventFinder.Api/appsettings.json` ships an empty
+`ConnectionStrings:Default` on purpose so that no credentials are committed.
+
 Configure a local PostgreSQL connection string before running:
 
 ```powershell
@@ -28,8 +32,20 @@ $env:ASPNETCORE_ENVIRONMENT = "Development"
 dotnet run --project .\api\EventFinder.Api\EventFinder.Api.csproj
 ```
 
-The API listens on the configured URL. Pending migrations are applied automatically
-during production startup; Development tests create their schema directly.
+The API listens on the configured URL (`http://localhost:5078` by default). Pending
+migrations are applied automatically on startup for every PostgreSQL target, so only the
+database itself has to exist. The integration tests replace the provider with an isolated
+in-memory SQLite database and create their schema directly.
+
+Without `ConnectionStrings:Default` the API refuses to start and reports
+`ConnectionStrings:Default must be configured.` instead of failing later inside Npgsql.
+
+> **Upgrading an existing local database:** migrations are now applied on startup for
+> every PostgreSQL target. A database that an older build created directly from the
+> model (no `__EFMigrationsHistory` table) makes the first migration fail with
+> "relation already exists" — drop and recreate it once:
+> `dotnet ef database drop --force --project api/EventFinder.Api` (or
+> `DROP DATABASE eventfinder; CREATE DATABASE eventfinder;`).
 
 ## Tests
 
@@ -41,8 +57,13 @@ dotnet test EventFinder.Api.Tests/EventFinder.Api.Tests.csproj
 ## Deploy to Render (free)
 
 Configure `ConnectionStrings__Default` in Render's dashboard using your Neon
-PostgreSQL connection string. Also configure Google, Brevo and Firebase
-credentials there instead of committing them.
+PostgreSQL connection string. Use the Npgsql key/value format (not a `postgresql://` URL):
+
+```
+Host=YOUR_NEON_HOST;Database=YOUR_DATABASE;Username=YOUR_USERNAME;Password=YOUR_PASSWORD;SSL Mode=Require
+```
+
+Also configure Google, Brevo and Firebase credentials there instead of committing them.
 
 Free-tier notes: instances sleep after 15 minutes, and production data lives in
 Neon PostgreSQL rather than the Render container filesystem.

@@ -188,7 +188,7 @@ EventFinder uses public services that do not require API keys or tokens:
 | **Open-Meteo** | Keyless | Weather forecasts |
 | **OpenStreetMap** | Keyless | Map data |
 | **Overpass API** | Keyless for normal OSM data queries | Nearby venues and event-related places |
-| **Ardent Africa** | Keyless (optional API key for higher limits) | Public event discovery |
+| **Ardent Africa** | Keyless (optional API key for higher limits) | Public event discovery — *feed retired, see [Public JSON event feeds](#public-json-event-feeds)* |
 | **Android Location APIs** | Device permission | Current device location |
 | **Room / SQLite** | Local | Events, users, favourites and RSVPs |
 
@@ -235,7 +235,13 @@ Currently configured sources:
 | --- | --- | --- |
 | **Aticket South Africa** | `https://za.aticket.net/feed/featured-events` (RSS) | No |
 | **Motorsport South Africa** | `https://www.motorsport.co.za/events/list/?ical=1` (ICS) | No |
-| **Ardent Africa** | `https://api.ardent.africa/public/v1/events` (JSON) | No |
+
+> **Ardent Africa was retired by the platform.** `https://api.ardent.africa/public/v1/events`
+> now answers `404 {"code":404,"message":"Application not found"}` for every path, so the source
+> was removed from the configured list instead of failing on every discovery run. The generic
+> JSON adapter (`PublicJsonEventSource` / `PublicJsonEventClient` / `PublicJsonEventMapper`) is
+> still wired up and unit tested, so a live JSON feed only needs a new `PublicJsonEventSource`
+> entry in `SouthAfricaEventSources.kt`.
 
 New sources can be added in `SouthAfricaEventSources.kt` without changing any other code.
 The `PublicJsonEventClient` handles `{ "events": [...] }`, `{ "data": [...] }`, `{ "results": [...] }`,
@@ -457,21 +463,38 @@ multi-user product while staying 100% free:
 | Capability | Detail |
 | --- | --- |
 | Stack | ASP.NET Core 8, EF Core 8 + Npgsql/PostgreSQL, JWT bearer auth, xUnit integration tests |
+| Database | PostgreSQL. Production runs on **Neon PostgreSQL**, configured through the `ConnectionStrings__Default` environment variable; the committed `appsettings.json` intentionally ships an **empty** connection string so no credentials live in the repository. |
+| Migrations | EF Core migrations are applied automatically at API startup for every PostgreSQL target (production **and** local development), so schema drift is caught locally. |
 | Auth | Register / login / Google (ID-token verified via `oauth2.googleapis.com/tokeninfo`), change password, profile update (`PUT /api/auth/me`), account deletion (`DELETE /api/auth/me`), `/me` |
 | Password reset | Two-step: `forgot-password` emails a SHA-256-hashed, single-use 60-minute token (Brevo free 300/day); missing Brevo key fails visibly instead of logging the token → `reset-password` |
 | Events | Public catalogue (`GET /api/events/public`) with city + Haversine radius filters, owner-guarded CRUD |
 | RSVP | Multi-user: anyone signed in can RSVP/cancel; `GET /api/events/{id}/attendees` returns the shared list |
 | Envelope | Every response is `{ success, message, data, errors }` with server-generated IDs |
 | Health | `GET /health` → 200; wired as the Render health check |
-| Deploy | `render.yaml` blueprint (Docker, free web tier), `Dockerfile`, auto-migrate on boot |
+| Deploy | `render.yaml` blueprint (Docker, free web-service plan), `Dockerfile`, auto-migrate on boot. Persistent data lives in the external PostgreSQL database, never in the Render container filesystem. |
 
-Run it locally:
+Run it locally — a **valid PostgreSQL connection string is required** (there is no SQLite
+fallback in the API any more):
+
+```powershell
+# PowerShell — point the API at a local PostgreSQL instance
+$env:ConnectionStrings__Default = "Host=localhost;Port=5432;Database=eventfinder;Username=postgres;Password=YOUR_LOCAL_PASSWORD"
+$env:ASPNETCORE_ENVIRONMENT = "Development"
+dotnet run --project .\api\EventFinder.Api\EventFinder.Api.csproj   # http://localhost:5078
+```
 
 ```bash
+# Or from the repository root
 dotnet tool restore                       # dotnet-ef from repo-root manifest
 dotnet run --project api/EventFinder.Api  # http://localhost:5078
 dotnet test api/EventFinder.Api.Tests     # 13 integration tests
 ```
+
+The API refuses to start without `ConnectionStrings:Default` and says so explicitly
+(`ConnectionStrings:Default must be configured.`). Pending migrations are applied on boot,
+so the database only has to exist — the schema does not. If an older build created your
+local database directly from the model, drop and recreate it once so the first migration
+applies cleanly (`dotnet ef database drop --force --project api/EventFinder.Api`).
 
 The Android app uses Room as its offline source of truth and prefers the API when it is
 reachable (auth, create/update/delete, RSVP, discovery merge with `api:`-prefixed ids),
@@ -571,8 +594,9 @@ them means you can never update the published app.
 - **Password reset email** requires a Brevo API key in production (`Brevo__ApiKey`); without it
   `forgot-password` returns a controlled 502 and the service never logs raw tokens.
 - **Public event feeds** — the architecture supports keyless public JSON, RSS and ICS event
-  sources via `EventDiscoveryRepository`. Aticket South Africa (RSS), Motorsport South
-  Africa (ICS) and Ardent Africa (JSON) are configured as verified sources. Events without
+  sources via `EventDiscoveryRepository`. Aticket South Africa (RSS) and Motorsport South
+  Africa (ICS) are configured as verified sources; the Ardent Africa JSON feed was retired by
+  the platform and removed from the list. Events without
   valid coordinates are correctly rejected since they cannot be plotted on the map.
   Additional sources can be added to `SouthAfricaEventSources.kt`.
 - **isPublic** events created in the app are pushed to the backend catalogue, so any signed-in

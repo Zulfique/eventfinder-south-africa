@@ -10,6 +10,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -56,6 +57,7 @@ import androidx.compose.runtime.setValue
 import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -261,7 +263,10 @@ fun HomeScreen(
                 if (state.isLoading && state.events.isEmpty()) {
                     LoadingView(stringResource(R.string.loading_events))
                 } else if (state.isMapView) {
-                    Box(Modifier.fillMaxSize()) {
+                    // weight(1f) keeps the map inside the space left by the search
+                    // field and the category chips. fillMaxSize() made the map
+                    // overlap them, which hid the chips and clipped the search box.
+                    Box(Modifier.weight(1f).clipToBounds()) {
                         val defaultCenter = defaultSouthAfricaCenter(context)
                         EventMap(
                             events = state.events.map { it.event },
@@ -348,7 +353,7 @@ fun HomeScreen(
 
 /** Scrollable event cards (list view). */
 @Composable
-private fun EventList(
+private fun ColumnScope.EventList(
     state: HomeUiState,
     onEventClick: (String) -> Unit,
     onFavoriteToggle: (String) -> Unit
@@ -356,11 +361,12 @@ private fun EventList(
     if (state.events.isEmpty()) {
         EmptyState(
             icon = Icons.Outlined.EventBusy,
-            title = stringResource(R.string.no_events)
+            title = stringResource(R.string.no_events),
+            modifier = Modifier.weight(1f)
         )
     } else {
         LazyColumn(
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier.weight(1f),
             contentPadding = androidx.compose.foundation.layout.PaddingValues(
                 horizontal = 16.dp, vertical = 8.dp
             ),

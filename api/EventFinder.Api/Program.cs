@@ -34,7 +34,15 @@ if (builder.Environment.IsProduction())
 else
 {
     // Development and ordinary local tests can run without a deployed secret.
-    configuredJwtSecret ??= DevelopmentJwtSecret;
+    if (string.IsNullOrWhiteSpace(configuredJwtSecret))
+    {
+        configuredJwtSecret = DevelopmentJwtSecret;
+        // Publish the fallback through configuration as well, so every consumer
+        // of IConfiguration (TokenService, for example) signs and validates with
+        // exactly the same development secret instead of failing with
+        // "Jwt:Secret is not configured.".
+        builder.Configuration["Jwt:Secret"] = DevelopmentJwtSecret;
+    }
 }
 
 builder.Services.AddDbContext<AppDbContext>(options =>
@@ -160,16 +168,18 @@ var app = builder.Build();
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    // Tests run in the Development environment and use an isolated SQLite
-    // database; creating the schema directly avoids applying
-    // provider-specific migrations there. Deployments apply migrations.
-    if (app.Environment.IsDevelopment())
+    // The migrations in this project target PostgreSQL. The integration test
+    // host swaps in an isolated SQLite database, which cannot apply them, so
+    // the test schema is created directly from the model. Every PostgreSQL
+    // target — production and local development alike — applies the real
+    // migrations, so schema drift is caught locally instead of in production.
+    if (db.Database.IsNpgsql())
     {
-        db.Database.EnsureCreated();
+        db.Database.Migrate();
     }
     else
     {
-        db.Database.Migrate();
+        db.Database.EnsureCreated();
     }
 }
 

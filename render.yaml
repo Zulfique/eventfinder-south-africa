@@ -23,6 +23,9 @@ services:
       - key: Jwt__ExpiryHours
         value: "168"
 
+      # Neon PostgreSQL connection string, supplied in the Render dashboard
+      # (never committed). Use the Npgsql key/value format:
+      #   Host=YOUR_NEON_HOST;Database=YOUR_DATABASE;Username=YOUR_USERNAME;Password=YOUR_PASSWORD;SSL Mode=Require
       - key: ConnectionStrings__Default
         sync: false
 
