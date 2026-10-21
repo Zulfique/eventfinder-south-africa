@@ -75,19 +75,22 @@ import com.eventfinder.app.ui.components.LoadingView
 import com.eventfinder.app.ui.components.resolve
 import com.eventfinder.app.utils.AppLogger
 import com.eventfinder.app.utils.LocationUtils
+import com.eventfinder.app.utils.SouthAfricanPlaces
 import org.osmdroid.views.MapView
 
 /**
- * Nation-wide default map centre used until the user's location is known.
- * Cape Town (loc. en) or Johannesburg (loc. af) — a better whole-country
- * guess than pinning one city regardless of the device language.
+ * Nation-wide default map centre used until the user's place is known.
+ *
+ * This is deliberately *not* derived from the device language: an English
+ * speaker in Durban and an Afrikaans speaker in Cape Town must both get the
+ * same sensible starting point. The real centre comes from the device
+ * position, or from the "Default city" preference in Settings — see
+ * [PlaceResolver].
  */
-internal fun defaultSouthAfricaCenter(context: Context): Pair<Double, Double> =
-    if (context.resources.configuration.locales[0].language == "af") {
-        -26.2041 to 28.0473 // Johannesburg
-    } else {
-        -33.9249 to 18.4241 // Cape Town
-    }
+internal fun defaultSouthAfricaCenter(): Pair<Double, Double> {
+    val fallback = SouthAfricanPlaces.nationalDefault
+    return fallback.latitude to fallback.longitude
+}
 
 private fun hasLocationPermission(context: Context): Boolean {
     return ContextCompat.checkSelfPermission(
@@ -267,7 +270,7 @@ fun HomeScreen(
                     // field and the category chips. fillMaxSize() made the map
                     // overlap them, which hid the chips and clipped the search box.
                     Box(Modifier.weight(1f).clipToBounds()) {
-                        val defaultCenter = defaultSouthAfricaCenter(context)
+                        val defaultCenter = defaultSouthAfricaCenter()
                         EventMap(
                             events = state.events.map { it.event },
                             center = (state.userLat ?: defaultCenter.first) to

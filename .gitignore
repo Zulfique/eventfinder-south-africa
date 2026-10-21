@@ -19,6 +19,13 @@ captures/
 *.keystore
 keystore.properties
 
+# Firebase service account keys (private keys — never commit; they belong in
+# the Render environment as Firebase__ServiceAccountJson)
+*-service-account*.json
+*serviceAccount*.json
+firebase-service-account*.json
+eventfinder-south-africa-*.json
+
 # JVM crash logs
 app/hs_err_*.log
 *.log

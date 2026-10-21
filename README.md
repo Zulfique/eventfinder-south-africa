@@ -44,7 +44,7 @@ paid infrastructure; Firebase Storage is optional and falls back to local file s
 | Area | What it does |
 | --- | --- |
 | **Discover** | Browse the local event catalogue, filter by category chip and free-text keyword, sort by date / distance / name. |
-| **Near me** | Requests location permission and sorts events by distance using the Haversine great-circle formula. |
+| **Near me** | Requests location permission and sorts events by distance using the Haversine great-circle formula. Works from **any** South African city — the app resolves the device position, falls back to the "Default city" in Settings, and finally to a nation-wide default. |
 | **Map** | Event locations plotted on a free OpenStreetMap map (osmdroid) — no Google Maps key or billing. |
 | **Event detail** | Hero image, organiser, attendee count, venue map link, **weather forecast at the venue** on the event day, share and RSVP. |
 | **Search** | Debounced keyword search with recent-search history and popular events. |
@@ -258,6 +258,33 @@ The whole UI is externalised to string resources and ships in two languages:
 The language is switched at runtime from **Settings** (persisted in DataStore) and applied
 through `LocaleManager` in `MainActivity.attachBaseContext`.
 
+## Where the app thinks you are
+
+EventFinder works from **anywhere in South Africa** — Cape Town, Durban, Gqeberha,
+Polokwane, Bloemfontein or a small town. The place is resolved in this order
+(`utils/PlaceResolver.kt`):
+
+1. **Device position** — the last known GPS/network fix once the location
+   permission is granted. Distances, the "near me" sorting and the map centre
+   follow it exactly.
+2. **Default city** — the city typed into *Settings → Discovery defaults →
+   Default city*. It is resolved offline from a table of 40+ South African
+   cities (`utils/SouthAfricanPlaces.kt`, including Afrikaans names such as
+   *Kaapstad* and nicknames such as *Joburg* or *Gqeberha*), and through the
+   South-African-only geocoder when the name is not in the table.
+3. **Nation-wide fallback** — Cape Town, so the map is never centred on a
+   random place.
+
+This also drives event creation: leaving the latitude/longitude fields blank
+(the documented *"leave the coordinates blank to place the event in your
+current city"* hint) now stores the **resolved** position instead of a fixed
+Johannesburg coordinate, so a Cape Town user's event is really in Cape Town —
+on the map, in the local catalogue and on the shared backend catalogue.
+
+> The map centre used to depend on the **device language** (English → Cape
+> Town, Afrikaans → Johannesburg), which sent every English user to the wrong
+> city. It is now location-driven only.
+
 ## Offline-first behaviour
 
 - Events, favourites and RSVPs are cached in **Room** and observed as `Flow`s, so the UI renders instantly.
@@ -331,7 +358,7 @@ adb install -r app\build\outputs\apk\debug\app-debug.apk
 
 ## Testing
 
-The project has **159 JVM unit tests** across 18 suites, all runnable from the command line with
+The project has **167 JVM unit tests** across 19 suites, all runnable from the command line with
 no emulator:
 
 ```bash
@@ -358,6 +385,7 @@ no emulator:
 | `EventGeocoderTest` | Reverse-geocoding results accepted only when they resolve inside South Africa (full country name, country code, mixed results; non-SA rejected). |
 | `ReminderScheduleTest` | Reminder offsets: 24 h + 1 h lead times, same-day events, events starting within the hour, past events, and boundary-exact leads. |
 | `CloudSyncMappingTest` | Firestore document ↔ domain mapping for events, favourites and RSVPs used by `CloudSyncManager`. |
+| `SouthAfricanPlacesTest` | Offline South African city lookup: English names, Afrikaans names and nicknames (*Kaapstad*, *Joburg*, *Gqeberha*), city-with-province strings, unknown names and coordinate bounds. |
 
 HTML reports are written to `app/build/reports/tests/testDebugUnitTest/index.html`.
 
@@ -449,8 +477,8 @@ docs/screenshots/                        Real device screenshots
 | **Multi-language (2 SA languages)** | English + Afrikaans (`values-af/strings.xml`), `LocaleManager`, in-app switcher |
 | **Production assets** | Adaptive launcher icon (SA-flag colours), Material 3 theming, screenshot set |
 | **Play Store preparation** | Signed release build (`keystore.properties`), minify + ProGuard, `bundleRelease` ready |
-| **CI/CD (GitHub Actions)** | `.github/workflows/android-ci.yml` — build, 159 unit tests, lint, instrumentation on every push |
-| Unit testing | 159 JVM tests + 13 API integration tests + 6 Compose instrumented tests + GitHub Actions CI |
+| **CI/CD (GitHub Actions)** | `.github/workflows/android-ci.yml` — build, 167 unit tests, lint, instrumentation on every push |
+| Unit testing | 167 JVM tests + 13 API integration tests + 6 Compose instrumented tests + GitHub Actions CI |
 | Logging & comments | `AppLogger` used across data/UI layers; KDoc on every class |
 | Documentation | This README with Mermaid architecture diagrams |
 | **Final POE tag** | Git tag `Final-POE` marks the submission commit |
@@ -519,14 +547,45 @@ app), not a secret.
 This repository is wired to a live Firebase project:
 
 - **Project ID:** `eventfinder-south-africa`
-- **Android package:** `com.eventfinder.app`
+- **Project number:** `690167106186`
+- **Android package:** `com.eventfinder.app` (App ID `1:690167106186:android:4766476a0ad8af4c513b73`)
 - **Firestore:** enabled (`nam5`); **anonymous authentication** on; owner-scoped security rules
   (`request.auth.uid == userId`) — the app signs in anonymously before syncing and keys every
   document path by the Firebase auth uid
 - **FCM:** enabled; devices auto-subscribe to the `new_events` topic
 - **Storage:** not enabled (requires Blaze). `FirebaseImageUploader` falls back to local storage.
-- **Google sign-in:** an OAuth **web client ID** is required in `local.properties`
-  (`GOOGLE_SERVER_CLIENT_ID`); until it is set the Google button stays hidden.
+- **Google sign-in:** enabled in **Authentication → Sign-in method → Google**; the OAuth consent
+  screen is **In production / External**, so any user can sign in (no test-user limit).
+  The API verifies the returned ID token server-side against
+  `Google:ServerClientId` (the OAuth **web** client ID) — the same value that is
+  `GOOGLE_SERVER_CLIENT_ID` in `local.properties`.
+- **SHA-1 fingerprints:** both the debug and the release keystore are registered on the
+  Android app, which is what Credential Manager needs to match the calling app.
+
+### Verified Google configuration (free, no billing)
+
+Everything below was set up and verified in the Firebase / Google Cloud console for the
+project `eventfinder-south-africa`:
+
+| Item | Value / state |
+| --- | --- |
+| Billing plan | **Spark — no-cost ($0/month)**. Do **not** start the $300 Cloud trial and do not enable Blaze; both would add a billing account. |
+| OAuth consent screen | Publishing status **In production**, user type **External** |
+| OAuth clients | 2 x Android (one per SHA-1) + 1 x Web (`…-o9bolqrekmkv8bpbfrqd532iqe6r5m3c.apps.googleusercontent.com`) |
+| `app/google-services.json` | Downloaded from the console, so it now contains the `oauth_client` array (Android + web) and `other_platform_oauth_client` — previously those arrays were empty |
+| API keys | Android key + browser key, both auto-created by Firebase |
+| Service account | `firebase-adminsdk-fbsvc@eventfinder-south-africa.iam.gserviceaccount.com` (used by the API for custom tokens) |
+
+The committed `google-services.json` contains **only public identifiers** (API key, OAuth
+client IDs, app ID) — never a secret. The private key of the service account is **not** in
+the repository: `.gitignore` blocks `*-service-account*.json` and friends.
+
+**To give the Render API its Firebase Admin access**, download a JSON key for the
+`firebase-adminsdk-fbsvc@…` service account (Google Cloud console → IAM & Admin →
+Service accounts → the account → Keys → Add key → JSON) and paste the **whole file
+content** into the Render environment variable `Firebase__ServiceAccountJson`. With it,
+`GET /api/auth/firebase-token` returns a real custom token; without it the endpoint
+answers `503` and only ordinary registration/login are affected.
 
 ### Connecting your own project
 
@@ -536,14 +595,25 @@ project:
 
 1. Go to <https://console.firebase.google.com> → **Add project** (Spark plan, free).
 2. **Add an Android app** with package name `com.eventfinder.app`.
-3. Download the generated `google-services.json` and replace `app/google-services.json`.
-4. Enable **Authentication → Anonymous** and **Firestore Database** (production mode + the
+3. Add the **SHA-1 fingerprint** of every keystore that signs a build (debug *and*
+   release) — Google sign-in fails without it:
+
+   ```bash
+   keytool -list -v -keystore ~/.android/debug.keystore -alias androiddebugkey \
+     -storepass android | grep SHA1
+   keytool -list -v -keystore eventfinder-release.jks -alias eventfinder | grep SHA1
+   ```
+
+4. Download the generated `google-services.json` and replace `app/google-services.json`.
+   Check that it contains a populated `oauth_client` array — an empty array means the
+   SHA-1 fingerprints were not registered yet.
+5. Enable **Authentication → Anonymous** and **Firestore Database** (production mode + the
    owner-scoped rules below). Cloud Messaging is on by default. Storage is optional
    (requires Blaze).
-5. (Optional) **Authentication → Sign-in method → Google** + **Google Cloud console →
+6. (Optional) **Authentication → Sign-in method → Google** + **Google Cloud console →
    Credentials → OAuth 2.0 Client IDs (Web application)** → copy the web client ID into
    `local.properties` as `GOOGLE_SERVER_CLIENT_ID`.
-6. Rebuild and run on your physical device.
+7. Rebuild and run on your physical device.
 
 Firestore security rules — each user can only touch their own documents, and only while
 authenticated (anonymous sign-in is free on the Spark plan):

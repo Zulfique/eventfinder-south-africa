@@ -20,6 +20,7 @@ import com.eventfinder.app.data.sources.SouthAfricaEventSources
 import com.eventfinder.app.data.store.UserPreferences
 import com.eventfinder.app.utils.AppLogger
 import com.eventfinder.app.utils.NetworkMonitor
+import com.eventfinder.app.utils.PlaceResolver
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -102,6 +103,18 @@ class AppContainer(context: Context) {
         EventGeocoder(
             geocodingApi = ApiClient.openMeteoGeocodingApi(appContext.cacheDir),
             geocodeCacheDao = database.geocodeCacheDao()
+        )
+    }
+
+    /**
+     * Resolves the user's current place (device fix → configured default city →
+     * nation-wide fallback) so the app works from any South African city.
+     */
+    val placeResolver: PlaceResolver by lazy {
+        PlaceResolver(
+            context = appContext,
+            preferences = preferences,
+            geocoder = eventGeocoder
         )
     }
 

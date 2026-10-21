@@ -19,6 +19,7 @@ import com.eventfinder.app.ui.components.UiMessage
 import com.eventfinder.app.utils.AppLogger
 import com.eventfinder.app.utils.DateTimeUtils
 import com.eventfinder.app.utils.ImageStorage
+import com.eventfinder.app.utils.PlaceResolver
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asSharedFlow
@@ -106,7 +107,8 @@ class CreateEventViewModel(
     private val eventRepository: EventRepository,
     private val authRepository: AuthRepository,
     private val eventId: String? = null,
-    private val imageUploader: FirebaseImageUploader? = null
+    private val imageUploader: FirebaseImageUploader? = null,
+    private val placeResolver: PlaceResolver? = null
 ) : ViewModel() {
 
     /** True when the wizard is editing an existing user-created event. */
@@ -238,9 +240,23 @@ class CreateEventViewModel(
 
         viewModelScope.launch {
             _uiState.update { it.copy(isSubmitting = true) }
-            // Blank or omitted coordinates are stored as null (see isValidCoordinate).
-            val lat = state.latitude.trim().toDoubleOrNull()
-            val lng = state.longitude.trim().toDoubleOrNull()
+
+            // Blank coordinates mean "place it where the user is". The place
+            // resolver returns the device position, the city configured in
+            // Settings or the nation-wide fallback — never a hard-coded city.
+            var lat = state.latitude.trim().toDoubleOrNull()
+            var lng = state.longitude.trim().toDoubleOrNull()
+            if (lat == null || lng == null) {
+                val place = placeResolver?.resolve()
+                if (place != null) {
+                    lat = lat ?: place.latitude
+                    lng = lng ?: place.longitude
+                    AppLogger.i(
+                        "CreateEventViewModel",
+                        "Placed event at ${place.label} (${place.latitude}, ${place.longitude})"
+                    )
+                }
+            }
 
             // Blob storage: if a local photo was picked, upload it to Firebase
             // Cloud Storage and use the permanent download URL. Falls back to
@@ -315,7 +331,8 @@ class CreateEventViewModel(
                     container.eventRepository,
                     container.authRepository,
                     eventId,
-                    container.imageUploader
+                    container.imageUploader,
+                    container.placeResolver
                 )
             }
         }

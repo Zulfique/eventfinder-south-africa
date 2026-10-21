@@ -12,6 +12,7 @@ import com.eventfinder.app.domain.model.Event
 import com.eventfinder.app.domain.model.EventCategory
 import com.eventfinder.app.domain.model.RsvpStatus
 import com.eventfinder.app.utils.AppLogger
+import com.eventfinder.app.utils.SouthAfricanPlaces
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
@@ -225,14 +226,19 @@ override suspend fun ensureSeeded() {
         var id = java.util.UUID.randomUUID().toString()
         val token = preferences.authToken.firstOrNull()
         if (apiClient != null && !token.isNullOrBlank()) {
+            // Coordinates are resolved by the create wizard (device position or
+            // the configured default city). The nation-wide fallback is only
+            // used when even that is missing, so an event is never pinned to
+            // a city the user is not in.
+            val fallback = SouthAfricanPlaces.nationalDefault
             val body = com.eventfinder.app.data.remote.EventFinderApiClient.eventBody(
                 title = draft.title.trim(),
                 description = draft.description.trim(),
                 venueName = draft.venueName.trim(),
                 address = draft.address.trim(),
                 city = "",
-                latitude = draft.latitude ?: -26.2041,
-                longitude = draft.longitude ?: 28.0473,
+                latitude = draft.latitude ?: fallback.latitude,
+                longitude = draft.longitude ?: fallback.longitude,
                 startUtcMillis = draft.startDate,
                 endUtcMillis = draft.endDate,
                 category = draft.category.labelKey,

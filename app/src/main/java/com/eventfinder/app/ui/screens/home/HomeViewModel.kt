@@ -20,6 +20,7 @@ import com.eventfinder.app.notifications.NotificationHelper
 import com.eventfinder.app.ui.components.UiMessage
 import com.eventfinder.app.utils.AppLogger
 import com.eventfinder.app.utils.LocationUtils
+import com.eventfinder.app.utils.PlaceSource
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -95,6 +96,21 @@ class HomeViewModel(
     init {
         viewModelScope.launch {
             preferences.defaultRadiusKm.first().let { radiusFlow.value = it }
+        }
+
+        // Resolve the user's place (device fix → configured default city →
+        // nation-wide fallback) so distances, the radius filter and the map
+        // centre are correct wherever the user is in South Africa — also when
+        // the location permission has not been granted yet.
+        viewModelScope.launch {
+            val place = container.placeResolver.resolve()
+            setUserLocation(place.latitude, place.longitude)
+            if (place.source != PlaceSource.DEVICE) {
+                AppLogger.i(
+                    "HomeViewModel",
+                    "Using ${place.source} place: ${place.label} (${place.latitude}, ${place.longitude})"
+                )
+            }
         }
 
         // Seed demo events, then attempt to discover public JSON feeds when online.
