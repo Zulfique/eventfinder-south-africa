@@ -11,6 +11,7 @@ using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using Npgsql;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -58,7 +59,7 @@ builder.Services.AddDbContext<AppDbContext>(options =>
     }
 
 
-    options.UseNpgsql(connectionString);
+    options.UseNpgsql(NpgsqlConnectionString.Normalize(connectionString));
 });
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
@@ -223,3 +224,42 @@ app.Run();
 
 /// <summary>Exposed for the integration test suite (WebApplicationFactory).</summary>
 public partial class Program;
+
+
+/// <summary>
+/// Normalises a PostgreSQL connection string for Npgsql.
+/// </summary>
+public static class NpgsqlConnectionString
+{
+    public static string Normalize(string connectionString)
+    {
+        var value = connectionString.Trim();
+
+        if (!value.StartsWith("postgres://", StringComparison.OrdinalIgnoreCase) &&
+            !value.StartsWith("postgresql://", StringComparison.OrdinalIgnoreCase))
+        {
+            return value;
+        }
+
+        if (!Uri.TryCreate(value, UriKind.Absolute, out var uri))
+        {
+            return value;
+        }
+
+        var builder = new NpgsqlConnectionStringBuilder
+        {
+            Host = uri.Host,
+            Port = uri.IsDefaultPort ? 5432 : uri.Port,
+            Database = uri.AbsolutePath.Trim('/'),
+            Username = Uri.UnescapeDataString(uri.UserInfo.Split(':')[0]),
+            Password = uri.UserInfo.Contains(':')
+                ? Uri.UnescapeDataString(uri.UserInfo.Split(':')[1])
+                : string.Empty,
+            SslMode = uri.Scheme.Equals("postgresql", StringComparison.OrdinalIgnoreCase)
+                ? SslMode.Require
+                : SslMode.Prefer
+        };
+
+        return builder.ConnectionString;
+    }
+}
