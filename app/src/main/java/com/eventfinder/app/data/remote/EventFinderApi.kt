@@ -47,6 +47,25 @@ data class FirebaseTokenResponse(
     @SerializedName("firebaseToken") val firebaseToken: String
 )
 
+/** Result of a successful blob upload to Cloudflare R2. */
+data class BlobUploadResponse(
+    val url: String,
+    val key: String,
+    @SerializedName("sizeBytes") val sizeBytes: Long = 0L
+)
+
+/** Whether the server has Cloudflare R2 configured. */
+data class BlobStatusResponse(
+    val configured: Boolean = false
+)
+
+/** Payload sent to the blob upload endpoint. */
+data class BlobUploadBody(
+    val fileName: String,
+    val contentBase64: String,
+    val contentType: String? = null
+)
+
 data class ApiAuthResponse(
     val user: ApiUserDto,
     val token: String,
@@ -208,6 +227,21 @@ interface EventFinderApiService {
         @Header("Authorization") bearer: String,
         @Path("id") id: String
     ): retrofit2.Response<ApiEnvelope<Unit>>
+
+    @GET("api/blobs/status")
+    suspend fun blobStatus(): retrofit2.Response<ApiEnvelope<BlobStatusResponse>>
+
+    @POST("api/blobs/upload")
+    suspend fun uploadBlob(
+        @Header("Authorization") bearer: String,
+        @Body body: BlobUploadBody
+    ): retrofit2.Response<ApiEnvelope<BlobUploadResponse>>
+
+    @DELETE("api/blobs/{key}")
+    suspend fun deleteBlob(
+        @Header("Authorization") bearer: String,
+        @Path("key") key: String
+    ): retrofit2.Response<ApiEnvelope<Unit>>
 }
 
 /**
@@ -296,6 +330,43 @@ class EventFinderApiClient(
 
     suspend fun cancelRsvp(bearer: String, eventId: String): Result<Unit> =
         wrap("cancelRsvp") { service.cancelRsvp(bearer, eventId) }
+
+    /**
+     * Uploads [bytes] as an event photo to the server's Cloudflare R2 bucket
+     * and returns the permanent public URL of the stored object.
+     */
+    suspend fun uploadBlob(
+        bearer: String,
+        fileName: String,
+        bytes: ByteArray,
+        contentType: String? = null
+    ): Result<BlobUploadResponse> = wrap("uploadBlob") {
+        service.uploadBlob(
+            bearer,
+            BlobUploadBody(
+                fileName = fileName,
+                contentBase64 = android.util.Base64.encodeToString(bytes, android.util.Base64.NO_WRAP),
+                contentType = contentType
+            )
+        )
+    }
+
+    /** Removes a previously uploaded blob from the server's R2 bucket. */
+    suspend fun deleteBlob(bearer: String, key: String): Result<Unit> =
+        wrap("deleteBlob") { service.deleteBlob(bearer, key) }
+
+    /** True when the server reports that Cloudflare R2 blob storage is configured. */
+    suspend fun blobStorageStatus(): Result<Boolean> {
+        val result = wrap("blobStatus") { service.blobStatus() }
+        return result.map { it.configured }
+    }
+
+    /**
+     * Extracts the R2 bucket key from a stored public URL, or returns null
+     * when the URL does not point at the blob store.
+     */
+    fun blobKeyFromUrl(url: String?): String? =
+        com.eventfinder.app.data.cloud.R2BlobKeys.fromUrl(url)
 
     private suspend fun <T> wrap(
         op: String,

@@ -137,6 +137,10 @@ builder.Services.AddSingleton<TokenService>();
 builder.Services.AddSingleton<FirebaseTokenService>();
 builder.Services.AddHttpClient<GoogleTokenVerifier>();
 builder.Services.AddHttpClient<IEmailService, EmailService>();
+// Cloudflare R2 blob storage (free tier). The service reports itself as
+// unavailable when the R2 credentials are missing, so the app keeps its
+// local-file fallback instead of failing.
+builder.Services.AddSingleton<IBlobStorageService, R2BlobStorageService>();
 
 // Initialize Firebase Admin SDK for custom token generation.
 // The service account JSON can be provided via Firebase:ServiceAccountJson configuration,
@@ -208,17 +212,19 @@ app.MapGet("/", () => Results.Json(new
 })).WithTags("Health");
 
 // API health-check endpoint (used by uptime monitors and Render deploy checks).
-app.MapGet("/health", () => Results.Json(new
+app.MapGet("/health", (IBlobStorageService blobStorage) => Results.Json(new
 {
     status = "Healthy",
     service = "EventFinder.Api",
     utc = DateTime.UtcNow,
     emailConfigured,
     googleConfigured,
+    blobStorageConfigured = blobStorage.IsConfigured,
 })).WithTags("Health");
 
 app.MapAuthEndpoints();
 app.MapEventEndpoints();
+app.MapBlobEndpoints();
 
 app.Run();
 

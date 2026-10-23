@@ -167,13 +167,15 @@ dependencies {
     // ---- Image loading ----
     implementation("io.coil-kt:coil-compose:2.6.0")
 
-    // ---- Firebase (free Spark plan): Firestore NoSQL, Storage blobs, FCM push ----
+    // ---- Firebase (free Spark plan): Firestore NoSQL, FCM push ----
     // The API key inside google-services.json is a public app identifier issued
-    // by Google, not a secret. All three services below are free for this scale.
+    // by Google, not a secret. Both services below are free for this scale.
+    // Blob storage is NOT Firebase: event photos live in Cloudflare R2 (free
+    // tier) and are uploaded through the REST API, so Firebase Storage - which
+    // would require the paid Blaze plan - is not a dependency any more.
     implementation(platform("com.google.firebase:firebase-bom:32.7.4"))
     implementation("com.google.firebase:firebase-auth-ktx")
     implementation("com.google.firebase:firebase-firestore-ktx")
-    implementation("com.google.firebase:firebase-storage-ktx")
     implementation("com.google.firebase:firebase-messaging-ktx")
 
     // ---- Unit testing (run on JVM / GitHub Actions) ----

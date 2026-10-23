@@ -43,3 +43,25 @@ services:
 
       - key: Firebase__ServiceAccountJson
         sync: false
+
+      # Cloudflare R2 - the free blob store for event photos. R2 is
+      # S3-compatible and its free tier (10 GB, 1M/10M operations per month,
+      # zero egress) needs no Blaze billing account.
+      # Create an "Object Read & Write" R2 API token in the Cloudflare
+      # dashboard and paste the credentials here.
+      - key: R2__AccountId
+        sync: false
+
+      - key: R2__AccessKeyId
+        sync: false
+
+      - key: R2__SecretAccessKey
+        sync: false
+
+      - key: R2__BucketName
+        sync: false
+
+      # Optional: a custom public domain for the bucket. When it is empty the
+      # API falls back to https://<account>.r2.cloudflarestorage.com/<bucket>
+      - key: R2__PublicBaseUrl
+        sync: false
