@@ -7,36 +7,36 @@ using Microsoft.EntityFrameworkCore;
 
 namespace EventFinder.Api.Endpoints;
 
-/// <summary>
-/// Blob-storage endpoints backed by Cloudflare R2 (free tier).
-///
-/// The Android app uploads the event photo here instead of talking to
-/// Firebase Cloud Storage directly: Firebase Storage requires the Blaze
-/// plan, while R2 is free and S3-compatible. The API owns the R2
-/// credentials so the private key never reaches the handset.
-/// </summary>
-public static class BlobEndpoints
-{
-    /// <summary>Maximum accepted upload size: 8 MB.</summary>
-    private const long MaxUploadBytes = 8L * 1024 * 1024;
-
-    public static RouteGroupBuilder MapBlobEndpoints(this IEndpointRouteBuilder app)
+    /// <summary>
+    /// Blob-storage endpoints backed by Azure Blob Storage (free tier).
+    ///
+    /// The Android app uploads the event photo here instead of talking to
+    /// Firebase Cloud Storage directly: Firebase Storage requires the Blaze
+    /// plan, while Azure's free tier covers this prototype. The API owns the
+    /// Azure storage credentials so the private key never reaches the handset.
+    /// </summary>
+    public static class BlobEndpoints
     {
-        var group = app.MapGroup("/api/blobs").WithTags("Blobs");
+        /// <summary>Maximum accepted upload size: 8 MB.</summary>
+        private const long MaxUploadBytes = 8L * 1024 * 1024;
 
-        group.MapPost("/upload", UploadAsync).RequireAuthorization();
-        group.MapDelete("/{key}", DeleteAsync).RequireAuthorization();
-        group.MapGet("/status", Status);
-
-        return group;
-    }
-
-    private static IResult Status(IBlobStorageService storage) =>
-        Results.Json(ApiResponse<object>.Ok(new
+        public static RouteGroupBuilder MapBlobEndpoints(this IEndpointRouteBuilder app)
         {
-            configured = storage.IsConfigured,
-            provider = "cloudflare-r2",
-        }));
+            var group = app.MapGroup("/api/blobs").WithTags("Blobs");
+
+            group.MapPost("/upload", UploadAsync).RequireAuthorization();
+            group.MapDelete("/{key}", DeleteAsync).RequireAuthorization();
+            group.MapGet("/status", Status);
+
+            return group;
+        }
+
+        private static IResult Status(IBlobStorageService storage) =>
+            Results.Json(ApiResponse<object>.Ok(new
+            {
+                configured = storage.IsConfigured,
+                provider = "azure-blob-storage",
+            }));
 
     private static async Task<IResult> UploadAsync(
         BlobUploadRequest request,

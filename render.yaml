@@ -44,24 +44,22 @@ services:
       - key: Firebase__ServiceAccountJson
         sync: false
 
-      # Cloudflare R2 - the free blob store for event photos. R2 is
-      # S3-compatible and its free tier (10 GB, 1M/10M operations per month,
-      # zero egress) needs no Blaze billing account.
-      # Create an "Object Read & Write" R2 API token in the Cloudflare
-      # dashboard and paste the credentials here.
-      - key: R2__AccountId
+      # Azure Blob Storage - the free blob store for event photos.
+      # Azure's free tier (5 GB LRS storage, 20k reads / 10k writes /
+      # 15 GB egress per month) needs no billing account and is enough
+      # for this prototype app.
+      # Create a Storage Account (locally-redundant, LRS, free tier) in
+      # the Azure Portal, enable "Blob (anonymous) read access" on the
+      # account, create a blob container named "event-images", and set
+      # the container's public access level to "Blob" (anonymous read).
+      # Then find the "Connection string" under Access Keys and paste it here.
+      - key: AzureStorage__ConnectionString
         sync: false
 
-      - key: R2__AccessKeyId
+      - key: AzureStorage__ContainerName
         sync: false
 
-      - key: R2__SecretAccessKey
-        sync: false
-
-      - key: R2__BucketName
-        sync: false
-
-      # Optional: a custom public domain for the bucket. When it is empty the
-      # API falls back to https://<account>.r2.cloudflarestorage.com/<bucket>
-      - key: R2__PublicBaseUrl
+      # Optional: a custom public domain or CDN for the container.
+      # When empty the API falls back to the Azure blob service URL.
+      - key: AzureStorage__PublicBaseUrl
         sync: false

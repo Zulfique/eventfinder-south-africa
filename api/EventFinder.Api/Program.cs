@@ -137,10 +137,10 @@ builder.Services.AddSingleton<TokenService>();
 builder.Services.AddSingleton<FirebaseTokenService>();
 builder.Services.AddHttpClient<GoogleTokenVerifier>();
 builder.Services.AddHttpClient<IEmailService, EmailService>();
-// Cloudflare R2 blob storage (free tier). The service reports itself as
-// unavailable when the R2 credentials are missing, so the app keeps its
-// local-file fallback instead of failing.
-builder.Services.AddSingleton<IBlobStorageService, R2BlobStorageService>();
+// Azure Blob Storage (free tier). The service reports itself as
+// unavailable when the Azure credentials are missing, so the app keeps
+// its local-file fallback instead of failing.
+builder.Services.AddSingleton<IBlobStorageService, AzureBlobStorageService>();
 
 // Initialize Firebase Admin SDK for custom token generation.
 // The service account JSON can be provided via Firebase:ServiceAccountJson configuration,
