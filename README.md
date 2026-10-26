@@ -58,7 +58,7 @@ paid infrastructure; Firebase Storage is optional and falls back to local file s
 | **Event alerts** | On-device notifications flag newly added or changed events in the local Room catalogue — computed by a pure diff, no push service required. |
 | **Cloud sync** | User-created events, favourites and RSVPs sync bidirectionally with **Cloud Firestore** (NoSQL) — automatically, whenever connectivity returns. |
 | **Real-time push** | **Firebase Cloud Messaging** delivers live updates to the `new_events` topic; devices auto-subscribe on launch. |
-| **Blob storage** | Event photos upload to **Firebase Cloud Storage**; when Storage is unavailable (requires Blaze billing) they are stored in local internal file storage instead — nothing breaks. |
+| **Blob storage** | Event photos upload to **Azure Blob Storage** through the REST API; when the API is unreachable they are stored in local internal file storage instead — nothing breaks. |
 
 ## Screenshots
 
@@ -93,7 +93,7 @@ emulator at 1080 × 2340.
 | Cloud NoSQL | **Cloud Firestore** | Bidirectional sync of user-created events, favourites and RSVPs. Free Spark plan, owner-scoped secure rules + anonymous auth. |
 | Backend | **ASP.NET Core 8 Minimal API** (`api/`) | Verified auth (register / login / Google), two-step password reset, public event catalogue, multi-user RSVP. EF Core + Npgsql (PostgreSQL), deploys on Render free tier. |
 | Google sign-in | **AndroidX Credential Manager** | Returns a Google ID token verified server-side (audience + signature) before a JWT is issued. |
-| Blob storage | **Firebase Cloud Storage** | Event photos stored as blobs; graceful fallback to local internal storage when Storage is not enabled (requires Blaze). |
+| Blob storage | **Azure Blob Storage** | Event photos stored as blobs through the API, so the storage account key never reaches the handset; graceful fallback to local internal storage when Azure is unreachable. |
 | Push notifications | **Firebase Cloud Messaging** | Real-time `new_events` topic pushes; free, no server needed for console sends. |
 | Preferences | **DataStore Preferences 1.0** | Async, type-safe key/value storage for settings & session. |
 | Networking | **Retrofit 2.9 + OkHttp 4.12 + Gson** | Industry standard REST client with logging interceptor. |
@@ -434,7 +434,7 @@ CI never depends on a secret to compile — all external APIs are keyless, and t
 ```
 app/src/main/java/com/eventfinder/app/
 ├── data/
-│   ├── cloud/          FirebaseStatus, CloudSyncManager, FirebaseImageUploader, SyncCoordinator, TaskAwait
+│   ├── cloud/          FirebaseStatus, CloudSyncManager, AzureImageUploader, AzureBlobKeys, SyncCoordinator, TaskAwait
 │   ├── local/          Room entities, DAOs, database + entity↔domain mappers
 │   ├── remote/         Retrofit services, DTOs, API client (Open-Meteo + Overpass + public JSON + EventFinder backend)
 │   ├── remote/dto/     Public JSON event DTOs with multi-format field resolution
@@ -468,7 +468,7 @@ docs/screenshots/                        Real device screenshots
 | External library integration | Room, Retrofit/OkHttp, DataStore, Coil, osmdroid, AndroidX Biometric, Credential Manager, Firebase |
 | Native Android SDK integration | `AlarmManager` + `NotificationManager` reminders, `LocationManager`/location permissions, biometrics |
 | Offline-first / robustness | Room cache + local event catalogue, graceful fallbacks, validation on every form |
-| **Blob storage** | `FirebaseImageUploader` - uploads to Firebase Cloud Storage; falls back to local internal file storage when Storage is unavailable (requires Blaze) |
+| **Blob storage** | `AzureImageUploader` - uploads to Azure Blob Storage through the REST API; falls back to local internal file storage when the API is unreachable |
 | **NoSQL database (store)** | `CloudSyncManager.pushLocalChanges` — Firestore writes for events, favourites, RSVPs |
 | **NoSQL database (read)** | `CloudSyncManager.pullRemoteChanges` — Firestore reads merged into Room |
 | **Biometric authentication** | `security/BiometricAuth.kt` — AndroidX BiometricPrompt, BIOMETRIC_STRONG |
@@ -540,7 +540,7 @@ app), not a secret.
 | --- | --- | --- |
 | **Cloud Firestore** | NoSQL database (store + read) | Spark (free): 1 GiB storage, 50 K reads / 20 K writes per day |
 | **Cloud Messaging** | Real-time push notifications | Spark (free): unlimited message volume |
-| **Cloud Storage** | Blob storage | **Requires Blaze billing** (Google policy change). The app degrades gracefully to local internal file storage via `FirebaseStatus` when Storage is unavailable — event photos still work offline on-device. |
+| **Cloud Storage** | Blob storage | **Not used** — Google requires the Blaze plan for Cloud Storage. Event photos go to **Azure Blob Storage** through the API instead, and fall back to local internal file storage when Azure is unreachable, so photos keep working offline. |
 
 ### Project status
 
@@ -553,7 +553,9 @@ This repository is wired to a live Firebase project:
   (`request.auth.uid == userId`) — the app signs in anonymously before syncing and keys every
   document path by the Firebase auth uid
 - **FCM:** enabled; devices auto-subscribe to the `new_events` topic
-- **Storage:** not enabled (requires Blaze). `FirebaseImageUploader` falls back to local storage.
+- **Storage:** Firebase Storage not enabled (requires Blaze). Event photos are stored in
+  Azure Blob Storage instead; `AzureImageUploader` falls back to local storage when the API
+  is unreachable.
 - **Google sign-in:** enabled in **Authentication → Sign-in method → Google**; the OAuth consent
   screen is **In production / External**, so any user can sign in (no test-user limit).
   The API verifies the returned ID token server-side against
@@ -657,8 +659,10 @@ them means you can never update the published app.
   (`GET /api/events/{id}/attendees`); there is still no organiser approve/reject workflow.
 - **Google sign-in** needs an OAuth web client ID (`GOOGLE_SERVER_CLIENT_ID`) and a Firebase
   project with Google sign-in enabled; the button is hidden until configured.
-- **Firebase Cloud Storage** requires the Blaze plan (item 21) — event photos use local
-  internal storage fallback, or can be served by the API itself.
+- **Azure Blob Storage** holds event photos, uploaded through the API. The storage account
+  must have "Allow Blob public access" enabled and its container must allow anonymous blob
+  read, otherwise photo URLs return 403; when Azure is unreachable the app keeps its local
+  internal storage fallback.
 - **Render free tier** – the backend sleeps after ~15 min idle (30–60 s cold start); persistent user
   data lives in the configured Neon PostgreSQL database, not the Render container filesystem.
 - **Password reset email** requires a Brevo API key in production (`Brevo__ApiKey`); without it

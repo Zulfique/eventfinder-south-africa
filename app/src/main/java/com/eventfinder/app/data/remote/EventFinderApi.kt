@@ -47,14 +47,14 @@ data class FirebaseTokenResponse(
     @SerializedName("firebaseToken") val firebaseToken: String
 )
 
-/** Result of a successful blob upload to Cloudflare R2. */
+/** Result of a successful blob upload to Azure Blob Storage. */
 data class BlobUploadResponse(
     val url: String,
     val key: String,
     @SerializedName("sizeBytes") val sizeBytes: Long = 0L
 )
 
-/** Whether the server has Cloudflare R2 configured. */
+/** Whether the server has Azure Blob Storage configured. */
 data class BlobStatusResponse(
     val configured: Boolean = false
 )
@@ -332,7 +332,7 @@ class EventFinderApiClient(
         wrap("cancelRsvp") { service.cancelRsvp(bearer, eventId) }
 
     /**
-     * Uploads [bytes] as an event photo to the server's Cloudflare R2 bucket
+     * Uploads [bytes] as an event photo to the server's Azure blob container
      * and returns the permanent public URL of the stored object.
      */
     suspend fun uploadBlob(
@@ -351,22 +351,22 @@ class EventFinderApiClient(
         )
     }
 
-    /** Removes a previously uploaded blob from the server's R2 bucket. */
+    /** Removes a previously uploaded blob from the server's Azure container. */
     suspend fun deleteBlob(bearer: String, key: String): Result<Unit> =
         wrap("deleteBlob") { service.deleteBlob(bearer, key) }
 
-    /** True when the server reports that Cloudflare R2 blob storage is configured. */
+    /** True when the server reports that Azure Blob Storage is configured. */
     suspend fun blobStorageStatus(): Result<Boolean> {
         val result = wrap("blobStatus") { service.blobStatus() }
         return result.map { it.configured }
     }
 
     /**
-     * Extracts the R2 bucket key from a stored public URL, or returns null
+     * Extracts the container key from a stored public URL, or returns null
      * when the URL does not point at the blob store.
      */
     fun blobKeyFromUrl(url: String?): String? =
-        com.eventfinder.app.data.cloud.R2BlobKeys.fromUrl(url)
+        com.eventfinder.app.data.cloud.AzureBlobKeys.fromUrl(url)
 
     private suspend fun <T> wrap(
         op: String,

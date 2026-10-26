@@ -426,3 +426,69 @@ public class EventTests : IClassFixture<ApiFactory>
         Assert.Equal(0, afterCancel.Data.GetArrayLength());
     }
 }
+
+/// <summary>
+/// Blob keys are hierarchical (<c>event_images/&lt;userId&gt;/&lt;file&gt;.png</c>), so the delete
+/// route has to accept a multi-segment, percent-encoded key. Before it was a catch-all
+/// route these requests never reached the handler: a slash-containing key 404'd at
+/// routing, and an encoded key was rejected by the ownership check. The test host has no
+/// Azure credentials, so reaching the endpoint is observable as 503 Service Unavailable.
+/// </summary>
+public class BlobEndpointRoutingTests : IClassFixture<ApiFactory>
+{
+    private readonly ApiFactory _factory;
+
+    public BlobEndpointRoutingTests(ApiFactory factory) => _factory = factory;
+
+    [Fact]
+    public async Task Delete_accepts_a_hierarchical_key_that_the_client_percent_encoded()
+    {
+        var client = _factory.CreateClient();
+        await client.AuthenticateAsync(_factory, $"blob-{Guid.NewGuid():N}@example.com");
+
+        // Exactly what Retrofit's default @Path("key") encoding produces.
+        var key = $"event_images/{Guid.NewGuid()}/{Guid.NewGuid():N}.png";
+        var encoded = Uri.EscapeDataString(key);
+
+        var response = await client.DeleteAsync($"/api/blobs/{encoded}");
+
+        Assert.Equal(System.Net.HttpStatusCode.ServiceUnavailable, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Delete_accepts_a_key_whose_slashes_are_still_literal()
+    {
+        var client = _factory.CreateClient();
+        await client.AuthenticateAsync(_factory, $"blob-{Guid.NewGuid():N}@example.com");
+
+        var key = $"event_images/{Guid.NewGuid()}/{Guid.NewGuid():N}.png";
+
+        var response = await client.DeleteAsync($"/api/blobs/{key}");
+
+        Assert.Equal(System.Net.HttpStatusCode.ServiceUnavailable, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Delete_without_credentials_is_unauthorized_rather_than_not_found()
+    {
+        var client = _factory.CreateClient();
+
+        var key = $"event_images/{Guid.NewGuid()}/{Guid.NewGuid():N}.png";
+
+        var response = await client.DeleteAsync($"/api/blobs/{Uri.EscapeDataString(key)}");
+
+        Assert.Equal(System.Net.HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Status_reports_the_provider_the_app_switches_on()
+    {
+        var client = _factory.CreateClient();
+
+        var envelope = await (await client.GetAsync("/api/blobs/status")).ReadEnvelopeAsync();
+
+        Assert.True(envelope.Success);
+        Assert.Equal("azure-blob-storage", envelope.Data.GetProperty("provider").GetString());
+        Assert.False(envelope.Data.GetProperty("configured").GetBoolean());
+    }
+}

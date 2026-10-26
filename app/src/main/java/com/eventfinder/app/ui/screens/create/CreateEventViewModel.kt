@@ -8,7 +8,7 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import android.content.Context
 import android.net.Uri
 import com.eventfinder.app.R
-import com.eventfinder.app.data.cloud.R2ImageUploader
+import com.eventfinder.app.data.cloud.AzureImageUploader
 import com.eventfinder.app.data.repository.AuthRepository
 import com.eventfinder.app.data.repository.EventRepository
 import com.eventfinder.app.data.repository.IMAGE_REMOVED
@@ -107,7 +107,7 @@ class CreateEventViewModel(
     private val eventRepository: EventRepository,
     private val authRepository: AuthRepository,
     private val eventId: String? = null,
-    private val imageUploader: R2ImageUploader? = null,
+    private val imageUploader: AzureImageUploader? = null,
     private val placeResolver: PlaceResolver? = null
 ) : ViewModel() {
 
@@ -259,9 +259,9 @@ class CreateEventViewModel(
             }
 
             // Blob storage: if a local photo was picked, upload it to
-            // Cloudflare R2 (through the REST API, which owns the R2
+            // Azure Blob Storage (through the REST API, which owns the storage
             // credentials) and use the permanent public URL. Falls back to
-            // the local file URI when R2 is unavailable or the upload
+            // the local file URI when Azure is unavailable or the upload
             // fails, so the flow never crashes and works fully offline.
             var imageUrl = state.imageUrl
             if (imageUrl != null &&

@@ -1,191 +1,398 @@
 using Azure;
 using Azure.Storage.Blobs;
 using Azure.Storage.Blobs.Models;
-using Azure.Storage.Blobs.Specialized;
-using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 
 namespace EventFinder.Api.Services;
 
 /// <summary>
-/// Blob storage backed by <b>Azure Storage Accounts (Azure Blob Storage)</b>.
+/// Azure Blob Storage backing for the event-photo uploads.
 ///
-/// Azure's free tier covers 5 GB of LRS blob storage plus 20,000 reads,
-/// 10,000 writes and 15 GB of egress per month — ample headroom for this
-/// prototype app and, crucially, it needs no billing/Blaze-style account.
+/// Replaces the previous Cloudflare R2 implementation: Azure Storage is used
+/// instead because the project runs on an Azure for Students subscription,
+/// whose credit covers this app's usage. Like R2, the credentials never reach
+/// the handset - the API owns the connection string and exposes only a small
+/// authenticated upload/delete surface, and the phone stores the resulting
+/// public URL.
 ///
-/// The service is configured with environment variables that map to the
-/// <c>AzureStorage</c> configuration section:
-/// <list type="bullet">
-///   <item><description><c>AzureStorage__ConnectionString</c> - the Azure Storage connection string.</description></item>
-///   <item><description><c>AzureStorage__ContainerName</c> - the blob container that stores event photos.</description></item>
-///   <item><description><c>AzureStorage__PublicBaseUrl</c> - optional custom domain for the container; defaults to the blob service URL.</description></item>
-/// </list>
-///
-/// When the credentials are missing the service reports itself as
-/// unavailable and every call returns <c>null</c> / fails softly, so the
-/// Android app keeps its local-file fallback and nothing breaks.
+/// The service reports itself as <see cref="IsConfigured"/> only when both the
+/// connection string and the container name are present, so a half-configured
+/// Render service degrades to its "storage unavailable" answers instead of
+/// failing every request.
 /// </summary>
-public interface IBlobStorageService
+public sealed class AzureBlobStorageService : IBlobStorageService, IDisposable
 {
-    /// <summary>True when blob credentials are configured and the service can be used.</summary>
-    bool IsConfigured { get; }
+    private readonly string? _connectionString;
+    private readonly string _containerName;
+    private readonly string? _publicBaseUrl;
+    private readonly ILogger? _logger;
 
     /// <summary>
-    /// Uploads [content] to the container under [key] and returns the permanent
-    /// public URL, or <c>null</c> when blob storage is not configured or the upload failed.
+    /// Lazily created container client. A malformed connection string makes the
+    /// factory return null rather than throwing, so a bad secret reports "not
+    /// configured" instead of turning every request into a 500.
     /// </summary>
-    Task<string?> UploadAsync(string key, byte[] content, string contentType, CancellationToken ct = default);
+    private readonly Lazy<BlobContainerClient?> _client;
 
-    /// <summary>Best-effort removal of a previously uploaded object.</summary>
-    Task<bool> DeleteAsync(string key, CancellationToken ct = default);
+    private readonly SemaphoreSlim _containerLock = new(1, 1);
+    private bool _containerEnsured;
+    private bool _disposed;
 
-    /// <summary>
-    /// Maps a stored public URL back to its blob key, or returns <c>null</c>
-    /// when the URL does not belong to this container.
-    /// </summary>
-    string? KeyFromUrl(string? url);
-}
-
-public class AzureBlobStorageService : IBlobStorageService, IDisposable
-{
-    private readonly IConfiguration _configuration;
-    private readonly ILogger<AzureBlobStorageService> _logger;
-    private readonly Lazy<BlobContainerClient?> _container;
-
-    public AzureBlobStorageService(IConfiguration configuration, ILogger<AzureBlobStorageService> logger)
+    public AzureBlobStorageService(
+        IConfiguration configuration,
+        ILogger<AzureBlobStorageService>? logger = null)
     {
-        _configuration = configuration;
         _logger = logger;
-        _container = new Lazy<BlobContainerClient?>(CreateContainerClient, LazyThreadSafetyMode.ExecutionAndPublication);
+
+        var connectionString = configuration["AzureStorage:ConnectionString"]?.Trim();
+        _connectionString = string.IsNullOrWhiteSpace(connectionString)
+            ? null
+            : connectionString;
+
+        var containerName = configuration["AzureStorage:ContainerName"]?.Trim();
+        _containerName = string.IsNullOrWhiteSpace(containerName)
+            ? string.Empty
+            : containerName!;
+
+        var publicBaseUrl = configuration["AzureStorage:PublicBaseUrl"]?.Trim();
+        _publicBaseUrl = string.IsNullOrWhiteSpace(publicBaseUrl)
+            ? null
+            : publicBaseUrl.TrimEnd('/');
+
+        // Only derive a base URL once a container is known, otherwise the
+        // derived value would be meaningless and KeyFromUrl would start
+        // matching foreign URLs. (_client is not built yet here, so the gate
+        // is repeated on the local values rather than going through
+        // IsConfigured.)
+        if (_publicBaseUrl is null &&
+            _connectionString is not null &&
+            _containerName.Length > 0)
+        {
+            _publicBaseUrl = DerivePublicBaseUrl(_connectionString, _containerName);
+        }
+
+        _client = new Lazy<BlobContainerClient?>(
+            CreateContainerClient,
+            LazyThreadSafetyMode.ExecutionAndPublication);
     }
 
+    /// <inheritdoc />
     public bool IsConfigured =>
-        !string.IsNullOrWhiteSpace(ConnectionString) &&
-        !string.IsNullOrWhiteSpace(ContainerName);
+        _connectionString is { Length: > 0 } &&
+        _containerName.Length > 0 &&
+        _client.Value is not null;
 
-    private string? ConnectionString => _configuration["AzureStorage:ConnectionString"];
-    private string? ContainerName => _configuration["AzureStorage:ContainerName"];
-
-    /// <summary>
-    /// Public base URL for the container. Defaults to the Azure blob service
-    /// endpoint and can be overridden with <c>AzureStorage:PublicBaseUrl</c>
-    /// when a custom domain or CDN front is configured.
-    /// </summary>
-    private string PublicBaseUrl
+    /// <inheritdoc />
+    public async Task<string?> UploadAsync(
+        string key,
+        byte[] content,
+        string contentType,
+        CancellationToken cancellationToken = default)
     {
-        get
+        if (string.IsNullOrWhiteSpace(key) || content is null || content.Length == 0)
         {
-            var configured = _configuration["AzureStorage:PublicBaseUrl"];
-            if (!string.IsNullOrWhiteSpace(configured))
-            {
-                return configured.TrimEnd('/');
-            }
-
-            var client = _container.Value;
-            return client?.Uri.ToString().TrimEnd('/') ?? string.Empty;
-        }
-    }
-
-    private BlobContainerClient? CreateContainerClient()
-    {
-        if (!IsConfigured)
-        {
-            _logger.LogWarning("Azure Blob Storage is not configured — blob uploads fall back to local file storage.");
             return null;
         }
 
-        try
+        if (_client.Value is not BlobContainerClient client)
         {
-            var blobServiceClient = new BlobServiceClient(ConnectionString!);
-            var client = blobServiceClient.GetBlobContainerClient(ContainerName!);
-
-            // Create the container if it does not already exist so the first
-            // upload succeeds without a manual provisioning step.
-            client.CreateIfNotExists(PublicAccessType.Blob);
-
-            _logger.LogInformation("Azure Blob Storage container ready: {Container}", ContainerName);
-            return client;
-        }
-        catch (RequestFailedException ex)
-        {
-            _logger.LogError(ex, "Failed to build the Azure Blob Storage client (HTTP {Status}).", ex.Status);
             return null;
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to build the Azure Blob Storage client.");
-            return null;
-        }
-    }
 
-    public async Task<string?> UploadAsync(string key, byte[] content, string contentType, CancellationToken ct = default)
-    {
-        var container = _container.Value;
-        if (container is null || content.Length == 0)
+        var normalizedKey = NormalizeKey(key);
+        if (normalizedKey.Length == 0)
         {
             return null;
         }
 
         try
         {
+            await EnsureContainerAsync(client, cancellationToken);
+
+            // The blob name is the key verbatim, so the public URL is simply
+            // {PublicBaseUrl}/{key}.
+            var blob = client.GetBlobClient(normalizedKey);
+
             using var stream = new MemoryStream(content, writable: false);
-            var blob = container.GetBlobClient(key);
+            await blob.UploadAsync(
+                stream,
+                new BlobUploadOptions
+                {
+                    HttpHeaders = new BlobHttpHeaders { ContentType = contentType }
+                },
+                cancellationToken);
 
-            await blob.UploadAsync(stream, overwrite: true, cancellationToken: ct);
-            await blob.SetHttpHeadersAsync(new BlobHttpHeaders { ContentType = contentType }, null, ct);
-
-            var url = $"{PublicBaseUrl}/{key}";
-            _logger.LogInformation("Uploaded blob to Azure Blob Storage: {Key}", key);
-            return url;
+            var baseUrl = _publicBaseUrl ?? blob.Uri.GetLeftPart(UriPartial.Authority);
+            return $"{baseUrl.TrimEnd('/')}/{normalizedKey}";
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
         }
         catch (RequestFailedException ex)
         {
-            _logger.LogError(ex, "Azure upload failed for {Key} (HTTP {Status}).", key, ex.Status);
-            return null;
+            AppLoggerWarn(
+                $"Azure Blob upload failed for '{key}': {ex.Status} {ex.Message}");
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Azure upload failed for {Key}.", key);
-            return null;
-        }
-    }
-
-    public async Task<bool> DeleteAsync(string key, CancellationToken ct = default)
-    {
-        var container = _container.Value;
-        if (container is null) return false;
-
-        try
-        {
-            var blob = container.GetBlobClient(key);
-            await blob.DeleteIfExistsAsync(cancellationToken: ct);
-            _logger.LogInformation("Deleted blob from Azure Blob Storage: {Key}", key);
-            return true;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Azure blob delete skipped for {Key}.", key);
-            return false;
-        }
-    }
-
-    public string? KeyFromUrl(string? url)
-    {
-        if (string.IsNullOrWhiteSpace(url)) return null;
-        if (!url.StartsWith("http", StringComparison.OrdinalIgnoreCase)) return null;
-
-        var baseUrl = PublicBaseUrl;
-        if (!string.IsNullOrWhiteSpace(baseUrl) && url.StartsWith(baseUrl, StringComparison.OrdinalIgnoreCase))
-        {
-            var key = url[baseUrl.Length..].TrimStart('/');
-            return string.IsNullOrWhiteSpace(key) ? null : Uri.UnescapeDataString(key);
+            AppLoggerWarn($"Azure Blob upload failed for '{key}': {ex.Message}");
         }
 
         return null;
     }
 
+    /// <inheritdoc />
+    public async Task<bool> DeleteAsync(string key, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(key))
+        {
+            return false;
+        }
+
+        if (_client.Value is not BlobContainerClient client)
+        {
+            return false;
+        }
+
+        try
+        {
+            var blob = client.GetBlobClient(NormalizeKey(key));
+            var response = await blob.DeleteIfExistsAsync(
+                DeleteSnapshotsOption.IncludeSnapshots,
+                cancellationToken: cancellationToken);
+
+            if (response.Value)
+            {
+                return true;
+            }
+
+            // The container may not exist yet, which means neither does the
+            // blob - a delete of an absent blob still succeeds semantically.
+            return await ContainerExistsAsync(client, cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (RequestFailedException ex)
+        {
+            // 404 means "already gone", which is the state we want.
+            if (ex.Status == 404)
+            {
+                return true;
+            }
+
+            AppLoggerWarn(
+                $"Azure Blob delete failed for '{key}': {ex.Status} {ex.Message}");
+            return false;
+        }
+        catch (Exception ex)
+        {
+            AppLoggerWarn($"Azure Blob delete failed for '{key}': {ex.Message}");
+            return false;
+        }
+    }
+
+    /// <inheritdoc />
+    public string? KeyFromUrl(string? url)
+    {
+        if (string.IsNullOrWhiteSpace(url))
+        {
+            return null;
+        }
+
+        var baseUrl = _publicBaseUrl;
+        if (string.IsNullOrWhiteSpace(baseUrl))
+        {
+            return null;
+        }
+
+        baseUrl = baseUrl.TrimEnd('/');
+
+        // Strip a SAS or cache-busting query string before comparing, so a
+        // signed download URL still maps back to its own key.
+        var path = url;
+        var queryStart = path.IndexOf('?', StringComparison.Ordinal);
+        if (queryStart >= 0)
+        {
+            path = path.Substring(0, queryStart);
+        }
+
+        var fragmentStart = path.IndexOf('#', StringComparison.Ordinal);
+        if (fragmentStart >= 0)
+        {
+            path = path.Substring(0, fragmentStart);
+        }
+
+        // Require an exact segment boundary: "eventphotos-dev/..." must not be
+        // mistaken for an object inside the "eventphotos" container.
+        if (path.Length <= baseUrl.Length ||
+            !path.StartsWith(baseUrl, StringComparison.Ordinal) ||
+            path[baseUrl.Length] != '/')
+        {
+            return null;
+        }
+
+        var key = path.Substring(baseUrl.Length).TrimStart('/');
+        if (string.IsNullOrWhiteSpace(key))
+        {
+            return null;
+        }
+
+        try
+        {
+            return Uri.UnescapeDataString(key);
+        }
+        catch (UriFormatException)
+        {
+            // A malformed escape sequence is not a key this service produced.
+            return null;
+        }
+    }
+
+    /// <summary>Releases the synchronisation primitive held by this service.</summary>
     public void Dispose()
     {
-        // Nothing to dispose manually — Azure SDK clients are lazy and pooled.
+        if (_disposed)
+        {
+            return;
+        }
+
+        _disposed = true;
+        _containerLock.Dispose();
+        GC.SuppressFinalize(this);
+    }
+
+    /// <summary>
+    /// Normalises a key to the canonical form used for both writes and reads.
+    /// </summary>
+    private static string NormalizeKey(string key)
+    {
+        var normalized = key.Trim().Replace('\\', '/').TrimStart('/');
+        while (normalized.Contains("//"))
+        {
+            normalized = normalized.Replace("//", "/");
+        }
+
+        return normalized;
+    }
+
+    private BlobContainerClient? CreateContainerClient()
+    {
+        if (_connectionString is null || _containerName.Length == 0)
+        {
+            return null;
+        }
+
+        try
+        {
+            return new BlobContainerClient(_connectionString, _containerName);
+        }
+        catch (Exception ex)
+        {
+            AppLoggerWarn($"Azure Blob connection string rejected: {ex.Message}");
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Derives the public base URL from the connection string when the operator
+    /// does not set <c>AzureStorage:PublicBaseUrl</c>. The container URI is used rather
+    /// than just the host, so a path-prefixed custom endpoint keeps working.
+    /// </summary>
+    private static string? DerivePublicBaseUrl(string connectionString, string containerName)
+    {
+        try
+        {
+            var service = new BlobServiceClient(connectionString);
+            return service.GetBlobContainerClient(containerName).Uri.ToString().TrimEnd('/');
+        }
+        catch
+        {
+            // A malformed connection string must not crash startup; UploadAsync
+            // falls back to the blob's own URI after a real upload has happened.
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Creates the container on first use and makes its blobs readable through a
+    /// public URL, which is how event photos are served to the app.
+    ///
+    /// Failures are logged but not rethrown: when Azure is unreachable or the
+    /// account rejects public access, <see cref="UploadAsync"/> still attempts
+    /// the upload and the caller keeps its local-file fallback.
+    /// </summary>
+    private async Task EnsureContainerAsync(
+        BlobContainerClient client,
+        CancellationToken cancellationToken)
+    {
+        if (_containerEnsured)
+        {
+            return;
+        }
+
+        await _containerLock.WaitAsync(cancellationToken);
+        try
+        {
+            if (_containerEnsured)
+            {
+                return;
+            }
+
+            await client.CreateIfNotExistsAsync(
+                PublicAccessType.Blob,
+                cancellationToken: cancellationToken);
+
+            // CreateIfNotExists is a no-op when the container already exists, so
+            // re-apply the ACL explicitly - the account-level "Allow Blob public
+            // access" switch must be on for this to stick.
+            await client.SetAccessPolicyAsync(
+                PublicAccessType.Blob,
+                cancellationToken: cancellationToken);
+
+            _containerEnsured = true;
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (RequestFailedException ex)
+        {
+            AppLoggerWarn(
+                "Could not prepare the Azure Blob container (status " + ex.Status +
+                "): " + ex.Message +
+                " - check that the storage account has 'Allow Blob public access' enabled.");
+        }
+        catch (Exception ex)
+        {
+            AppLoggerWarn("Could not prepare the Azure Blob container: " + ex.Message);
+        }
+        finally
+        {
+            _containerLock.Release();
+        }
+    }
+
+    private async Task<bool> ContainerExistsAsync(
+        BlobContainerClient client,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var response = await client.ExistsAsync(cancellationToken);
+            return response.Value;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <summary>Writes a diagnostic to the host log, when a logger was supplied.</summary>
+    private void AppLoggerWarn(string message)
+    {
+        _logger?.LogWarning("{Message}", message);
     }
 }

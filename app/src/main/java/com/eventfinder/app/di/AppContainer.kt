@@ -2,7 +2,7 @@ package com.eventfinder.app.di
 
 import android.content.Context
 import com.eventfinder.app.data.cloud.CloudSyncManager
-import com.eventfinder.app.data.cloud.R2ImageUploader
+import com.eventfinder.app.data.cloud.AzureImageUploader
 import com.eventfinder.app.data.cloud.SyncCoordinator
 import com.eventfinder.app.data.local.AppDatabase
 import com.eventfinder.app.data.remote.ApiClient
@@ -59,11 +59,11 @@ class AppContainer(context: Context) {
     }
 
     /**
-     * Blob storage uploader (Cloudflare R2 via the REST API). Replaces the
+     * Blob storage uploader (Azure Blob Storage via the REST API). Replaces the
      * Firebase Storage uploader, which required the paid Blaze plan.
      */
-    val imageUploader: R2ImageUploader by lazy {
-        R2ImageUploader(
+    val imageUploader: AzureImageUploader by lazy {
+        AzureImageUploader(
             context = appContext,
             api = eventFinderApiClient,
             session = preferences

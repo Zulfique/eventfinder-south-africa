@@ -44,22 +44,22 @@ services:
       - key: Firebase__ServiceAccountJson
         sync: false
 
-      # Azure Blob Storage - the free blob store for event photos.
-      # Azure's free tier (5 GB LRS storage, 20k reads / 10k writes /
-      # 15 GB egress per month) needs no billing account and is enough
-      # for this prototype app.
-      # Create a Storage Account (locally-redundant, LRS, free tier) in
-      # the Azure Portal, enable "Blob (anonymous) read access" on the
-      # account, create a blob container named "event-images", and set
-      # the container's public access level to "Blob" (anonymous read).
-      # Then find the "Connection string" under Access Keys and paste it here.
+      # Azure Blob Storage - the store for event photos. The Azure for Students
+      # subscription covers this account; a general-purpose v2 account with LRS
+      # hot blobs runs about $0.018/GB-month, so the $100 credit lasts.
+      # Azure portal -> Storage account -> Security + networking -> Access keys
+      # -> Connection string, pasted below (never committed).
+      # The account must have "Allow Blob public access" enabled and the
+      # container must exist with Blob (anonymous read) access, otherwise the
+      # photo URLs return 403.
       - key: AzureStorage__ConnectionString
         sync: false
 
       - key: AzureStorage__ContainerName
         sync: false
 
-      # Optional: a custom public domain or CDN for the container.
-      # When empty the API falls back to the Azure blob service URL.
+      # Optional: a custom public domain or CDN in front of the account. When
+      # it is empty the API falls back to
+      # https://<account>.blob.core.windows.net/<container>
       - key: AzureStorage__PublicBaseUrl
         sync: false

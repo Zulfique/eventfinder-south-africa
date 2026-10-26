@@ -7,36 +7,39 @@ using Microsoft.EntityFrameworkCore;
 
 namespace EventFinder.Api.Endpoints;
 
-    /// <summary>
-    /// Blob-storage endpoints backed by Azure Blob Storage (free tier).
-    ///
-    /// The Android app uploads the event photo here instead of talking to
-    /// Firebase Cloud Storage directly: Firebase Storage requires the Blaze
-    /// plan, while Azure's free tier covers this prototype. The API owns the
-    /// Azure storage credentials so the private key never reaches the handset.
-    /// </summary>
-    public static class BlobEndpoints
+/// <summary>
+/// Blob-storage endpoints backed by Azure Blob Storage.
+///
+/// The Android app uploads the event photo here instead of talking to a
+/// cloud storage service directly. The API owns the storage credentials so
+/// the account key never reaches the handset, and the phone only ever
+/// handles the resulting public URL.
+/// </summary>
+public static class BlobEndpoints
+{
+    /// <summary>Maximum accepted upload size: 8 MB.</summary>
+    private const long MaxUploadBytes = 8L * 1024 * 1024;
+
+    public static RouteGroupBuilder MapBlobEndpoints(this IEndpointRouteBuilder app)
     {
-        /// <summary>Maximum accepted upload size: 8 MB.</summary>
-        private const long MaxUploadBytes = 8L * 1024 * 1024;
+        var group = app.MapGroup("/api/blobs").WithTags("Blobs");
 
-        public static RouteGroupBuilder MapBlobEndpoints(this IEndpointRouteBuilder app)
+        group.MapPost("/upload", UploadAsync).RequireAuthorization();
+        // Catch-all: blob keys are hierarchical ("event_images/<userId>/<file>.png"),
+        // so a single-segment route would never match one. Clients URL-encode the
+        // key on the way in, hence the explicit unescape in DeleteAsync.
+        group.MapDelete("/{*key}", DeleteAsync).RequireAuthorization();
+        group.MapGet("/status", Status);
+
+        return group;
+    }
+
+    private static IResult Status(IBlobStorageService storage) =>
+        Results.Json(ApiResponse<object>.Ok(new
         {
-            var group = app.MapGroup("/api/blobs").WithTags("Blobs");
-
-            group.MapPost("/upload", UploadAsync).RequireAuthorization();
-            group.MapDelete("/{key}", DeleteAsync).RequireAuthorization();
-            group.MapGet("/status", Status);
-
-            return group;
-        }
-
-        private static IResult Status(IBlobStorageService storage) =>
-            Results.Json(ApiResponse<object>.Ok(new
-            {
-                configured = storage.IsConfigured,
-                provider = "azure-blob-storage",
-            }));
+            configured = storage.IsConfigured,
+            provider = "azure-blob-storage",
+        }));
 
     private static async Task<IResult> UploadAsync(
         BlobUploadRequest request,
@@ -115,7 +118,7 @@ namespace EventFinder.Api.Endpoints;
     }
 
     private static async Task<IResult> DeleteAsync(
-        string key,
+        string? key,
         ClaimsPrincipal principal,
         AppDbContext db,
         IBlobStorageService storage,
@@ -132,22 +135,65 @@ namespace EventFinder.Api.Endpoints;
                 statusCode: StatusCodes.Status503ServiceUnavailable);
         }
 
+        // The key reaches us either with its slashes intact or still
+        // percent-encoded, depending on how the client built the URL. Normalise
+        // both before the ownership check, otherwise a correctly-owned key would
+        // be rejected as foreign.
+        var blobKey = UnescapeKey(key);
+        if (blobKey is null)
+        {
+            return Results.Json(
+                ApiResponse<object>.Fail("A blob key is required."),
+                statusCode: StatusCodes.Status400BadRequest);
+        }
+
         // Objects live under "event_images/<userId>/..." - only the owner may
         // delete their own photos.
         var prefix = $"event_images/{user.Id}/";
-        if (!key.StartsWith(prefix, StringComparison.Ordinal))
+        if (!blobKey.StartsWith(prefix, StringComparison.Ordinal))
         {
             return Results.Json(
                 ApiResponse<object>.Fail("You can only delete your own uploads."),
                 statusCode: StatusCodes.Status403Forbidden);
         }
 
-        var deleted = await storage.DeleteAsync(key, ct);
+        var deleted = await storage.DeleteAsync(blobKey, ct);
         return deleted
             ? Results.Json(ApiResponse<object>.Ok(new { }, "Deleted."))
             : Results.Json(
                 ApiResponse<object>.Fail("The blob could not be deleted."),
                 statusCode: StatusCodes.Status502BadGateway);
+    }
+
+    /// <summary>
+    /// Decodes a routed blob key. Returns <c>null</c> when there is no key or
+    /// when it contains an escape sequence we would rather reject than guess at.
+    /// </summary>
+    private static string? UnescapeKey(string? key)
+    {
+        if (string.IsNullOrWhiteSpace(key))
+        {
+            return null;
+        }
+
+        var trimmed = key.Trim().TrimStart('/');
+        if (trimmed.Length == 0)
+        {
+            return null;
+        }
+
+        try
+        {
+            trimmed = Uri.UnescapeDataString(trimmed);
+        }
+        catch (UriFormatException)
+        {
+            return null;
+        }
+
+        // Collapse a leading slash left behind by a decoded %2F.
+        trimmed = trimmed.TrimStart('/');
+        return trimmed.Length == 0 ? null : trimmed;
     }
 
     private static string ContentTypeFor(string extension) => extension switch

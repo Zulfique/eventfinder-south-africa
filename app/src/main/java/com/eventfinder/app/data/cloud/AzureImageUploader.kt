@@ -9,27 +9,24 @@ import kotlinx.coroutines.flow.firstOrNull
 import java.io.File
 
 /**
- * Uploads event photos to **Cloudflare R2** through the EventFinder REST API.
+ * Uploads event photos to **Azure Blob Storage** through the EventFinder REST API.
  *
- * R2 is the free blob store for this project: its free tier covers 10 GB and
- * 1M/10M operations per month with zero egress fees, and - unlike Firebase
- * Cloud Storage - it never needs a Blaze billing account.
- *
- * The R2 credentials never reach the handset: the API owns them and exposes
- * a small authenticated upload endpoint. The phone simply posts the image
- * bytes and stores the returned public URL on the event.
+ * The API owns the storage account credentials and exposes a small
+ * authenticated upload endpoint, so the account key never reaches the handset.
+ * The phone simply posts the image bytes and stores the returned public URL on
+ * the event.
  *
  * Every method fails softly. When the API is unreachable, the server has no
- * R2 credentials, or the upload is rejected, the caller keeps the local
+ * Azure credentials, or the upload is rejected, the caller keeps the local
  * `file://` URI and the app stays fully usable offline.
  */
-class R2ImageUploader(
+class AzureImageUploader(
     private val context: Context,
     private val api: EventFinderApiClient,
     private val session: SessionProvider
 ) {
 
-    private val tag = "R2ImageUploader"
+    private val tag = "AzureImageUploader"
 
     /**
      * Uploads the image at [localUri] and returns a permanent public URL, or
@@ -52,7 +49,7 @@ class R2ImageUploader(
         val result = api.uploadBlob(bearer, fileName, bytes)
         val uploaded = result.getOrNull()
         if (uploaded != null) {
-            AppLogger.i(tag, "Uploaded event image to Cloudflare R2: ${uploaded.url}")
+            AppLogger.i(tag, "Uploaded event image to Azure Blob Storage: ${uploaded.url}")
             return uploaded.url
         }
 
@@ -61,8 +58,8 @@ class R2ImageUploader(
     }
 
     /**
-     * Best-effort removal of a previously uploaded blob. Only R2 URLs are
-     * touched; local file URIs are ignored.
+     * Best-effort removal of a previously uploaded blob. Only remote
+     * blob URLs are touched; local file URIs are ignored.
      */
     suspend fun deleteIfRemote(url: String?) {
         if (url.isNullOrBlank() || !url.startsWith("http")) return
@@ -76,7 +73,7 @@ class R2ImageUploader(
         }
     }
 
-    /** True when the server reports that R2 blob storage is configured. */
+    /** True when the server reports that Azure blob storage is configured. */
     suspend fun isBlobStorageAvailable(): Boolean =
         api.blobStorageStatus().getOrNull() == true
 

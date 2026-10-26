@@ -170,9 +170,9 @@ dependencies {
     // ---- Firebase (free Spark plan): Firestore NoSQL, FCM push ----
     // The API key inside google-services.json is a public app identifier issued
     // by Google, not a secret. Both services below are free for this scale.
-    // Blob storage is NOT Firebase: event photos live in Cloudflare R2 (free
-    // tier) and are uploaded through the REST API, so Firebase Storage - which
-    // would require the paid Blaze plan - is not a dependency any more.
+    // Blob storage is NOT Firebase: event photos live in Azure Blob Storage
+    // and are uploaded through the REST API, so Firebase Storage - which would
+    // require the paid Blaze plan - is not a dependency any more.
     implementation(platform("com.google.firebase:firebase-bom:32.7.4"))
     implementation("com.google.firebase:firebase-auth-ktx")
     implementation("com.google.firebase:firebase-firestore-ktx")
