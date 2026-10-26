@@ -25,7 +25,7 @@ import okhttp3.OkHttpClient
 object SouthAfricaEventSources {
 
     fun create(
-        client: PublicJsonEventClient,
+        _client: PublicJsonEventClient,
         httpClient: OkHttpClient
     ): List<EventSource> {
         return listOf(
