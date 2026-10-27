@@ -74,7 +74,7 @@ android {
             buildConfigField(
                 "String",
                 "API_BASE_URL",
-                "\"${project.findProperty("EVENTFINDER_API_DEBUG_URL") ?: "http://10.0.2.2:5078/"}\""
+                "\"${project.findProperty("EVENTFINDER_API_DEBUG_URL") ?: "https://eventfinder-api-nlc2.onrender.com/"}\""
             )
         }
         release {

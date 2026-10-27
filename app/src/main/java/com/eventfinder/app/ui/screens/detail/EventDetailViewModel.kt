@@ -96,6 +96,7 @@ class EventDetailViewModel(
             if (latitude != null && longitude != null) {
                 loadWeather(latitude, longitude, event.startDate)
             } else {
+                weatherKey = null
                 _uiState.update {
                     it.copy(weather = null, weatherUnavailable = true)
                 }
@@ -104,23 +105,33 @@ class EventDetailViewModel(
     }
 
     private suspend fun loadWeather(lat: Double, lng: Double, startDate: Long) {
-        if (Triple(lat, lng, startDate) == weatherKey) return
+        val key = Triple(lat, lng, startDate)
+        if (key == weatherKey && _uiState.value.weather != null) return
+        // Never keep showing a forecast belonging to an old event/date.
+        _uiState.update { it.copy(weather = null, weatherUnavailable = false) }
+
         val weatherRepository: WeatherRepository = container.weatherRepository
         if (!DateTimeUtils.isInFuture(startDate) ||
             DateTimeUtils.daysUntil(startDate) > 16L
         ) {
-            _uiState.update { it.copy(weatherUnavailable = true) }
+            weatherKey = null
+            _uiState.update { it.copy(weather = null, weatherUnavailable = true) }
             return
         }
+
         weatherRepository.forecastFor(eventId, lat, lng, startDate)
             .onSuccess { weather ->
-                weatherKey = Triple(lat, lng, startDate)
+                weatherKey = key
                 _uiState.update { it.copy(weather = weather, weatherUnavailable = false) }
                 AppLogger.d("EventDetailViewModel", "Weather loaded for $eventId")
             }
-            .onFailure {
-                _uiState.update { it.copy(weatherUnavailable = true) }
+            .onFailure { error ->
                 weatherKey = null
+                _uiState.update { it.copy(weather = null, weatherUnavailable = true) }
+                AppLogger.w(
+                    "EventDetailViewModel",
+                    "Weather unavailable for $eventId: ${error.message}"
+                )
             }
     }
 

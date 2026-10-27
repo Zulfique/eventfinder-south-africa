@@ -24,7 +24,7 @@ fun describeWeatherCode(code: Int): String = when (code) {
     45, 48 -> "Foggy"
     51, 53, 55, 56, 57 -> "Drizzle"
     61, 63, 65, 66, 67 -> "Rain"
-    71, 73, 75, 77 -> "Snow"
+    71, 73, 75, 77, 85, 86 -> "Snow"
     80, 81, 82 -> "Showers"
     95 -> "Thunderstorm"
     in 96..99 -> "Thunderstorm with hail"
@@ -112,9 +112,14 @@ class WeatherRepositoryImpl(
                 return Result.failure(IllegalStateException("forecast_too_far"))
             }
 
+            val weatherCode = codes.getOrNull(bestIndex)
+                ?: return Result.failure(
+                    IllegalStateException("missing_weather_code")
+                )
+
             val summary = WeatherSummary(
                 temperatureCelsius = temperatures[bestIndex],
-                weatherCode = codes.getOrElse(bestIndex) { 0 },
+                weatherCode = weatherCode,
                 unit = response.hourlyUnits?.temperatureUnit ?: "°C",
                 hourIso = times[bestIndex]
             )

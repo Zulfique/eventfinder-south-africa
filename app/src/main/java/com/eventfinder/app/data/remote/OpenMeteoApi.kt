@@ -40,8 +40,8 @@ interface OpenMeteoApi {
                 "precipitation_sum,precipitation_probability_max," +
                 "sunrise,sunset,uv_index_max",
 
-        @Query("forecast_days")
-        forecastDays: Int = 7,
+@Query("forecast_days")
+forecastDays: Int? = null,
 
         @Query("temperature_unit")
         temperatureUnit: String = "celsius",

@@ -52,7 +52,7 @@ class WeatherRepositoryTest {
             longitude: Double,
             hourly: String,
             daily: String,
-            forecastDays: Int,
+            forecastDays: Int?,
             temperatureUnit: String,
             windSpeedUnit: String,
             timezone: String,
