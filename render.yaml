@@ -1,3 +1,13 @@
+﻿databases:
+  # Free PostgreSQL instance managed by Render. Connection credentials are
+  # injected into the API as ConnectionStrings__Default below.
+  - name: eventfinder-db
+    plan: free
+    postgresVersion: 16
+    databaseName: eventfinder
+    user: eventfinder
+    ipAllowList: []
+
 services:
   - type: web
     name: eventfinder-api
@@ -23,43 +33,24 @@ services:
       - key: Jwt__ExpiryHours
         value: "168"
 
-      # Neon PostgreSQL connection string, supplied in the Render dashboard
-      # (never committed). Use the Npgsql key/value format:
-      #   Host=YOUR_NEON_HOST;Database=YOUR_DATABASE;Username=YOUR_USERNAME;Password=YOUR_PASSWORD;SSL Mode=Require
+      # Render injects the managed PostgreSQL connection string automatically.
       - key: ConnectionStrings__Default
-        sync: false
+        fromDatabase:
+          name: eventfinder-db
+          property: connectionString
 
       - key: Google__ServerClientId
-        sync: false
-
-      - key: Brevo__ApiKey
-        sync: false
-
-      - key: Brevo__FromEmail
-        sync: false
+        value: 690167106186-o9bolqrekmkv8bpbfrqd532iqe6r5m3c.apps.googleusercontent.com
 
       - key: Brevo__FromName
         value: EventFinder
 
-      - key: Firebase__ServiceAccountJson
-        sync: false
-
-      # Azure Blob Storage - the store for event photos. The Azure for Students
-      # subscription covers this account; a general-purpose v2 account with LRS
-      # hot blobs runs about $0.018/GB-month, so the $100 credit lasts.
-      # Azure portal -> Storage account -> Security + networking -> Access keys
-      # -> Connection string, pasted below (never committed).
-      # The account must have "Allow Blob public access" enabled and the
-      # container must exist with Blob (anonymous read) access, otherwise the
-      # photo URLs return 403.
+      # Azure secrets are entered in the Render dashboard and never committed.
       - key: AzureStorage__ConnectionString
         sync: false
 
       - key: AzureStorage__ContainerName
-        sync: false
+        value: event-images
 
-      # Optional: a custom public domain or CDN in front of the account. When
-      # it is empty the API falls back to
-      # https://<account>.blob.core.windows.net/<container>
       - key: AzureStorage__PublicBaseUrl
         sync: false
