@@ -47,7 +47,7 @@ android {
         buildConfigField(
             "String",
             "API_BASE_URL",
-            "\"${project.findProperty("EVENTFINDER_API_URL") ?: "https://eventfinder-api-nlc2.onrender.com/"}\""
+            "\"${project.findProperty("EVENTFINDER_API_URL") ?: "https://eventfinder-api-o1t1.onrender.com/"}\""
         )
         // OAuth web client ID for Credential Manager Google sign-in (public value).
         buildConfigField(
@@ -74,7 +74,7 @@ android {
             buildConfigField(
                 "String",
                 "API_BASE_URL",
-                "\"${project.findProperty("EVENTFINDER_API_DEBUG_URL") ?: "https://eventfinder-api-nlc2.onrender.com/"}\""
+                "\"${project.findProperty("EVENTFINDER_API_DEBUG_URL") ?: "https://eventfinder-api-o1t1.onrender.com/"}\""
             )
         }
         release {
