@@ -1,9 +1,9 @@
-﻿databases:
+databases:
   # Free PostgreSQL instance managed by Render. Connection credentials are
   # injected into the API as ConnectionStrings__Default below.
   - name: eventfinder-db
     plan: free
-    postgresVersion: 16
+    postgresMajorVersion: '16'
     databaseName: eventfinder
     user: eventfinder
     ipAllowList: []
