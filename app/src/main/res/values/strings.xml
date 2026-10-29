@@ -290,4 +290,11 @@
   <string name="default_city">Default city</string>
   <string name="default_city_hint">e.g. Johannesburg — used when location is off</string>
   <string name="default_radius">Search radius</string>
-  <string name="radius_km_value">%d km</string></resources>
+  <string name="radius_km_value">%d km</string>  <!-- Avatar / profile photo -->
+  <string name="avatar_style_default">Default</string>
+  <string name="avatar_style_male">Male</string>
+  <string name="avatar_style_female">Female</string>
+  <string name="photo_import_failed">Couldn’t read that photo. Please pick another.</string>
+  <string name="email_verification_token">Email verification token</string>
+  <string name="verify_email_change">Verify change</string>
+</resources>

@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Generic female avatar: silhouette with a top-knot bun on a pink disc.
+  Bundled vector so no network or paid service is involved.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="48dp"
+    android:height="48dp"
+    android:viewportWidth="48"
+    android:viewportHeight="48">
+
+    <!-- Disc background -->
+    <path
+        android:fillColor="#FCE7F3"
+        android:pathData="M24,0 A24,24 0 1,1 24,48 A24,24 0 1,1 24,0 Z" />
+
+    <!-- Bun -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M20.8,12.2 A3.2,3.2 0 1,0 27.2,12.2 A3.2,3.2 0 1,0 20.8,12.2 Z" />
+
+    <!-- Head -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M17,20 A7,7 0 1,0 31,20 A7,7 0 1,0 17,20 Z" />
+
+    <!-- Shoulders -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M12,39 C12,31.82 17.37,26 24,26 C30.63,26 36,31.82 36,39 Z" />
+</vector>

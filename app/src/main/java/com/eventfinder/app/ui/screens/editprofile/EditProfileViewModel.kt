@@ -6,10 +6,13 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.eventfinder.app.R
+import com.eventfinder.app.data.cloud.AzureImageUploader
 import com.eventfinder.app.data.repository.AuthRepository
+import com.eventfinder.app.data.store.UserPreferences
 import com.eventfinder.app.di.AppContainer
 import com.eventfinder.app.ui.components.UiMessage
 import com.eventfinder.app.utils.EmailValidator
+import com.eventfinder.app.utils.ImageStorage
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asSharedFlow
@@ -26,7 +29,10 @@ data class EditProfileUiState(
     val nameError: Int? = null,
     val emailError: Int? = null,
     val verificationToken: String = "",
-    val verifying: Boolean = false
+    val verifying: Boolean = false,
+    val avatarUrl: String? = null,
+    val avatarStyle: Int = 0,
+    val uploadingPhoto: Boolean = false
 )
 
 /**
@@ -34,7 +40,9 @@ data class EditProfileUiState(
  * via the auth repository.
  */
 class EditProfileViewModel(
-    private val authRepository: AuthRepository
+    private val authRepository: AuthRepository,
+    private val preferences: UserPreferences,
+    private val imageUploader: AzureImageUploader
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(EditProfileUiState())
@@ -50,6 +58,59 @@ class EditProfileViewModel(
                     it.copy(fullName = user.fullName, email = user.email)
                 }
             }
+            val userId = preferences.sessionUserId.first()
+            if (userId != null) {
+                _uiState.update {
+                    it.copy(
+                        avatarUrl = preferences.avatarUrl(userId),
+                        avatarStyle = preferences.avatarStyle(userId)
+                    )
+                }
+            }
+        }
+    }
+
+    /**
+     * Imports the picked photo into internal storage for an instant preview,
+     * then uploads it to Azure Blob Storage and swaps to the permanent URL.
+     * Everything fails softly: a failed upload keeps the local file URI.
+     */
+    fun onPhotoPicked(context: android.content.Context, uri: android.net.Uri) {
+        viewModelScope.launch {
+            val local = ImageStorage.importImage(context, uri)
+            if (local == null) {
+                _messages.emit(UiMessage.Resource(R.string.photo_import_failed))
+                return@launch
+            }
+            val userId = preferences.sessionUserId.first()
+            if (userId != null) preferences.setAvatarUrl(userId, local)
+            _uiState.update { it.copy(avatarUrl = local) }
+
+            _uiState.update { it.copy(uploadingPhoto = true) }
+            val remote = imageUploader.uploadProfilePhoto(local)
+            _uiState.update { it.copy(uploadingPhoto = false) }
+            if (remote != null && userId != null) {
+                preferences.setAvatarUrl(userId, remote)
+                _uiState.update { it.copy(avatarUrl = remote) }
+            }
+        }
+    }
+
+    /** 0 = initials, 1 = male silhouette, 2 = female silhouette. */
+    fun onAvatarStyleChange(style: Int) {
+        viewModelScope.launch {
+            val userId = preferences.sessionUserId.first() ?: return@launch
+            preferences.setAvatarStyle(userId, style)
+            _uiState.update { it.copy(avatarStyle = style) }
+        }
+    }
+
+    /** Drops the uploaded photo so the generated avatar is shown again. */
+    fun onRemovePhoto() {
+        viewModelScope.launch {
+            val userId = preferences.sessionUserId.first() ?: return@launch
+            preferences.setAvatarUrl(userId, null)
+            _uiState.update { it.copy(avatarUrl = null) }
         }
     }
 
@@ -117,7 +178,13 @@ class EditProfileViewModel(
 
     companion object {
         fun factory(container: AppContainer): ViewModelProvider.Factory = viewModelFactory {
-            initializer { EditProfileViewModel(container.authRepository) }
+            initializer {
+                EditProfileViewModel(
+                    container.authRepository,
+                    container.preferences,
+                    container.imageUploader
+                )
+            }
         }
     }
 }

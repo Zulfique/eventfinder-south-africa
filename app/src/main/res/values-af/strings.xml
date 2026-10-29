@@ -290,4 +290,11 @@
   <string name="default_city">Verstek stad</string>
   <string name="default_city_hint">bv. Johannesburg — gebruik wanneer ligging af is</string>
   <string name="default_radius">Soekradius</string>
-  <string name="radius_km_value">%d km</string></resources>
+  <string name="radius_km_value">%d km</string>  <!-- Avatar / profile photo -->
+  <string name="avatar_style_default">Verstek</string>
+  <string name="avatar_style_male">Manlik</string>
+  <string name="avatar_style_female">Vroulik</string>
+  <string name="photo_import_failed">Kon die foto nie lees nie. Kies asseblief ’n ander een.</string>
+  <string name="email_verification_token">E-pos verifiëringstoken</string>
+  <string name="verify_email_change">Verifieer wysiging</string>
+</resources>

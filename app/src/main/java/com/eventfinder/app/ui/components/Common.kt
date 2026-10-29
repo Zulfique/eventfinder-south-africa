@@ -39,16 +39,30 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Image
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.eventfinder.app.R
@@ -219,6 +233,117 @@ fun EventImage(
     }
 }
 
+/**
+ * Tappable favourite heart. Fills red with a spring pop and a soft red glow
+ * when favourited, and rests as a grey outline otherwise. Shared by the event
+ * card and the detail hero so both render identically.
+ */
+@Composable
+fun FavoriteHeart(
+    isFavorite: Boolean,
+    onToggle: () -> Unit,
+    modifier: Modifier = Modifier,
+    size: Dp = 24.dp,
+    contentDescription: String? = null
+) {
+    val heartColor = MaterialTheme.colorScheme.error
+    val tint by animateColorAsState(
+        targetValue = if (isFavorite) heartColor else MaterialTheme.colorScheme.onSurfaceVariant,
+        animationSpec = tween(durationMillis = 200),
+        label = "heartTint"
+    )
+    val glow by animateDpAsState(
+        targetValue = if (isFavorite) 7.dp else 0.dp,
+        animationSpec = tween(durationMillis = 250),
+        label = "heartGlow"
+    )
+    val scale = remember { Animatable(1f) }
+    LaunchedEffect(isFavorite) {
+        if (isFavorite) {
+            // Punchy pop on fill, then settle back with a playful bounce.
+            scale.snapTo(1f)
+            scale.animateTo(1.4f, tween(durationMillis = 110))
+            scale.animateTo(
+                1f,
+                spring(
+                    dampingRatio = Spring.DampingRatioMediumBouncy,
+                    stiffness = Spring.StiffnessMedium
+                )
+            )
+        }
+    }
+
+    Box(
+        modifier = modifier
+            .size(48.dp)
+            .clip(CircleShape)
+            .clickable(onClick = onToggle),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            imageVector = if (isFavorite) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
+            contentDescription = contentDescription,
+            tint = tint,
+            modifier = Modifier
+                .size(size)
+                .shadow(glow, CircleShape, ambientColor = heartColor, spotColor = heartColor)
+                .graphicsLayer {
+                    scaleX = scale.value
+                    scaleY = scale.value
+                }
+        )
+    }
+}
+
+/**
+ * Circular profile avatar: uploaded photo first, then the chosen male/female
+ * silhouette, then the user's initials on the brand container colour.
+ */
+@Composable
+fun UserAvatar(
+    fullName: String,
+    photoUrl: String? = null,
+    avatarStyle: Int = 0,
+    size: Dp = 64.dp,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .size(size)
+            .clip(CircleShape)
+            .background(MaterialTheme.colorScheme.primaryContainer),
+        contentAlignment = Alignment.Center
+    ) {
+        when {
+            !photoUrl.isNullOrBlank() -> AsyncImage(
+                model = photoUrl,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize()
+            )
+            avatarStyle == 1 -> Image(
+                painter = painterResource(R.drawable.avatar_male),
+                contentDescription = null,
+                modifier = Modifier.fillMaxSize()
+            )
+            avatarStyle == 2 -> Image(
+                painter = painterResource(R.drawable.avatar_female),
+                contentDescription = null,
+                modifier = Modifier.fillMaxSize()
+            )
+            else -> Text(
+                fullName.trim().take(2).ifBlank { "?" }.uppercase(),
+                style = if (size >= 64.dp) {
+                    MaterialTheme.typography.titleLarge
+                } else {
+                    MaterialTheme.typography.titleMedium
+                },
+                color = MaterialTheme.colorScheme.onPrimaryContainer
+            )
+        }
+    }
+}
+
 /** Reusable event card used on the Home list, Search and Favorites screens. */
 @Composable
 fun EventCard(
@@ -308,20 +433,13 @@ fun EventCard(
             }
             if (onFavoriteToggle != null) {
                 Spacer(Modifier.width(8.dp))
-                Box(
-                    modifier = Modifier
-                        .size(48.dp)
-                        .clickable { onFavoriteToggle() },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        if (view.isFavorite) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
-                        contentDescription = stringResource(
-                            if (view.isFavorite) R.string.favorite_remove else R.string.favorite_add
-                        ),
-                        tint = if (view.isFavorite) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
+                FavoriteHeart(
+                    isFavorite = view.isFavorite,
+                    onToggle = onFavoriteToggle,
+                    contentDescription = stringResource(
+                        if (view.isFavorite) R.string.favorite_remove else R.string.favorite_add
                     )
-                }
+                )
             }
         }
     }

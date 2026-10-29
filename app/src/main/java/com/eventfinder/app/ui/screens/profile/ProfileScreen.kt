@@ -35,6 +35,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -48,6 +49,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.eventfinder.app.R
 import com.eventfinder.app.di.AppContainer
 import com.eventfinder.app.ui.components.EventCard
+import com.eventfinder.app.ui.components.UserAvatar
 
 /**
  * Screen 4 (Profile): account header, stats, My Events / Attending and
@@ -65,6 +67,8 @@ fun ProfileScreen(
 ) {
     val viewModel: ProfileViewModel = viewModel(factory = ProfileViewModel.factory(container))
     val state by viewModel.uiState.collectAsState()
+    // Pick up avatar edits made on the edit-profile screen.
+    LaunchedEffect(Unit) { viewModel.reloadAvatar() }
     val isGuest = state.email.isBlank()
     val snackbarHostState = remember { SnackbarHostState() }
 
@@ -95,17 +99,12 @@ fun ProfileScreen(
                         Modifier.fillMaxWidth().padding(16.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Box(
-                            Modifier.size(64.dp).clip(CircleShape)
-                                .background(MaterialTheme.colorScheme.primaryContainer),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                state.fullName.take(2).uppercase(),
-                                style = MaterialTheme.typography.titleLarge,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer
-                            )
-                        }
+                        UserAvatar(
+                            fullName = state.fullName,
+                            photoUrl = state.avatarUrl,
+                            avatarStyle = state.avatarStyle,
+                            size = 64.dp
+                        )
                         Spacer(Modifier.size(12.dp))
                         Column {
                             Text(state.fullName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)

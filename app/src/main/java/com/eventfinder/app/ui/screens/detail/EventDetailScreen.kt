@@ -72,6 +72,7 @@ import com.eventfinder.app.di.AppContainer
 import com.eventfinder.app.domain.model.RsvpStatus
 import com.eventfinder.app.ui.components.categoryLabel
 import com.eventfinder.app.ui.components.EventImage
+import com.eventfinder.app.ui.components.FavoriteHeart
 import com.eventfinder.app.ui.components.resolve
 import com.eventfinder.app.ui.components.LoadingView
 import com.eventfinder.app.utils.DateTimeUtils
@@ -156,21 +157,21 @@ fun EventDetailScreen(
                                     .padding(8.dp),
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                IconButton(
-                                    onClick = { viewModel.toggleFavorite() },
+                                Box(
                                     modifier = Modifier
                                         .clip(RoundedCornerShape(50))
-                                        .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.9f))
+                                        .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.9f)),
+                                    contentAlignment = Alignment.Center
                                 ) {
-                                    Icon(
-                                        if (view.isFavorite) Icons.Outlined.Favorite
-                                        else Icons.Outlined.FavoriteBorder,
+                                    // Filled + glowing when favourited; the old
+                                    // icon stayed an outline in both states.
+                                    FavoriteHeart(
+                                        isFavorite = view.isFavorite,
+                                        onToggle = { viewModel.toggleFavorite() },
                                         contentDescription = stringResource(
                                             if (view.isFavorite) R.string.favorite_remove
                                             else R.string.favorite_add
-                                        ),
-                                        tint = if (view.isFavorite) MaterialTheme.colorScheme.error
-                                        else MaterialTheme.colorScheme.onSurface
+                                        )
                                     )
                                 }
                                 if (event.isCreatedByUser) {
