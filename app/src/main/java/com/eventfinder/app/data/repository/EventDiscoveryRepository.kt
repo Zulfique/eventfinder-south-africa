@@ -17,7 +17,11 @@ class EventDiscoveryRepository(
     private val eventDao: EventDao,
     private val sources: List<EventSource>,
     private val geocoder: EventGeocoder? = null,
-    private val apiClient: com.eventfinder.app.data.remote.EventFinderApiClient? = null
+    private val apiClient: com.eventfinder.app.data.remote.EventFinderApiClient? = null,
+    /** Scrapes the event page for a share image when the feed has none. */
+    private val coverArt: com.eventfinder.app.data.remote.CoverArtExtractor? = null,
+    /** Last resort: freely licensed Commons artwork for events with no image. */
+    private val commonsImages: com.eventfinder.app.data.remote.CommonsImageSearch? = null
 ) {
     private val tag = "EventDiscoveryRepository"
     private val refreshMutex = Mutex()
@@ -151,7 +155,9 @@ class EventDiscoveryRepository(
                 }
             }
 
-            val validEvents = events.filter { isValid(it) }.distinctBy { it.stableId }
+            val validEvents = events.filter { isValid(it) }
+                .distinctBy { it.stableId }
+                .map { attachCoverArt(it) }
             val organizerId = "external:${source.id}"
 
             if (validEvents.isEmpty()) {
@@ -229,6 +235,28 @@ class EventDiscoveryRepository(
                 status = SourceStatus.FAILED
             )
         }
+    }
+
+    /**
+     * Fills in cover art scraped from the event's own page when the feed did
+     * not supply an image. Feeds without artwork are the norm (the ICS source
+     * has no image field at all), which otherwise left the catalogue showing
+     * the same stock placeholder for every event. The extractor memoises both
+     * hits and misses, so one sync never fetches a page twice.
+     */
+    private suspend fun attachCoverArt(event: RemoteEvent): RemoteEvent {
+        if (event.imageUrl != null) return event
+
+        // 1. The event's own page: real, event-specific artwork when it exists.
+        coverArt?.extract(event.sourceUrl)?.let { return event.copy(imageUrl = it) }
+
+        // 2. Wikimedia Commons: the site published nothing (Motorsport SA
+        //    publishes no image at all), so fall back to a freely licensed
+        //    photo of the sport and town rather than an empty card.
+        val place = event.venueName.ifBlank { event.address }
+        val commons = commonsImages?.findImage(event.title, place)
+            ?: return event
+        return event.copy(imageUrl = commons.url)
     }
 
     private suspend fun geocodeIfNeeded(event: RemoteEvent): RemoteEvent {

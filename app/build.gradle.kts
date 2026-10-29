@@ -47,13 +47,17 @@ android {
         buildConfigField(
             "String",
             "API_BASE_URL",
-            "\"${project.findProperty("EVENTFINDER_API_URL") ?: "https://eventfinder-api-nlc2.onrender.com/"}\""
+            "\"${project.findProperty("EVENTFINDER_API_URL") ?: "https://eventfinder-api-o1t1.onrender.com/"}\""
         )
-        // OAuth web client ID for Credential Manager Google sign-in (public value).
+        // OAuth web client ID for Credential Manager Google sign-in. This is a
+        // *public* value (it ships in the APK and is listed in the README), so it
+        // is safe as the in-repo default: leaving it blank silently hid the
+        // "Continue with Google" button, because GoogleSignInHelper.isConfigured
+        // is false whenever it is empty. Override via local.properties.
         buildConfigField(
             "String",
             "GOOGLE_SERVER_CLIENT_ID",
-            "\"${project.findProperty("GOOGLE_SERVER_CLIENT_ID") ?: ""}\""
+            "\"${project.findProperty("GOOGLE_SERVER_CLIENT_ID") ?: "690167106186-o9bolqrekmkv8bpbfrqd532iqe6r5m3c.apps.googleusercontent.com"}\""
         )
     }
 
@@ -70,11 +74,17 @@ android {
 
     buildTypes {
         debug {
-            // Local API on the host machine, reached from the emulator via 10.0.2.2.
+            // Debug builds now default to the deployed Render API so a fresh
+            // clone authenticates against the real backend. Pointing at a local
+            // `dotnet run` (reached from the emulator via 10.0.2.2) is opt-in:
+            // set EVENTFINDER_API_DEBUG_URL=http://10.0.2.2:5078/ in
+            // local.properties. Without this override the old default timed out
+            // after 20s and AuthRepository silently fell back to an on-device
+            // account instead of ever reaching Firebase.
             buildConfigField(
                 "String",
                 "API_BASE_URL",
-                "\"${project.findProperty("EVENTFINDER_API_DEBUG_URL") ?: "http://10.0.2.2:5078/"}\""
+                "\"${project.findProperty("EVENTFINDER_API_DEBUG_URL") ?: "https://eventfinder-api-o1t1.onrender.com/"}\""
             )
         }
         release {

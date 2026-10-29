@@ -46,7 +46,7 @@ class AzureImageUploader(
 
         val fileName = fileNameFor(localUri, eventId)
 
-        val result = api.uploadBlob(bearer, fileName, bytes)
+        val result = api.uploadBlob("Bearer $bearer", fileName, bytes)
         val uploaded = result.getOrNull()
         if (uploaded != null) {
             AppLogger.i(tag, "Uploaded event image to Azure Blob Storage: ${uploaded.url}")
@@ -67,7 +67,7 @@ class AzureImageUploader(
         val bearer = bearerToken() ?: return
         val key = api.blobKeyFromUrl(url) ?: return
 
-        val result = api.deleteBlob(bearer, key)
+        val result = api.deleteBlob("Bearer $bearer", key)
         if (result.isFailure) {
             AppLogger.d(tag, "Blob delete skipped: ${result.exceptionOrNull()?.message}")
         }

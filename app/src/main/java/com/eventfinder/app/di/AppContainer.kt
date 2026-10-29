@@ -132,12 +132,24 @@ class AppContainer(context: Context) {
         ApiClient.httpClient(appContext.cacheDir)
     }
 
+    /** Scrapes event pages for the share images the feeds do not carry. */
+    private val coverArtExtractor: com.eventfinder.app.data.remote.CoverArtExtractor by lazy {
+        com.eventfinder.app.data.remote.CoverArtExtractor(httpClient)
+    }
+
+    /** Freely licensed Wikimedia Commons artwork for events with no image. */
+    private val commonsImageSearch: com.eventfinder.app.data.remote.CommonsImageSearch by lazy {
+        com.eventfinder.app.data.remote.CommonsImageSearch(httpClient)
+    }
+
     val eventDiscoveryRepository: EventDiscoveryRepository by lazy {
         EventDiscoveryRepository(
             eventDao = database.eventDao(),
             sources = SouthAfricaEventSources.create(publicJsonEventClient, httpClient),
             geocoder = eventGeocoder,
-            apiClient = eventFinderApiClient
+            apiClient = eventFinderApiClient,
+            coverArt = coverArtExtractor,
+            commonsImages = commonsImageSearch
         )
     }
 

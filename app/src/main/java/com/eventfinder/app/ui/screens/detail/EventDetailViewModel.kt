@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.eventfinder.app.R
+import com.eventfinder.app.data.repository.EventRepository
 import com.eventfinder.app.data.repository.WeatherRepository
 import com.eventfinder.app.data.repository.WeatherSummary
 import com.eventfinder.app.di.AppContainer
@@ -40,10 +41,15 @@ data class EventDetailUiState(
 class EventDetailViewModel(
     private val container: AppContainer,
     private val appContext: android.content.Context,
-    private val eventId: String
+    private val eventId: String,
+    // Optional seams so JVM tests can drive the weather state machine with
+    // fakes instead of the Room-backed singletons in [AppContainer].
+    injectedEventRepository: EventRepository? = null,
+    injectedWeatherRepository: WeatherRepository? = null
 ) : ViewModel() {
 
-    private val eventRepository = container.eventRepository
+    private val eventRepository = injectedEventRepository ?: container.eventRepository
+    private val weatherRepository = injectedWeatherRepository ?: container.weatherRepository
 
     private val eventFlow = MutableStateFlow<Event?>(null)
     private var weatherKey: Triple<Double, Double, Long>? = null
@@ -96,6 +102,7 @@ class EventDetailViewModel(
             if (latitude != null && longitude != null) {
                 loadWeather(latitude, longitude, event.startDate)
             } else {
+                weatherKey = null
                 _uiState.update {
                     it.copy(weather = null, weatherUnavailable = true)
                 }
@@ -104,23 +111,41 @@ class EventDetailViewModel(
     }
 
     private suspend fun loadWeather(lat: Double, lng: Double, startDate: Long) {
-        if (Triple(lat, lng, startDate) == weatherKey) return
-        val weatherRepository: WeatherRepository = container.weatherRepository
+        val key = Triple(lat, lng, startDate)
+        if (key == weatherKey && _uiState.value.weather != null) return
+
+        // Never keep showing a forecast belonging to an old event/date: the
+        // WeatherCard reads state.weather before state.weatherUnavailable, so a
+        // stale value would mask the unavailable state entirely.
+        _uiState.update { it.copy(weather = null, weatherUnavailable = false) }
+
         if (!DateTimeUtils.isInFuture(startDate) ||
             DateTimeUtils.daysUntil(startDate) > 16L
         ) {
-            _uiState.update { it.copy(weatherUnavailable = true) }
+            weatherKey = null
+            _uiState.update {
+                it.copy(weather = null, weatherUnavailable = true)
+            }
             return
         }
+
         weatherRepository.forecastFor(eventId, lat, lng, startDate)
             .onSuccess { weather ->
-                weatherKey = Triple(lat, lng, startDate)
-                _uiState.update { it.copy(weather = weather, weatherUnavailable = false) }
+                weatherKey = key
+                _uiState.update {
+                    it.copy(weather = weather, weatherUnavailable = false)
+                }
                 AppLogger.d("EventDetailViewModel", "Weather loaded for $eventId")
             }
-            .onFailure {
-                _uiState.update { it.copy(weatherUnavailable = true) }
+            .onFailure { error ->
                 weatherKey = null
+                _uiState.update {
+                    it.copy(weather = null, weatherUnavailable = true)
+                }
+                AppLogger.w(
+                    "EventDetailViewModel",
+                    "Weather unavailable for $eventId: ${error.message}"
+                )
             }
     }
 

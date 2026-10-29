@@ -66,12 +66,12 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.viewmodel.compose.viewModel
-import coil.compose.AsyncImage
 import com.eventfinder.app.R
 import com.eventfinder.app.data.repository.describeWeatherCode
 import com.eventfinder.app.di.AppContainer
 import com.eventfinder.app.domain.model.RsvpStatus
 import com.eventfinder.app.ui.components.categoryLabel
+import com.eventfinder.app.ui.components.EventImage
 import com.eventfinder.app.ui.components.resolve
 import com.eventfinder.app.ui.components.LoadingView
 import com.eventfinder.app.utils.DateTimeUtils
@@ -135,10 +135,10 @@ fun EventDetailScreen(
                     ) {
                         // Hero image with back + favourite controls
                         Box(Modifier.fillMaxWidth().height(230.dp)) {
-                            AsyncImage(
-                                model = event.imageUrl,
+                            EventImage(
+                                imageUrl = event.imageUrl,
+                                category = event.category,
                                 contentDescription = stringResource(R.string.event_image),
-                                contentScale = ContentScale.Crop,
                                 modifier = Modifier.fillMaxSize()
                             )
                             IconButton(

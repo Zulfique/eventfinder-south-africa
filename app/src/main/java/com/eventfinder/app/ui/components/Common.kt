@@ -21,9 +21,16 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.outlined.CalendarMonth
+import androidx.compose.material.icons.outlined.BusinessCenter
 import androidx.compose.material.icons.outlined.Category
+import androidx.compose.material.icons.outlined.Event
 import androidx.compose.material.icons.outlined.FavoriteBorder
+import androidx.compose.material.icons.outlined.Groups
 import androidx.compose.material.icons.outlined.LocationOn
+import androidx.compose.material.icons.outlined.MusicNote
+import androidx.compose.material.icons.outlined.Palette
+import androidx.compose.material.icons.outlined.Restaurant
+import androidx.compose.material.icons.outlined.Sports
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -163,6 +170,55 @@ fun categoryLabel(category: EventCategory): Int = when (category) {
     EventCategory.OTHER -> R.string.all_categories
 }
 
+/** Category glyph used when an event has no published cover image. */
+fun categoryIcon(category: EventCategory): ImageVector = when (category) {
+    EventCategory.MUSIC -> Icons.Outlined.MusicNote
+    EventCategory.SPORTS -> Icons.Outlined.Sports
+    EventCategory.FOOD -> Icons.Outlined.Restaurant
+    EventCategory.ARTS -> Icons.Outlined.Palette
+    EventCategory.BUSINESS -> Icons.Outlined.BusinessCenter
+    EventCategory.COMMUNITY -> Icons.Outlined.Groups
+    EventCategory.OTHER -> Icons.Outlined.Event
+}
+
+/**
+ * Cover art for an event card or detail hero.
+ *
+ * Several feeds publish no artwork at all, and some sites expose nothing but
+ * their own loading GIF as the first image - loading that literally rendered an
+ * animated spinner on every card. When there is no image (or the request
+ * fails) this draws the event's category glyph on the surface colour instead,
+ * so the layout always looks deliberate.
+ */
+@Composable
+fun EventImage(
+    imageUrl: String?,
+    category: EventCategory,
+    modifier: Modifier = Modifier,
+    contentDescription: String? = null
+) {
+    Box(
+        modifier = modifier.background(MaterialTheme.colorScheme.surfaceVariant),
+        contentAlignment = Alignment.Center
+    ) {
+        if (imageUrl.isNullOrBlank()) {
+            Icon(
+                imageVector = categoryIcon(category),
+                contentDescription = contentDescription,
+                modifier = Modifier.size(34.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        } else {
+            AsyncImage(
+                model = imageUrl,
+                contentDescription = contentDescription,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize()
+            )
+        }
+    }
+}
+
 /** Reusable event card used on the Home list, Search and Favorites screens. */
 @Composable
 fun EventCard(
@@ -181,14 +237,13 @@ fun EventCard(
             modifier = Modifier.padding(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            AsyncImage(
-                model = event.imageUrl,
+            EventImage(
+                imageUrl = event.imageUrl,
+                category = event.category,
                 contentDescription = stringResource(R.string.event_image),
-                contentScale = ContentScale.Crop,
                 modifier = Modifier
                     .size(88.dp)
                     .clip(RoundedCornerShape(14.dp))
-                    .background(MaterialTheme.colorScheme.surfaceVariant)
             )
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
