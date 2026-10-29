@@ -74,8 +74,22 @@ public class GoogleTokenVerifier(HttpClient http, IConfiguration configuration)
                 if (string.IsNullOrEmpty(info.Sub) || string.IsNullOrEmpty(info.Email)) return null;
                 if (!string.Equals(Get("aud"), expectedAudience, StringComparison.Ordinal)) return null;
 
-                var exp = root.TryGetProperty("exp", out var expEl) && expEl.TryGetInt64(out var expSec)
-                    ? DateTimeOffset.FromUnixTimeSeconds(expSec)
+                long? expSeconds = null;
+                if (root.TryGetProperty("exp", out var expEl))
+                {
+                    if (expEl.ValueKind == JsonValueKind.Number && expEl.TryGetInt64(out var parsedInt))
+                    {
+                        expSeconds = parsedInt;
+                    }
+                    else if (expEl.ValueKind == JsonValueKind.String
+                             && long.TryParse(expEl.GetString(), out var parsedString))
+                    {
+                        expSeconds = parsedString;
+                    }
+                }
+
+                var exp = expSeconds.HasValue
+                    ? DateTimeOffset.FromUnixTimeSeconds(expSeconds.Value)
                     : DateTimeOffset.MinValue;
                 if (exp <= DateTimeOffset.UtcNow) return null;
 
