@@ -1,4 +1,4 @@
-﻿using System.Net.Http;
+using System.Net.Http;
 using System.Text.Json;
 
 namespace EventFinder.Api.Services;
@@ -69,7 +69,7 @@ public class GoogleTokenVerifier(HttpClient http, IConfiguration configuration)
                     Sub: Get("sub"),
                     Email: Get("email"),
                     Name: Get("name"),
-                    EmailVerified: Get("email_verified") is "true" or "True");
+                    EmailVerified: root.TryGetProperty("email_verified", out var emailVerifiedEl) && (emailVerifiedEl.ValueKind == JsonValueKind.True || (emailVerifiedEl.ValueKind == JsonValueKind.String && string.Equals(emailVerifiedEl.GetString(), "true", StringComparison.OrdinalIgnoreCase))));
 
                 if (string.IsNullOrEmpty(info.Sub) || string.IsNullOrEmpty(info.Email)) return null;
                 if (!string.Equals(Get("aud"), expectedAudience, StringComparison.Ordinal)) return null;

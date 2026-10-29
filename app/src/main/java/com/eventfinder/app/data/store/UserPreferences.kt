@@ -158,7 +158,7 @@ class UserPreferences(private val context: Context) : SessionProvider {
     /** Returns the last synced event startDate checkpoint, or null if none. */
     suspend fun getSyncCheckpoint(userId: String): String? {
         try {
-            return context.eventFinderDataStore.data.first()[userStringKey("sync_checkpoint", userId)] as? String
+            return context.eventFinderDataStore.data.first()[userStringKey("sync_checkpoint", userId)]
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
