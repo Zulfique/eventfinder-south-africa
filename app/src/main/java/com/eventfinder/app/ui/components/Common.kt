@@ -58,6 +58,8 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -296,8 +298,25 @@ fun FavoriteHeart(
 }
 
 /**
+ * Which artwork to show for a profile avatar. Pure state mapping so it can be
+ * unit tested without Compose: an uploaded photo always wins, then the chosen
+ * generated style, then the user's initials.
+ */
+enum class AvatarKind { PHOTO, MALE, FEMALE, INITIALS }
+
+fun resolveAvatarKind(avatarStyle: Int, hasPhoto: Boolean): AvatarKind = when {
+    hasPhoto -> AvatarKind.PHOTO
+    avatarStyle == 1 -> AvatarKind.MALE
+    avatarStyle == 2 -> AvatarKind.FEMALE
+    else -> AvatarKind.INITIALS
+}
+
+/**
  * Circular profile avatar: uploaded photo first, then the chosen male/female
  * silhouette, then the user's initials on the brand container colour.
+ *
+ * Exposes a single TalkBack description ("Profile avatar, female") instead of
+ * announcing the decorative layers separately.
  */
 @Composable
 fun UserAvatar(
@@ -307,31 +326,40 @@ fun UserAvatar(
     size: Dp = 64.dp,
     modifier: Modifier = Modifier
 ) {
+    val kind = resolveAvatarKind(avatarStyle, hasPhoto = !photoUrl.isNullOrBlank())
+    val semanticsDescription = when (kind) {
+        AvatarKind.PHOTO -> stringResource(R.string.avatar_desc_photo)
+        AvatarKind.MALE -> stringResource(R.string.avatar_desc_male)
+        AvatarKind.FEMALE -> stringResource(R.string.avatar_desc_female)
+        AvatarKind.INITIALS -> stringResource(R.string.avatar_desc_initials)
+    }
+
     Box(
         modifier = modifier
             .size(size)
             .clip(CircleShape)
-            .background(MaterialTheme.colorScheme.primaryContainer),
+            .background(MaterialTheme.colorScheme.primaryContainer)
+            .clearAndSetSemantics { contentDescription = semanticsDescription },
         contentAlignment = Alignment.Center
     ) {
-        when {
-            !photoUrl.isNullOrBlank() -> AsyncImage(
+        when (kind) {
+            AvatarKind.PHOTO -> AsyncImage(
                 model = photoUrl,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize()
             )
-            avatarStyle == 1 -> Image(
+            AvatarKind.MALE -> Image(
                 painter = painterResource(R.drawable.avatar_male),
                 contentDescription = null,
                 modifier = Modifier.fillMaxSize()
             )
-            avatarStyle == 2 -> Image(
+            AvatarKind.FEMALE -> Image(
                 painter = painterResource(R.drawable.avatar_female),
                 contentDescription = null,
                 modifier = Modifier.fillMaxSize()
             )
-            else -> Text(
+            AvatarKind.INITIALS -> Text(
                 fullName.trim().take(2).ifBlank { "?" }.uppercase(),
                 style = if (size >= 64.dp) {
                     MaterialTheme.typography.titleLarge

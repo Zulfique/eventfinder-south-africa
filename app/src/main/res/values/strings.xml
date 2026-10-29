@@ -297,4 +297,21 @@
   <string name="photo_import_failed">Couldn’t read that photo. Please pick another.</string>
   <string name="email_verification_token">Email verification token</string>
   <string name="verify_email_change">Verify change</string>
+  <string name="avatar_desc_photo">Profile photo</string>
+  <string name="avatar_desc_male">Profile avatar, male</string>
+  <string name="avatar_desc_female">Profile avatar, female</string>
+  <string name="avatar_desc_initials">Profile avatar, initials</string>
+  <!-- Ratings & reviews -->
+  <string name="reviews_title">Ratings and reviews</string>
+  <string name="write_review">Write a review</string>
+  <string name="no_reviews">No reviews yet — be the first.</string>
+  <string name="reviews_count">%1$d reviews</string>
+  <string name="verified_attendee">Verified attendee</string>
+  <string name="delete_review">Delete review</string>
+  <string name="submit_review">Submit</string>
+  <string name="review_comment_hint">What did you think? (optional)</string>
+  <string name="rate_stars">Rate %1$d stars</string>
+  <string name="review_saved">Review saved</string>
+  <string name="review_deleted">Review deleted</string>
+  <string name="review_failed">Couldn’t save the review. Try again.</string>
 </resources>

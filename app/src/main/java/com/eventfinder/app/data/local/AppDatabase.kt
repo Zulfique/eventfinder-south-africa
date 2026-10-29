@@ -171,6 +171,14 @@ private val MIGRATION_6_7 = object : Migration(6, 7) {
     }
 }
 
+private val MIGRATION_8_9 = object : Migration(8, 9) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("CREATE TABLE IF NOT EXISTS `event_reviews` (`reviewId` TEXT NOT NULL, `eventId` TEXT NOT NULL, `userId` TEXT NOT NULL, `userName` TEXT NOT NULL, `rating` INTEGER NOT NULL, `comment` TEXT, `isVerifiedAttendee` INTEGER NOT NULL, `createdAt` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, PRIMARY KEY(`reviewId`))")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_event_reviews_eventId` ON `event_reviews` (`eventId`)")
+        db.execSQL("CREATE TABLE IF NOT EXISTS `event_review_summaries` (`eventId` TEXT NOT NULL, `average` REAL NOT NULL, `count` INTEGER NOT NULL, PRIMARY KEY(`eventId`))")
+    }
+}
+
 private val MIGRATION_7_8 = object : Migration(7, 8) {
     override fun migrate(db: SupportSQLiteDatabase) {
         db.execSQL("ALTER TABLE users ADD COLUMN serverBacked INTEGER NOT NULL DEFAULT 0")
@@ -184,9 +192,11 @@ private val MIGRATION_7_8 = object : Migration(7, 8) {
         FavoriteEntity::class,
         RsvpEntity::class,
         SourceSyncEntity::class,
-        GeocodeCacheEntity::class
+        GeocodeCacheEntity::class,
+        CachedReviewEntity::class,
+        CachedReviewSummaryEntity::class
     ],
-    version = 8,
+    version = 9,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase(), DatabaseTransactionHelper {
@@ -196,6 +206,7 @@ abstract class AppDatabase : RoomDatabase(), DatabaseTransactionHelper {
     abstract fun favoriteDao(): FavoriteDao
     abstract fun rsvpDao(): RsvpDao
     abstract fun geocodeCacheDao(): GeocodeCacheDao
+    abstract fun reviewDao(): ReviewDao
 
     @Transaction
     override suspend fun setFavoriteAtomically(userId: String, eventId: String, favorite: Boolean) {
@@ -249,7 +260,7 @@ abstract class AppDatabase : RoomDatabase(), DatabaseTransactionHelper {
                 AppDatabase::class.java,
                 DB_NAME
             )
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9)
                 .build()
     }
 }

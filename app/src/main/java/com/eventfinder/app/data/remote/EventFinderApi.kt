@@ -133,6 +133,33 @@ data class CreateEventBody(
     val isPublic: Boolean
 )
 
+data class ApiReviewDto(
+    val id: String,
+    val eventId: String,
+    val userId: String,
+    val fullName: String,
+    val rating: Int,
+    val comment: String? = null,
+    @SerializedName("isVerifiedAttendee") val isVerifiedAttendee: Boolean = false,
+    val createdAt: String? = null,
+    val updatedAt: String? = null
+)
+
+data class ApiReviewListDto(
+    val average: Double = 0.0,
+    val count: Int = 0,
+    val items: List<ApiReviewDto> = emptyList(),
+    val mine: ApiReviewDto? = null
+)
+
+data class ApiReviewSummaryDto(
+    val eventId: String,
+    val average: Double,
+    val count: Int
+)
+
+data class ApiReviewBody(val rating: Int, val comment: String? = null)
+
 /** Retrofit surface for the EventFinder ASP.NET Core backend. */
 interface EventFinderApiService {
     @POST("api/auth/register")
@@ -221,6 +248,29 @@ interface EventFinderApiService {
         @Path("id") id: String,
         @Body body: ApiRsvpRequest
     ): retrofit2.Response<ApiEnvelope<Unit>>
+
+    @GET("api/events/{eventId}/reviews")
+    suspend fun getReviews(
+        @Path("eventId") eventId: String
+    ): retrofit2.Response<ApiEnvelope<ApiReviewListDto>>
+
+    @PUT("api/events/{eventId}/reviews")
+    suspend fun putReview(
+        @Header("Authorization") bearer: String,
+        @Path("eventId") eventId: String,
+        @Body body: ApiReviewBody
+    ): retrofit2.Response<ApiEnvelope<ApiReviewListDto>>
+
+    @DELETE("api/events/{eventId}/reviews")
+    suspend fun deleteReview(
+        @Header("Authorization") bearer: String,
+        @Path("eventId") eventId: String
+    ): retrofit2.Response<ApiEnvelope<ApiReviewListDto>>
+
+    @GET("api/reviews/summary")
+    suspend fun reviewSummary(
+        @Query("id") ids: List<String>
+    ): retrofit2.Response<ApiEnvelope<List<ApiReviewSummaryDto>>>
 
     @DELETE("api/events/{id}/rsvp")
     suspend fun cancelRsvp(
@@ -324,6 +374,18 @@ class EventFinderApiClient(
 
     suspend fun deleteEvent(bearer: String, id: String): Result<Unit> =
         wrap("deleteEvent") { service.deleteEvent(bearer, id) }
+
+    suspend fun getReviews(eventId: String): Result<ApiReviewListDto> =
+        wrap("getReviews") { service.getReviews(eventId) }
+
+    suspend fun putReview(bearer: String, eventId: String, rating: Int, comment: String?): Result<ApiReviewListDto> =
+        wrap("putReview") { service.putReview(bearer, eventId, ApiReviewBody(rating, comment)) }
+
+    suspend fun deleteReview(bearer: String, eventId: String): Result<ApiReviewListDto> =
+        wrap("deleteReview") { service.deleteReview(bearer, eventId) }
+
+    suspend fun reviewSummary(ids: List<String>): Result<List<ApiReviewSummaryDto>> =
+        wrap("reviewSummary") { service.reviewSummary(ids) }
 
     suspend fun rsvp(bearer: String, eventId: String, status: String): Result<Unit> =
         wrap("rsvp") { service.rsvp(bearer, eventId, ApiRsvpRequest(status)) }

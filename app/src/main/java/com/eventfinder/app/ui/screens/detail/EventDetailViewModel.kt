@@ -6,7 +6,9 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.eventfinder.app.R
+import com.eventfinder.app.data.local.CachedReviewEntity
 import com.eventfinder.app.data.repository.EventRepository
+import com.eventfinder.app.data.repository.ReviewsRepository
 import com.eventfinder.app.data.repository.WeatherRepository
 import com.eventfinder.app.data.repository.WeatherSummary
 import com.eventfinder.app.di.AppContainer
@@ -25,13 +27,30 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
+/** One reviewer row rendered by the detail screen. */
+data class ReviewRowUi(
+    val id: String,
+    val userName: String,
+    val rating: Int,
+    val comment: String?,
+    val isVerifiedAttendee: Boolean,
+    val createdAtMillis: Long,
+    val isMine: Boolean
+)
+
 /** UI state for the event detail screen (Screen 6). */
 data class EventDetailUiState(
     val loading: Boolean = true,
     val notFound: Boolean = false,
     val eventView: EventView? = null,
     val weather: WeatherSummary? = null,
-    val weatherUnavailable: Boolean = false
+    val weatherUnavailable: Boolean = false,
+    val reviews: List<ReviewRowUi> = emptyList(),
+    val reviewAverage: Double = 0.0,
+    val reviewCount: Int = 0,
+    val reviewDialogOpen: Boolean = false,
+    val reviewSubmitting: Boolean = false,
+    val signedIn: Boolean = false
 )
 
 /**
@@ -51,6 +70,14 @@ class EventDetailViewModel(
     private val eventRepository = injectedEventRepository ?: container.eventRepository
     private val weatherRepository = injectedWeatherRepository ?: container.weatherRepository
 
+    /**
+     * Reviews are optional: JVM unit tests build the container over a mock
+     * Context where Room/DataStore cannot initialize, so a failure here just
+     * disables the reviews feature instead of crashing the screen.
+     */
+    private val reviewsRepository: ReviewsRepository? =
+        runCatching { container.reviewsRepository }.getOrNull()
+
     private val eventFlow = MutableStateFlow<Event?>(null)
     private var weatherKey: Triple<Double, Double, Long>? = null
 
@@ -61,6 +88,33 @@ class EventDetailViewModel(
     val messages = _messages.asSharedFlow()
 
     init {
+        val reviews = reviewsRepository
+        if (reviews != null) {
+            viewModelScope.launch {
+                reviews.observeReviews(eventId).collect { rows ->
+                    val myId = runCatching { container.preferences.sessionUserId.first() }.getOrNull()
+                    _uiState.update { s -> s.copy(reviews = rows.map { it.toRowUi(myId) }) }
+                }
+            }
+            viewModelScope.launch {
+                reviews.observeSummary(eventId).collect { summary ->
+                    _uiState.update { s ->
+                        s.copy(
+                            reviewAverage = summary?.average ?: 0.0,
+                            reviewCount = summary?.count ?: 0
+                        )
+                    }
+                }
+            }
+        }
+        viewModelScope.launch {
+            runCatching {
+                container.preferences.sessionUserId.collect { id ->
+                    _uiState.update { it.copy(signedIn = id != null) }
+                }
+            }
+        }
+
         viewModelScope.launch {
             kotlinx.coroutines.flow.combine(
                 eventFlow,
@@ -97,6 +151,7 @@ class EventDetailViewModel(
                 return@launch
             }
             eventFlow.value = event
+            loadReviews()
             val latitude = event.latitude
             val longitude = event.longitude
             if (latitude != null && longitude != null) {
@@ -148,6 +203,75 @@ class EventDetailViewModel(
                 )
             }
     }
+
+    /** Re-fetches reviews from the server; the Room cache drives the UI. */
+    private fun loadReviews() {
+        val reviews = reviewsRepository ?: return
+        viewModelScope.launch {
+            reviews.refresh(eventId).onFailure { error ->
+                AppLogger.w("EventDetailViewModel", "Reviews refresh failed: ${error.message}")
+            }
+        }
+    }
+
+    fun openReviewDialog() {
+        _uiState.update { it.copy(reviewDialogOpen = true) }
+    }
+
+    fun closeReviewDialog() {
+        _uiState.update { it.copy(reviewDialogOpen = false, reviewSubmitting = false) }
+    }
+
+    /** Creates or replaces the signed-in user's review for this event. */
+    fun submitReview(rating: Int, comment: String?) {
+        if (rating !in 1..5) return
+        val reviews = reviewsRepository
+        viewModelScope.launch {
+            if (reviews == null) {
+                _messages.emit(UiMessage.Resource(R.string.review_failed))
+                return@launch
+            }
+            _uiState.update { it.copy(reviewSubmitting = true) }
+            val trimmed = comment?.trim()?.takeIf { it.isNotEmpty() }
+            reviews.submit(eventId, rating, trimmed)
+                .onSuccess {
+                    _uiState.update { s -> s.copy(reviewDialogOpen = false, reviewSubmitting = false) }
+                    _messages.emit(UiMessage.Resource(R.string.review_saved))
+                }
+                .onFailure { error ->
+                    _uiState.update { s -> s.copy(reviewSubmitting = false) }
+                    AppLogger.w("EventDetailViewModel", "Review submit failed: ${error.message}")
+                    _messages.emit(UiMessage.Resource(R.string.review_failed))
+                }
+        }
+    }
+
+    /** Deletes the signed-in user's review for this event. */
+    fun deleteMyReview() {
+        val reviews = reviewsRepository
+        viewModelScope.launch {
+            if (reviews == null) {
+                _messages.emit(UiMessage.Resource(R.string.review_failed))
+                return@launch
+            }
+            reviews.delete(eventId)
+                .onSuccess { _messages.emit(UiMessage.Resource(R.string.review_deleted)) }
+                .onFailure { error ->
+                    AppLogger.w("EventDetailViewModel", "Review delete failed: ${error.message}")
+                    _messages.emit(UiMessage.Resource(R.string.review_failed))
+                }
+        }
+    }
+
+    private fun CachedReviewEntity.toRowUi(currentUserId: String?) = ReviewRowUi(
+        id = reviewId,
+        userName = userName,
+        rating = rating,
+        comment = comment,
+        isVerifiedAttendee = isVerifiedAttendee,
+        createdAtMillis = createdAt,
+        isMine = currentUserId != null && userId == currentUserId
+    )
 
     fun toggleFavorite() {
         viewModelScope.launch {

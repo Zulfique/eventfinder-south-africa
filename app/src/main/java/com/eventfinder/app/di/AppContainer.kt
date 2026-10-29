@@ -14,6 +14,7 @@ import com.eventfinder.app.data.repository.EventDiscoveryRepository
 import com.eventfinder.app.data.repository.EventRepository
 import com.eventfinder.app.data.repository.EventRepositoryImpl
 import com.eventfinder.app.data.repository.OpenStreetMapRepository
+import com.eventfinder.app.data.repository.ReviewsRepository
 import com.eventfinder.app.data.repository.WeatherRepository
 import com.eventfinder.app.data.repository.WeatherRepositoryImpl
 import com.eventfinder.app.data.sources.SouthAfricaEventSources
@@ -91,6 +92,14 @@ class AppContainer(context: Context) {
             context = appContext,
             cloudSyncManager = cloudSyncManager,
             apiClient = eventFinderApiClient
+        )
+    }
+
+    val reviewsRepository: ReviewsRepository by lazy {
+        ReviewsRepository(
+            api = eventFinderApiClient,
+            dao = database.reviewDao(),
+            preferences = preferences
         )
     }
 

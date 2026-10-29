@@ -133,6 +133,48 @@ namespace EventFinder.Api.Migrations
                     b.ToTable("Events");
                 });
 
+            modelBuilder.Entity("EventFinder.Api.Data.EventReview", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Comment")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("EventId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<bool>("IsVerifiedAttendee")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("Rating")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId");
+
+                    b.HasIndex("EventId", "CreatedAt");
+
+                    b.HasIndex("EventId", "UserId")
+                        .IsUnique();
+
+                    b.ToTable("EventReviews");
+                });
+
             modelBuilder.Entity("EventFinder.Api.Data.PasswordResetToken", b =>
                 {
                     b.Property<Guid>("Id")
@@ -248,6 +290,17 @@ namespace EventFinder.Api.Migrations
                         .IsRequired();
 
                     b.Navigation("Organizer");
+                });
+
+            modelBuilder.Entity("EventFinder.Api.Data.EventReview", b =>
+                {
+                    b.HasOne("EventFinder.Api.Data.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("EventFinder.Api.Data.Rsvp", b =>

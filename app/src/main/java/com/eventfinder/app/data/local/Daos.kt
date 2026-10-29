@@ -7,6 +7,26 @@ import androidx.room.Query
 import androidx.room.Transaction
 import kotlinx.coroutines.flow.Flow
 
+/** Data access for cached event reviews. */
+@Dao
+interface ReviewDao {
+
+    @Query("SELECT * FROM event_reviews WHERE eventId = :eventId ORDER BY createdAt DESC")
+    fun observeForEvent(eventId: String): Flow<List<CachedReviewEntity>>
+
+    @Query("SELECT * FROM event_review_summaries WHERE eventId = :eventId LIMIT 1")
+    fun observeSummary(eventId: String): Flow<CachedReviewSummaryEntity?>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertAll(reviews: List<CachedReviewEntity>)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertSummary(summary: CachedReviewSummaryEntity)
+
+    @Query("DELETE FROM event_reviews WHERE eventId = :eventId")
+    suspend fun clearForEvent(eventId: String)
+}
+
 /** Data access for registered users. */
 @Dao
 interface UserDao {

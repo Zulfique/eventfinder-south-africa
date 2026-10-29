@@ -32,6 +32,8 @@ import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.Star
 import androidx.compose.material.icons.outlined.WbSunny
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Verified
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -43,6 +45,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -58,6 +61,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -76,6 +80,9 @@ import com.eventfinder.app.ui.components.FavoriteHeart
 import com.eventfinder.app.ui.components.resolve
 import com.eventfinder.app.ui.components.LoadingView
 import com.eventfinder.app.utils.DateTimeUtils
+import java.text.DateFormat
+import java.util.Date
+import java.util.Locale
 
 /**
  * Screen 6 (Event Detail): hero image, metadata, RSVP, favourite, share,
@@ -310,6 +317,21 @@ fun EventDetailScreen(
                             WeatherCard(state)
                             Spacer(Modifier.height(12.dp))
 
+                            ReviewsSection(
+                                state = state,
+                                onWriteClick = { viewModel.openReviewDialog() },
+                                onDeleteClick = { viewModel.deleteMyReview() }
+                            )
+                            if (state.reviewDialogOpen) {
+                                WriteReviewDialog(
+                                    submitting = state.reviewSubmitting,
+                                    onDismiss = { viewModel.closeReviewDialog() },
+                                    onSubmit = { rating, comment ->
+                                        viewModel.submitReview(rating, comment)
+                                    }
+                                )
+                            }
+
                             Button(
                                 onClick = { viewModel.setRsvp(RsvpStatus.ATTENDING) },
                                 enabled = view.rsvpStatus != RsvpStatus.ATTENDING,
@@ -436,6 +458,201 @@ fun EventDetailScreen(
             }
         }
     }
+}
+
+private val StarActive = Color(0xFFFFC107)
+private val StarInactive = Color(0xFFBDBDBD)
+
+private fun formatDate(epochMillis: Long): String =
+    if (epochMillis <= 0L) ""
+    else DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT).format(Date(epochMillis))
+
+/**
+ * Ratings & reviews: average + count, the write/delete entry points, and the
+ * reviewer list with verified-attendee badges. Reads [EventDetailUiState]
+ * only, so it stays a pure previewable section.
+ */
+@Composable
+private fun ReviewsSection(
+    state: EventDetailUiState,
+    onWriteClick: () -> Unit,
+    onDeleteClick: () -> Unit
+) {
+    Column(Modifier.fillMaxWidth()) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text(
+                stringResource(R.string.reviews_title),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold
+            )
+            Spacer(Modifier.weight(1f))
+            if (state.signedIn) {
+                TextButton(onClick = onWriteClick) {
+                    Text(stringResource(R.string.write_review))
+                }
+            }
+        }
+
+        if (state.reviewCount > 0) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    Icons.Outlined.Star,
+                    contentDescription = null,
+                    tint = StarActive,
+                    modifier = Modifier.size(20.dp)
+                )
+                Spacer(Modifier.size(4.dp))
+                Text(
+                    String.format(Locale.getDefault(), "%.1f", state.reviewAverage),
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(Modifier.size(8.dp))
+                Text(
+                    stringResource(R.string.reviews_count, state.reviewCount),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Spacer(Modifier.height(4.dp))
+        }
+
+        if (state.reviews.isEmpty()) {
+            Text(
+                stringResource(R.string.no_reviews),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(vertical = 8.dp)
+            )
+        } else {
+            state.reviews.forEach { review ->
+                ReviewRow(review = review, onDeleteClick = onDeleteClick)
+            }
+        }
+    }
+}
+
+@Composable
+private fun ReviewRow(review: ReviewRowUi, onDeleteClick: () -> Unit) {
+    Column(Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+            Text(review.userName, style = MaterialTheme.typography.labelLarge)
+            if (review.isVerifiedAttendee) {
+                Spacer(Modifier.size(6.dp))
+                Icon(
+                    Icons.Outlined.Verified,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(14.dp)
+                )
+                Spacer(Modifier.size(3.dp))
+                Text(
+                    stringResource(R.string.verified_attendee),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+            Spacer(Modifier.weight(1f))
+            Text(
+                formatDate(review.createdAtMillis),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            if (review.isMine) {
+                IconButton(
+                    onClick = onDeleteClick,
+                    modifier = Modifier.size(48.dp)
+                ) {
+                    Icon(
+                        Icons.Outlined.Delete,
+                        contentDescription = stringResource(R.string.delete_review),
+                        modifier = Modifier.size(20.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+
+        Row {
+            (1..5).forEach { star ->
+                Icon(
+                    Icons.Outlined.Star,
+                    contentDescription = null,
+                    tint = if (star <= review.rating) StarActive else StarInactive,
+                    modifier = Modifier.size(14.dp)
+                )
+                if (star < 5) Spacer(Modifier.size(2.dp))
+            }
+        }
+
+        review.comment?.let { comment ->
+            Text(
+                comment,
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.padding(top = 4.dp)
+            )
+        }
+    }
+}
+
+/** Star picker + optional comment; submit stays disabled until 1–5 chosen. */
+@Composable
+private fun WriteReviewDialog(
+    submitting: Boolean,
+    onDismiss: () -> Unit,
+    onSubmit: (Int, String?) -> Unit
+) {
+    var rating by remember { mutableStateOf(0) }
+    var comment by remember { mutableStateOf("") }
+
+    AlertDialog(
+        onDismissRequest = { if (!submitting) onDismiss() },
+        title = { Text(stringResource(R.string.write_review)) },
+        text = {
+            Column {
+                Row {
+                    (1..5).forEach { star ->
+                        IconButton(
+                            onClick = { rating = star },
+                            modifier = Modifier.size(48.dp)
+                        ) {
+                            Icon(
+                                Icons.Outlined.Star,
+                                contentDescription = stringResource(R.string.rate_stars, star),
+                                tint = if (star <= rating) StarActive else StarInactive,
+                                modifier = Modifier.size(32.dp)
+                            )
+                        }
+                    }
+                }
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = comment,
+                    onValueChange = { if (it.length <= 2000) comment = it },
+                    placeholder = {
+                        Text(stringResource(R.string.review_comment_hint))
+                    },
+                    modifier = Modifier.fillMaxWidth().height(120.dp)
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { onSubmit(rating, comment) },
+                enabled = rating in 1..5 && !submitting
+            ) {
+                Text(stringResource(R.string.submit_review))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss, enabled = !submitting) {
+                Text(stringResource(R.string.cancel))
+            }
+        }
+    )
 }
 
 /** Weather card populated from the free Open-Meteo API. */
