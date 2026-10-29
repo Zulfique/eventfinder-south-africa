@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Generic male avatar: short-hair silhouette on a blue disc.
-  Bundled vector so no network or paid service is involved.
+  Generic male avatar: white bust with a short, cropped hair silhouette
+  on a blue disc. Bundled vector so no network or paid service is involved.
 -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="48dp"
@@ -17,10 +17,15 @@
     <!-- Head -->
     <path
         android:fillColor="#FFFFFF"
-        android:pathData="M17,19.5 A7,7 0 1,0 31,19.5 A7,7 0 1,0 17,19.5 Z" />
+        android:pathData="M17.4,20 A6.6,6.6 0 1,0 30.6,20 A6.6,6.6 0 1,0 17.4,20 Z" />
 
     <!-- Shoulders -->
     <path
         android:fillColor="#FFFFFF"
-        android:pathData="M11,39 C11,31.82 16.82,26 24,26 C31.18,26 37,31.82 37,39 Z" />
+        android:pathData="M11,41 C11,33.27 16.82,27 24,27 C31.18,27 37,33.27 37,41 Z" />
+
+    <!-- Short cropped hair -->
+    <path
+        android:fillColor="#1E3A8A"
+        android:pathData="M17.6,18.4 A6.6,6.6 0 0,1 30.4,18.4 Z" />
 </vector>
