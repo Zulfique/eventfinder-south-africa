@@ -10,6 +10,7 @@ import com.eventfinder.app.R
 import com.eventfinder.app.di.AppContainer
 import com.eventfinder.app.domain.model.Event
 import com.eventfinder.app.domain.model.EventCategory
+import com.eventfinder.app.data.repository.RatingSummary
 import com.eventfinder.app.domain.model.EventFilterer
 import com.eventfinder.app.domain.model.EventSort
 import com.eventfinder.app.domain.model.EventView
@@ -35,6 +36,8 @@ import kotlinx.coroutines.launch
 @OptIn(ExperimentalCoroutinesApi::class)
 data class HomeUiState(
     val events: List<EventView> = emptyList(),
+    val trendingEvents: List<EventView> = emptyList(),
+    val nearbyEvents: List<EventView> = emptyList(),
     val isLoading: Boolean = true,
     val isOffline: Boolean = false,
     val selectedCategory: EventCategory? = null,
@@ -45,7 +48,8 @@ data class HomeUiState(
     val userLat: Double? = null,
     val userLng: Double? = null,
     val isMapView: Boolean = false,
-    val showFilterSheet: Boolean = false
+    val showFilterSheet: Boolean = false,
+    val isDiscoveryMode: Boolean = false
 )
 
 /**
@@ -58,6 +62,7 @@ class HomeViewModel(
 ) : ViewModel() {
 
     private val eventRepository = container.eventRepository
+    private val reviewRepository = container.eventReviewRepository
     private val eventDiscoveryRepository = container.eventDiscoveryRepository
     private val preferences = container.preferences
     private val networkMonitor = container.networkMonitor
@@ -81,7 +86,8 @@ class HomeViewModel(
     private data class Combined(
         val events: List<Event>,
         val rsvps: Map<String, RsvpStatus>,
-        val favoriteIds: Set<String>
+        val favoriteIds: Set<String>,
+        val ratings: Map<String, RatingSummary>
     )
 
     private data class Controls(
@@ -130,9 +136,32 @@ class HomeViewModel(
         val combinedFlow = combine(
             eventRepository.observeAllEvents(),
             eventRepository.observeRsvpStatuses(),
+            eventRepository.observeFavoriteIds(),
+            reviewRepository.observeAllRatingSummaries()
+        ) { events, rsvps, favoriteIds, ratings ->
+            Combined(events, rsvps, favoriteIds, ratings)
+        }
+
+        val trendingFlow = eventRepository.observeTrendingEvents().map { events ->
+            events.map { event ->
+                EventView(
+                    event = event,
+                    rsvpStatus = combinedFlow.first().rsvps[event.id],
+                    isFavorite = combinedFlow.first().favoriteIds.contains(event.id)
+                )
+            }
+        }
+
+        val nearbyFlow = combine(
+            eventRepository.observeEventsNearMe(
+                lat = locationFlow.value?.first ?: 0.0,
+                lng = locationFlow.value?.second ?: 0.0,
+                radiusKm = radiusFlow.value
+            ),
+            eventRepository.observeRsvpStatuses(),
             eventRepository.observeFavoriteIds()
         ) { events, rsvps, favoriteIds ->
-            Combined(events, rsvps, favoriteIds)
+            events.map { EventView(it, rsvps[it.id], favoriteIds.contains(it.id)) }
         }
 
         val textControlsFlow = combine(queryFlow, categoryFlow, sortFlow) { query, category, sort ->
@@ -146,10 +175,48 @@ class HomeViewModel(
         }
 
         viewModelScope.launch {
-            combinedFlow.combine(controlsFlow) { combined, controls -> applyControls(combined, controls) }
-                .collect { views ->
-                    _uiState.value = _uiState.value.copy(events = views, isLoading = false)
+            combine(
+                eventRepository.observeAllEvents(),
+                eventRepository.observeRsvpStatuses(),
+                eventRepository.observeFavoriteIds(),
+                reviewRepository.observeAllRatingSummaries(),
+                queryFlow,
+                categoryFlow,
+                sortFlow,
+                radiusFlow,
+                radiusEnabledFlow,
+                locationFlow,
+                eventRepository.observeTrendingEvents()
+            ) { events, rsvps, favoriteIds, ratings, query, category, sort, radius, radiusEnabled, location, trending ->
+                val controls = Controls(query, category, sort, radius, radiusEnabled, location)
+                val combined = Combined(events, rsvps, favoriteIds, ratings)
+                
+                val filteredViews = applyControls(combined, controls)
+                
+                val trendingViews = trending.map { e ->
+                    EventView(e, rsvps[e.id], favoriteIds.contains(e.id))
                 }
+                
+                val nearbyViews = events.filter { e ->
+                    val lat = location?.first ?: 0.0
+                    val lng = location?.second ?: 0.0
+                    e.latitude != null && e.longitude != null &&
+                    com.eventfinder.app.utils.DistanceCalculator.calculateDistance(
+                        lat, lng, e.latitude, e.longitude
+                    ) <= radius
+                }.map { e -> 
+                    EventView(e, rsvps[e.id], favoriteIds.contains(e.id)) 
+                }
+
+                _uiState.update { it.copy(
+                    events = filteredViews,
+                    trendingEvents = trendingViews,
+                    nearbyEvents = nearbyViews,
+                    isLoading = false,
+                    userLat = location?.first,
+                    userLng = location?.second
+                ) }
+            }.collect {}
         }
 
         // Wire up new event / favourite updated alerts (FR-04)
@@ -209,7 +276,14 @@ class HomeViewModel(
         )
         val sorted = EventFilterer.sort(filtered, c.sort, userLat, userLng)
         return EventFilterer.attachDistances(sorted, userLat, userLng, combined.favoriteIds)
-            .map { it.copy(rsvpStatus = combined.rsvps[it.event.id]) }
+            .map { view ->
+                val rating = combined.ratings[view.event.id]
+                view.copy(
+                    rsvpStatus = combined.rsvps[view.event.id],
+                    averageRating = rating?.average,
+                    reviewCount = rating?.count ?: 0
+                )
+            }
     }
 
     fun onQueryChange(value: String) {
@@ -250,6 +324,10 @@ class HomeViewModel(
 
     fun onShowFilterSheet(show: Boolean) {
         _uiState.value = _uiState.value.copy(showFilterSheet = show)
+    }
+
+    fun onToggleDiscoveryMode(enabled: Boolean) {
+        _uiState.update { it.copy(isDiscoveryMode = enabled) }
     }
 
     fun setUserLocation(lat: Double, lng: Double) {

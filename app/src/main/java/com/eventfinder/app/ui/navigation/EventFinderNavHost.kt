@@ -43,7 +43,9 @@ import com.eventfinder.app.ui.screens.create.CreateEventScreen
 import com.eventfinder.app.ui.screens.detail.EventDetailScreen
 import com.eventfinder.app.ui.screens.editprofile.EditProfileScreen
 import com.eventfinder.app.ui.screens.favorites.FavoritesScreen
+import com.eventfinder.app.ui.screens.groups.GroupPlanningScreen
 import com.eventfinder.app.ui.screens.home.HomeScreen
+import com.eventfinder.app.ui.screens.tickets.TicketScannerScreen
 import com.eventfinder.app.ui.screens.profile.ProfileScreen
 import com.eventfinder.app.ui.screens.search.SearchScreen
 import com.eventfinder.app.ui.screens.settings.SettingsScreen
@@ -59,10 +61,13 @@ object AppDestinations {
     const val EDIT_PROFILE = "editProfile"
     const val EVENT_DETAIL = "event/{eventId}"
     const val EDIT_EVENT = "editEvent/{eventId}"
+    const val GROUP_PLANNING = "groupPlanning/{eventId}"
+    const val TICKET_SCANNER = "ticketScanner/{eventId}"
 
     fun eventDetail(eventId: String) = "event/$eventId"
-
     fun editEvent(eventId: String) = "editEvent/$eventId"
+    fun groupPlanning(eventId: String) = "groupPlanning/$eventId"
+    fun ticketScanner(eventId: String) = "ticketScanner/$eventId"
 }
 
 /**
@@ -153,17 +158,19 @@ fun EventFinderNavHost(
             MainScreen(container = container, navController = navController)
         }
 
-        composable(
-            route = AppDestinations.EVENT_DETAIL,
-            arguments = listOf(navArgument("eventId") { type = NavType.StringType })
-        ) { entry ->
-            EventDetailScreen(
-                container = container,
-                eventId = entry.arguments?.getString("eventId").orEmpty(),
-                onBack = { navController.popBackStack() },
-                onEditEvent = { navController.navigate(AppDestinations.editEvent(it)) }
-            )
-        }
+                        composable(
+                            route = AppDestinations.EVENT_DETAIL,
+                            arguments = listOf(navArgument("eventId") { type = NavType.StringType })
+                        ) { entry ->
+                            EventDetailScreen(
+                                container = container,
+                                eventId = entry.arguments?.getString("eventId").orEmpty(),
+                                onBack = { navController.popBackStack() },
+                                onEditEvent = { navController.navigate(AppDestinations.editEvent(it)) },
+                                onPlanWithFriends = { navController.navigate(AppDestinations.groupPlanning(it)) },
+                                onOpenScanner = { navController.navigate(AppDestinations.ticketScanner(it)) }
+                            )
+                        }
 
         composable(
             route = AppDestinations.EDIT_EVENT,
@@ -188,11 +195,33 @@ fun EventFinderNavHost(
             )
         }
 
-        composable(AppDestinations.EDIT_PROFILE) {
-            EditProfileScreen(container = container, onBack = { navController.popBackStack() })
-        }
-    }
-}
+                        composable(AppDestinations.EDIT_PROFILE) {
+                            EditProfileScreen(container = container, onBack = { navController.popBackStack() })
+                        }
+
+                        composable(
+                            route = AppDestinations.GROUP_PLANNING,
+                            arguments = listOf(navArgument("eventId") { type = NavType.StringType })
+                        ) { entry ->
+                            GroupPlanningScreen(
+                                container = container,
+                                eventId = entry.arguments?.getString("eventId").orEmpty(),
+                                onBack = { navController.popBackStack() }
+                            )
+                        }
+
+                        composable(
+                            route = AppDestinations.TICKET_SCANNER,
+                            arguments = listOf(navArgument("eventId") { type = NavType.StringType })
+                        ) { entry ->
+                            TicketScannerScreen(
+                                container = container,
+                                eventId = entry.arguments?.getString("eventId").orEmpty(),
+                                onBack = { navController.popBackStack() }
+                            )
+                        }
+                    }
+                }
 
 /** Bottom navigation destinations (Home, Search, Create, Favorites, Profile). */
 private enum class EventFinderDestination(

@@ -10,6 +10,7 @@ import com.eventfinder.app.data.repository.WeatherRepository
 import com.eventfinder.app.data.repository.WeatherSummary
 import com.eventfinder.app.di.AppContainer
 import com.eventfinder.app.domain.model.Event
+import com.eventfinder.app.domain.model.EventReview
 import com.eventfinder.app.domain.model.EventView
 import com.eventfinder.app.domain.model.RsvpStatus
 import com.eventfinder.app.notifications.NotificationHelper
@@ -30,7 +31,14 @@ data class EventDetailUiState(
     val notFound: Boolean = false,
     val eventView: EventView? = null,
     val weather: WeatherSummary? = null,
-    val weatherUnavailable: Boolean = false
+    val weatherUnavailable: Boolean = false,
+    val reviews: List<EventReview> = emptyList(),
+    val averageRating: Double? = null,
+    val reviewCount: Int = 0,
+    val canReview: Boolean = false,
+    val reviewDraftRating: Int = 0,
+    val reviewDraftComment: String = "",
+    val isSubmittingReview: Boolean = false
 )
 
 /**
@@ -42,10 +50,19 @@ class EventDetailViewModel(
     private val appContext: android.content.Context,
     private val eventId: String
 ) : ViewModel() {
+    private data class DetailsBundle(
+        val event: Event?,
+        val favoriteIds: Set<String>,
+        val rsvps: Map<String, com.eventfinder.app.domain.model.RsvpStatus>,
+        val reviews: List<EventReview>,
+        val rating: com.eventfinder.app.data.repository.RatingSummary
+    )
 
     private val eventRepository = container.eventRepository
+    private val reviewRepository = container.eventReviewRepository
 
     private val eventFlow = MutableStateFlow<Event?>(null)
+    private var currentUserId: String? = null
     private var weatherKey: Triple<Double, Double, Long>? = null
 
     private val _uiState = MutableStateFlow(EventDetailUiState())
@@ -56,25 +73,39 @@ class EventDetailViewModel(
 
     init {
         viewModelScope.launch {
+            currentUserId = container.preferences.sessionUserId.first()
+        }
+        viewModelScope.launch {
             kotlinx.coroutines.flow.combine(
                 eventFlow,
                 eventRepository.observeFavoriteIds(),
-                eventRepository.observeRsvpStatuses()
-            ) { event, favoriteIds, rsvps -> Triple(event, favoriteIds, rsvps) }
-                .collect { (event, favoriteIds, rsvps) ->
-                    if (event == null) return@collect
-                    _uiState.update { current ->
-                        current.copy(
-                            loading = false,
-                            notFound = false,
-                            eventView = EventView(
-                                event = event,
-                                rsvpStatus = rsvps[event.id],
-                                isFavorite = favoriteIds.contains(event.id)
-                            )
-                        )
-                    }
+                eventRepository.observeRsvpStatuses(),
+                reviewRepository.observeReviews(eventId),
+                reviewRepository.observeRatingSummary(eventId)
+            ) { event, favoriteIds, rsvps, reviews, rating ->
+                DetailsBundle(event, favoriteIds, rsvps, reviews, rating)
+            }.collect { bundle ->
+                val event = bundle.event ?: return@collect
+                val canReview = !currentUserId.isNullOrBlank() && (
+                    (event.isCreatedByUser && event.organizerId == currentUserId) ||
+                        bundle.rsvps[event.id] == com.eventfinder.app.domain.model.RsvpStatus.ATTENDING
+                )
+                _uiState.update { current ->
+                    current.copy(
+                        loading = false,
+                        notFound = false,
+                        eventView = EventView(
+                            event = event,
+                            rsvpStatus = bundle.rsvps[event.id],
+                            isFavorite = bundle.favoriteIds.contains(event.id)
+                        ),
+                        reviews = bundle.reviews,
+                        averageRating = bundle.rating.average,
+                        reviewCount = bundle.rating.count,
+                        canReview = canReview
+                    )
                 }
+            }
         }
         refresh()
     }
@@ -182,6 +213,34 @@ class EventDetailViewModel(
             } else {
                 _messages.emit(UiMessage.Resource(R.string.delete_failed))
             }
+        }
+    }
+
+    fun setReviewRating(rating: Int) {
+        _uiState.update { it.copy(reviewDraftRating = rating.coerceIn(0, 5)) }
+    }
+
+    fun setReviewComment(text: String) {
+        _uiState.update { it.copy(reviewDraftComment = text.take(500)) }
+    }
+
+    fun submitReview() {
+        viewModelScope.launch {
+            val rating = _uiState.value.reviewDraftRating
+            val comment = _uiState.value.reviewDraftComment
+            _uiState.update { it.copy(isSubmittingReview = true) }
+            val result = reviewRepository.submitReview(eventId, rating, comment)
+            _uiState.update {
+                it.copy(
+                    isSubmittingReview = false,
+                    reviewDraftRating = if (result.isSuccess) 0 else it.reviewDraftRating,
+                    reviewDraftComment = if (result.isSuccess) "" else it.reviewDraftComment
+                )
+            }
+            _messages.emit(
+                if (result.isSuccess) UiMessage.Resource(R.string.review_submitted)
+                else UiMessage.Literal(result.exceptionOrNull()?.message ?: "review_failed")
+            )
         }
     }
 

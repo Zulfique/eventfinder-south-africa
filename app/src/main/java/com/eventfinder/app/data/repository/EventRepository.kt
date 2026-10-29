@@ -51,6 +51,8 @@ interface EventRepository {
     fun observeFavoriteEvents(): Flow<List<Event>>
     fun observeFavoriteIds(): Flow<Set<String>>
     fun observeRsvpStatuses(): Flow<Map<String, RsvpStatus>>
+    fun observeEventsNearMe(lat: Double, lng: Double, radiusKm: Int): Flow<List<Event>>
+    fun observeTrendingEvents(): Flow<List<Event>>
     suspend fun ensureSeeded()
     suspend fun toggleFavorite(eventId: String): Boolean
     suspend fun setRsvp(eventId: String, status: RsvpStatus)
@@ -102,6 +104,44 @@ class EventRepositoryImpl(
         }
 
     @OptIn(ExperimentalCoroutinesApi::class)
+    override fun observeEventsNearMe(lat: Double, lng: Double, radiusKm: Int): Flow<List<Event>> =
+        preferences.sessionUserId.flatMapLatest { userId ->
+            eventDao.observeAll().map { rows ->
+                rows.filter { event ->
+                        (event.isPublic || (!userId.isNullOrBlank() && event.organizerId == userId)) &&
+                        event.latitude != null && event.longitude != null &&
+                        com.eventfinder.app.utils.DistanceCalculator.calculateDistance(
+                            lat, lng, event.latitude, event.longitude
+                        ) <= radiusKm
+                    }.map { it.toDomain() }
+            }
+        }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    override fun observeTrendingEvents(): Flow<List<Event>> =
+        preferences.sessionUserId.flatMapLatest { userId ->
+            eventDao.observeAll().map { rows ->
+                val now = System.currentTimeMillis()
+                rows.filter { event ->
+                        (event.isPublic || (!userId.isNullOrBlank() && event.organizerId == userId)) &&
+                        event.startDate >= now &&
+                        event.startDate <= now + (7 * 24 * 60 * 60 * 1000L) // Next 7 days
+                    }.sortedByDescending { it.attendeeCount }
+                     .take(20)
+                     .map { it.toDomain() }
+            }
+        }
+    @OptIn(ExperimentalCoroutinesApi::class)
+    override fun observeFavoriteIds(): Flow<Set<String>> =
+        preferences.sessionUserId.flatMapLatest { userId ->
+            if (userId.isNullOrBlank()) {
+                flowOf(emptySet())
+            } else {
+                favoriteDao.observeAllForUser(userId).map { rows -> rows.map { it.eventId }.toSet() }
+            }
+        }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
     override fun observeFavoriteIds(): Flow<Set<String>> =
         preferences.sessionUserId.flatMapLatest { userId ->
             if (userId.isNullOrBlank()) {
@@ -133,6 +173,34 @@ class EventRepositoryImpl(
             }
         }
 
+    @OptIn(ExperimentalCoroutinesApi::class)
+    override fun observeEventsNearMe(lat: Double, lng: Double, radiusKm: Int): Flow<List<Event>> =
+        preferences.sessionUserId.flatMapLatest { userId ->
+            eventDao.observeAll().map { rows ->
+                rows.filter { event ->
+                        (event.isPublic || (!userId.isNullOrBlank() && event.organizerId == userId)) &&
+                        event.latitude != null && event.longitude != null &&
+                        com.eventfinder.app.utils.DistanceCalculator.calculateDistance(
+                            lat, lng, event.latitude, event.longitude
+                        ) <= radiusKm
+                    }.map { it.toDomain() }
+            }
+        }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    override fun observeTrendingEvents(): Flow<List<Event>> =
+        preferences.sessionUserId.flatMapLatest { userId ->
+            eventDao.observeAll().map { rows ->
+                val now = System.currentTimeMillis()
+                rows.filter { event ->
+                        (event.isPublic || (!userId.isNullOrBlank() && event.organizerId == userId)) &&
+                        event.startDate >= now &&
+                        event.startDate <= now + (7 * 24 * 60 * 60 * 1000L) // Next 7 days
+                    }.sortedByDescending { it.attendeeCount }
+                     .take(20)
+                     .map { it.toDomain() }
+            }
+        }
 override suspend fun ensureSeeded() {
     val now = System.currentTimeMillis()
     val upcomingSamples = eventDao.countUpcomingSampleEvents(now)

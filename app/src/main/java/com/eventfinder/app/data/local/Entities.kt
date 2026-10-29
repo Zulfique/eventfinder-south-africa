@@ -4,8 +4,22 @@ import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
 
+@Entity(tableName = "group_plans")
+data class GroupPlanEntity(
+    @PrimaryKey val id: String,
+    val eventId: String,
+    val creatorId: String,
+    val members: String,
+    val meetingPointLabel: String?,
+    val meetingLat: Double?,
+    val meetingLng: Double?,
+    val proposedTime: Long?,
+    val createdAt: Long
+)
+
 /**
  * Room entity for a registered user.
+
  * The password is stored as a salted PBKDF2 hash.
  */
 @Entity(tableName = "users")
@@ -19,7 +33,12 @@ data class UserEntity(
     val defaultRadiusKm: Int,
     val biometricEnabled: Boolean,
     val createdAt: Long,
-    val serverBacked: Boolean = false
+    val serverBacked: Boolean = false,
+    val avatarType: String = "initials",
+    val avatarUrl: String? = null,
+    val avatarImageUrl: String? = null,
+    val isVerified: Boolean = false,
+    val trustScore: Double = 0.0
 )
 
 /**
@@ -42,6 +61,10 @@ data class EventEntity(
     val latitude: Double?,
     val longitude: Double?,
     val imageUrl: String?,
+    /** Externally discovered URL for the event or ticketing page, when available. */
+    val sourceUrl: String? = null,
+    /** Optional RSVP / venue capacity, only when reported by the source. */
+    val maxAttendees: Int? = null,
     /** True = visible in this device's local catalogue. Has no cross-device semantics. */
     val isPublic: Boolean,
     val organizerId: String,
@@ -86,6 +109,16 @@ data class SourceSyncEntity(
     val lastSuccessAt: Long,
     val lastEmptyAt: Long,
     val lastFailedAt: Long
+)
+
+@Entity(tableName = "tickets")
+data class TicketEntity(
+    @PrimaryKey val id: String,
+    val eventId: String,
+    val userId: String,
+    val ticketCode: String,
+    val issuedAt: Long,
+    val checkedInAt: Long?
 )
 
 /**

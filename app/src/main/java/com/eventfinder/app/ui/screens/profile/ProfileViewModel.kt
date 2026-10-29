@@ -20,6 +20,9 @@ import kotlinx.coroutines.launch
 data class ProfileUiState(
     val fullName: String = "",
     val email: String = "",
+    val avatarType: String = "initials",
+    val avatarUrl: String? = null,
+    val avatarImageUrl: String? = null,
     val eventsCreated: Int = 0,
     val attendingCount: Int = 0,
     val favoriteCount: Int = 0,
@@ -49,6 +52,9 @@ class ProfileViewModel(
         ProfileUiState(
             fullName = user?.fullName ?: "",
             email = user?.email ?: "",
+            avatarType = user?.avatarType ?: "initials",
+            avatarUrl = user?.avatarUrl,
+            avatarImageUrl = user?.avatarImageUrl,
             eventsCreated = myEvents.size,
             attendingCount = attending.size,
             favoriteCount = favIds.size,

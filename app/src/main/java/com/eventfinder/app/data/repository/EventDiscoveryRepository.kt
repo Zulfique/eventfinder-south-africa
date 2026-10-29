@@ -4,6 +4,7 @@ import com.eventfinder.app.data.local.EventDao
 import com.eventfinder.app.data.local.EventEntity
 import com.eventfinder.app.data.local.SourceSyncEntity
 import com.eventfinder.app.data.remote.EventGeocoder
+import com.eventfinder.app.data.remote.EventImageResolver
 import com.eventfinder.app.data.remote.model.RemoteEvent
 import com.eventfinder.app.data.sources.EventSource
 import com.eventfinder.app.domain.model.EventCategory
@@ -17,7 +18,8 @@ class EventDiscoveryRepository(
     private val eventDao: EventDao,
     private val sources: List<EventSource>,
     private val geocoder: EventGeocoder? = null,
-    private val apiClient: com.eventfinder.app.data.remote.EventFinderApiClient? = null
+    private val apiClient: com.eventfinder.app.data.remote.EventFinderApiClient? = null,
+    private val imageResolver: EventImageResolver? = null
 ) {
     private val tag = "EventDiscoveryRepository"
     private val refreshMutex = Mutex()
@@ -46,7 +48,10 @@ class EventDiscoveryRepository(
             if (result.failed || result.inserted == 0) continue
             val organizerId = result.organizerId
 
-            val entities = result.events.map { it.toEntity(organizerId) }
+            val resolvedEvents = result.events.map { event ->
+                imageResolver?.resolve(event) ?: event
+            }
+            val entities = resolvedEvents.map { it.toEntity(organizerId) }
             if (entities.isNotEmpty()) {
                 eventDao.replaceEventsForSource(organizerId, entities)
                 totalInserted += entities.size
@@ -93,6 +98,7 @@ class EventDiscoveryRepository(
         return try {
             val remote = client.publicEvents().getOrNull() ?: return 0
             val entities = remote.mapNotNull { e ->
+                val imageUrl = e.imageUrl
                 val start = com.eventfinder.app.data.remote.EventFinderApiClient
                     .parseIso(e.startUtc) ?: return@mapNotNull null
                 val end = com.eventfinder.app.data.remote.EventFinderApiClient
@@ -111,7 +117,8 @@ class EventDiscoveryRepository(
                     address = e.address,
                     latitude = e.latitude,
                     longitude = e.longitude,
-                    imageUrl = e.imageUrl,
+                    imageUrl = imageUrl,
+                    sourceUrl = null,
                     isPublic = true,
                     organizerId = BACKEND_ORGANIZER_ID,
                     organizerName = e.organizerName.ifBlank { "EventFinder" },
@@ -188,7 +195,7 @@ class EventDiscoveryRepository(
                 AppLogger.w(
                     tag,
                     "Suspiciously small update from ${source.displayName}: " +
-                        "${validEvents.size} new vs $existingCount cached — keeping cached events"
+                        "${validEvents.size} new vs $existingCount cached � keeping cached events"
                 )
                 recordSync(source.id, lastSuccessAt = null, lastEmptyAt = System.currentTimeMillis())
                 return SourceResult(
@@ -269,6 +276,7 @@ class EventDiscoveryRepository(
             latitude = latitude,
             longitude = longitude,
             imageUrl = imageUrl,
+            sourceUrl = sourceUrl,
             isPublic = true,
             organizerId = organizerId,
             organizerName = organizerName ?: source,

@@ -1,6 +1,8 @@
 package com.eventfinder.app.ui.screens.profile
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -20,6 +22,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -39,8 +42,11 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import coil.compose.AsyncImage
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -97,14 +103,64 @@ fun ProfileScreen(
                     ) {
                         Box(
                             Modifier.size(64.dp).clip(CircleShape)
-                                .background(MaterialTheme.colorScheme.primaryContainer),
+                                .background(MaterialTheme.colorScheme.primaryContainer)
+                                .clickable(onClick = onEditProfile),
                             contentAlignment = Alignment.Center
                         ) {
-                            Text(
-                                state.fullName.take(2).uppercase(),
-                                style = MaterialTheme.typography.titleLarge,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer
-                            )
+                            val type = state.avatarType.ifBlank { "initials" }
+                            val url = state.avatarImageUrl ?: state.avatarUrl
+                            val contentDescription = when (type) {
+                                "male" -> "Profile avatar, male"
+                                "female" -> "Profile avatar, female"
+                                "uploaded" -> "Profile avatar, uploaded photo"
+                                else -> "Profile avatar, initials"
+                            }
+                            when (type) {
+                                "male" -> Image(
+                                    painter = painterResource(R.drawable.avatar_male),
+                                    contentDescription = contentDescription,
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier.size(64.dp).clip(CircleShape)
+                                )
+                                "female" -> Image(
+                                    painter = painterResource(R.drawable.avatar_female),
+                                    contentDescription = contentDescription,
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier.size(64.dp).clip(CircleShape)
+                                )
+                                "uploaded" -> if (!url.isNullOrBlank()) {
+                                    AsyncImage(
+                                        model = url,
+                                        contentDescription = contentDescription,
+                                        contentScale = ContentScale.Crop,
+                                        placeholder = painterResource(R.drawable.avatar_male),
+                                        error = painterResource(R.drawable.avatar_male),
+                                        modifier = Modifier.size(64.dp).clip(CircleShape)
+                                    )
+                                } else {
+                                    Text(
+                                        state.fullName.take(2).uppercase(),
+                                        style = MaterialTheme.typography.titleLarge,
+                                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                                    )
+                                }
+                                else -> if (state.fullName.isBlank()) {
+                                    Icon(
+                                        Icons.Outlined.Person,
+                                        contentDescription = contentDescription,
+                                        modifier = Modifier.size(32.dp),
+                                        tint = MaterialTheme.colorScheme.onPrimaryContainer
+                                    )
+                                } else {
+                                    Text(
+                                        state.fullName.take(2).uppercase(),
+                                        style = MaterialTheme.typography.titleLarge,
+                                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                                    )
+                                }
+                            }
                         }
                         Spacer(Modifier.size(12.dp))
                         Column {

@@ -14,8 +14,10 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -31,6 +33,13 @@ import androidx.compose.material.icons.outlined.Navigation
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.Star
+import androidx.compose.material.icons.outlined.StarOutline
+
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material.icons.outlined.OpenInNew
+import androidx.compose.material.icons.outlined.ContentCopy
+import androidx.compose.material.icons.outlined.CalendarToday
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material.icons.outlined.WbSunny
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -85,7 +94,9 @@ fun EventDetailScreen(
     container: AppContainer,
     eventId: String,
     onBack: () -> Unit,
-    onEditEvent: (String) -> Unit = {}
+    onEditEvent: (String) -> Unit = {},
+    onPlanWithFriends: (String) -> Unit = {},
+    onOpenScanner: (String) -> Unit = {}
 ) {
     val context = LocalContext.current
     val viewModel: EventDetailViewModel = viewModel(
@@ -255,7 +266,7 @@ fun EventDetailScreen(
                                 if (view.distanceKm != null) {
                                     Spacer(Modifier.size(8.dp))
                                     Text(
-                                        "· ${com.eventfinder.app.utils.DistanceCalculator.displayDistanceKm(view.distanceKm)} km " +
+                                        "ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â· ${com.eventfinder.app.utils.DistanceCalculator.displayDistanceKm(view.distanceKm)} km " +
                                             stringResource(R.string.distance_away),
                                         color = MaterialTheme.colorScheme.primary,
                                         style = MaterialTheme.typography.bodyMedium
@@ -308,6 +319,97 @@ fun EventDetailScreen(
                             // Weather card (Open-Meteo)
                             WeatherCard(state)
                             Spacer(Modifier.height(12.dp))
+
+                            Text(
+                                stringResource(R.string.reviews),
+                                style = MaterialTheme.typography.titleMedium
+                            )
+                            Spacer(Modifier.height(4.dp))
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                val average = state.averageRating
+                                if (average != null && state.reviewCount > 0) {
+                                    Row {
+                                        repeat(5) { index ->
+                                            Icon(
+                                                imageVector = if (index < average.toInt()) Icons.Outlined.Star else Icons.Outlined.StarOutline,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(16.dp),
+                                                tint = if (index < average.toInt()) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                    }
+                                    Spacer(Modifier.width(6.dp))
+                                    Text("%.1f (%d)".format(average, state.reviewCount), style = MaterialTheme.typography.bodyMedium)
+                                } else {
+                                    Text(stringResource(R.string.no_reviews_yet), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                            }
+                            Spacer(Modifier.height(8.dp))
+
+                            if (state.canReview) {
+                                Text(
+                                    if (state.reviewDraftRating == 0) stringResource(R.string.tap_to_rate)
+                                    else "${state.reviewDraftRating} ${stringResource(R.string.your_rating)}",
+                                    style = MaterialTheme.typography.labelMedium
+                                )
+                                Row {
+                                    repeat(5) { index ->
+                                        val star = index + 1
+                                        IconButton(onClick = { viewModel.setReviewRating(star) }) {
+                                            Text(if (state.reviewDraftRating >= star) "â˜…" else "â˜†", color = if (state.reviewDraftRating >= star) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 18.sp)
+
+
+
+
+
+
+                                    }
+                                }
+                                OutlinedTextField(
+                                    value = state.reviewDraftComment,
+                                    onValueChange = { viewModel.setReviewComment(it) },
+                                    label = { Text(stringResource(R.string.review_comment_optional)) },
+                                    modifier = Modifier.fillMaxWidth().height(100.dp),
+                                    maxLines = 5
+                                )
+                                Spacer(Modifier.height(8.dp))
+                                Button(
+                                    onClick = { viewModel.submitReview() },
+                                    enabled = state.reviewDraftRating > 0 && !state.isSubmittingReview,
+                                    modifier = Modifier.fillMaxWidth().height(44.dp)
+                                ) {
+                                    Text(stringResource(R.string.submit_review))
+                                }
+                                Spacer(Modifier.height(8.dp))
+                            }
+
+                            if (state.reviews.isNotEmpty()) {
+                                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    state.reviews.forEach { review ->
+                                        Card(modifier = Modifier.fillMaxWidth()) {
+                                            Column(Modifier.padding(12.dp)) {
+                                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                                    Row {
+                                                        repeat(5) { index ->
+                                                            Icon(
+                                                                imageVector = if (index < review.rating) Icons.Outlined.Star else Icons.Outlined.StarOutline,
+                                                                contentDescription = null,
+                                                                modifier = Modifier.size(14.dp),
+                                                                tint = if (index < review.rating) MaterialTheme.colorScheme.primary else MaterialTheme.colorHcolorScheme.onSurfaceVariant
+                                                            )
+                                                        }
+                                                    }
+                                                    Spacer(Modifier.width(8.dp))
+                                                    Text(review.authorName, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                                                }
+                                                Spacer(Modifier.height(4.dp))
+                                                Text(review.comment, style = MaterialTheme.typography.bodyMedium)
+                                            }
+                                        }
+                                    }
+                                }
+                                Spacer(Modifier.height(12.dp))
+                            }
 
                             Button(
                                 onClick = { viewModel.setRsvp(RsvpStatus.ATTENDING) },
@@ -403,25 +505,44 @@ fun EventDetailScreen(
                                     Text(stringResource(R.string.directions))
                                 }
                             }
-                            Spacer(Modifier.height(8.dp))
-                            FilledTonalButton(
-                                onClick = {
-                                    val send = Intent(Intent.ACTION_SEND).apply {
-                                        type = "text/plain"
-                                        putExtra(
-                                            Intent.EXTRA_TEXT,
-                                            "${event.title}\n${DateTimeUtils.formatFullDateTime(event.startDate)}\n" +
-                                                "${event.venueName}, ${event.address}\n\nDiscover via EventFinder"
-                                        )
-                                    }
-                                    context.startActivity(Intent.createChooser(send, context.getString(R.string.share)))
-                                },
-                                modifier = Modifier.fillMaxWidth().height(44.dp)
-                            ) {
-                                Icon(Icons.Outlined.Share, contentDescription = null)
-                                Spacer(Modifier.size(6.dp))
-                                Text(stringResource(R.string.share))
-                            }
+                             FilledTonalButton(
+                                 onClick = { onPlanWithFriends(event.id) },
+                                 modifier = Modifier.fillMaxWidth().height(44.dp)
+                             ) {
+                                 Icon(Icons.Outlined.Group, contentDescription = null)
+                                 Spacer(Modifier.size(6.dp))
+                                 Text("Plan with Friends")
+                             }
+                             Spacer(Modifier.height(8.dp))
+                             if (event.isCreatedByUser) {
+                                 Button(
+                                     onClick = { onOpenScanner(event.id) },
+                                     modifier = Modifier.fillMaxWidth().height(44.dp)
+                                 ) {
+                                     Icon(Icons.Outlined.QrCodeScanner, contentDescription = null)
+                                     Spacer(Modifier.size(6.dp))
+                                     Text("Check-in Attendees")
+                                 }
+                                 Spacer(Modifier.height(8.dp))
+                             }
+                             FilledTonalButton(
+                                 onClick = {
+                                     val send = Intent(Intent.ACTION_SEND).apply {
+                                         type = "text/plain"
+                                         putExtra(
+                                             Intent.EXTRA_TEXT,
+                                             "${event.title}\n${DateTimeUtils.formatFullDateTime(event.startDate)}\n" +
+                                                 "${event.venueName}, ${event.address}\n\nDiscover via EventFinder"
+                                         )
+                                     }
+                                     context.startActivity(Intent.createChooser(send, context.getString(R.string.share)))
+                                 },
+                                 modifier = Modifier.fillMaxWidth().height(44.dp)
+                             ) {
+                                 Icon(Icons.Outlined.Share, contentDescription = null)
+                                 Spacer(Modifier.size(6.dp))
+                                 Text(stringResource(R.string.share))
+                             }
 
                             Spacer(Modifier.height(24.dp))
 
@@ -458,7 +579,7 @@ private fun WeatherCard(state: EventDetailUiState) {
                 )
                 when {
                     state.weather != null -> Text(
-                        "${describeWeatherCode(state.weather.weatherCode)} · " +
+                        "${describeWeatherCode(state.weather.weatherCode)} ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â· " +
                             "${state.weather.temperatureCelsius}${state.weather.unit}",
                         style = MaterialTheme.typography.titleMedium,
                         color = MaterialTheme.colorScheme.onPrimaryContainer

@@ -38,6 +38,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -185,6 +186,8 @@ fun EventCard(
                 model = event.imageUrl,
                 contentDescription = stringResource(R.string.event_image),
                 contentScale = ContentScale.Crop,
+                placeholder = painterResource(R.drawable.ic_image_placeholder),
+                error = painterResource(R.drawable.ic_image_placeholder),
                 modifier = Modifier
                     .size(88.dp)
                     .clip(RoundedCornerShape(14.dp))
@@ -236,6 +239,16 @@ fun EventCard(
                             stringResource(R.string.distance_away),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.primary
+                    )
+                }
+                if (view.averageRating != null && view.reviewCount > 0) {
+                    Spacer(Modifier.height(2.dp))
+                    val average = view.averageRating!!
+                    Text(
+                        "${"★".repeat(average.toInt().coerceIn(0, 5))}${
+                            "☆".repeat((5 - average.toInt().coerceIn(0, 5)).coerceIn(0, 5))
+                        } %.1f (%d)".format(average, view.reviewCount),
+                        style = MaterialTheme.typography.labelSmall
                     )
                 }
                 Spacer(Modifier.height(4.dp))

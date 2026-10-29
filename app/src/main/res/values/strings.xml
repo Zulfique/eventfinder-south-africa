@@ -290,4 +290,18 @@
   <string name="default_city">Default city</string>
   <string name="default_city_hint">e.g. Johannesburg — used when location is off</string>
   <string name="default_radius">Search radius</string>
-  <string name="radius_km_value">%d km</string></resources>
+  <string name="radius_km_value">%d km</string>
+  <string name="reviews" translatable="false">Reviews</string>
+  <string name="average_rating" translatable="false">Average rating</string>
+  <string name="write_review" translatable="false">Write a verified review</string>
+  <string name="review_comment_optional" translatable="false">Optional review comment</string>
+  <string name="submit_review" translatable="false">Submit review</string>
+  <string name="review_submitted" translatable="false">Review saved</string>
+  <string name="no_reviews_yet" translatable="false">No reviews yet</string>
+  <string name="your_rating" translatable="false">Your rating</string>
+  <string name="tap_to_rate" translatable="false">Tap to rate</string>
+  <string name="source_link" translatable="false">Open source link</string>
+  <string name="capacity" translatable="false">Capacity</string>
+  <string name="avatar_content_description">Profile avatar</string>
+  <string name="edit_avatar">Edit avatar</string>
+</resources>

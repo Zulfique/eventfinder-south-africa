@@ -45,6 +45,7 @@ interface AuthRepository {
     suspend fun biometricLogin(): Result<User>
     suspend fun logout()
     suspend fun updateProfile(fullName: String, email: String): Result<User>
+    suspend fun updateAvatarType(avatarType: String, avatarImageUrl: String? = null): Result<User> = Result.failure(UnsupportedOperationException())
     suspend fun verifyEmailChange(token: String): Result<Unit>
     suspend fun setBiometricEnabled(enabled: Boolean)
 
@@ -327,6 +328,32 @@ class AuthRepositoryImpl(
         val updated = current.copy(fullName = normalizedFullName, email = normalizedEmail)
         AppLogger.i("AuthRepository", "Profile updated locally for ${updated.id}")
         return Result.success(updated)
+    }
+
+    override suspend fun updateAvatarType(avatarType: String, avatarImageUrl: String?): Result<User> {
+        val current = currentUser.first()
+            ?: return Result.failure(IllegalStateException("no_session"))
+        val normalized = avatarType.ifBlank { "initials" }
+        val normalizedUrl = if (normalized == "uploaded") avatarImageUrl?.takeIf { it.isNotBlank() } else null
+
+        val entity = userDao.findById(current.id)
+            ?: return Result.failure(IllegalStateException("user_missing"))
+        userDao.upsert(
+            entity.copy(
+                avatarType = normalized,
+                avatarUrl = normalizedUrl,
+                avatarImageUrl = normalizedUrl
+            )
+        )
+
+        AppLogger.i("AuthRepository", "Avatar updated for ${current.email}: $normalized")
+        return Result.success(
+            current.copy(
+                avatarType = normalized,
+                avatarUrl = normalizedUrl,
+                avatarImageUrl = normalizedUrl
+            )
+        )
     }
 
     override suspend fun verifyEmailChange(token: String): Result<Unit> {

@@ -7,12 +7,19 @@ import com.eventfinder.app.data.cloud.SyncCoordinator
 import com.eventfinder.app.data.local.AppDatabase
 import com.eventfinder.app.data.remote.ApiClient
 import com.eventfinder.app.data.remote.EventGeocoder
+import com.eventfinder.app.data.remote.EventImageResolver
 import com.eventfinder.app.data.remote.PublicJsonEventClient
 import com.eventfinder.app.data.repository.AuthRepository
 import com.eventfinder.app.data.repository.AuthRepositoryImpl
 import com.eventfinder.app.data.repository.EventDiscoveryRepository
 import com.eventfinder.app.data.repository.EventRepository
 import com.eventfinder.app.data.repository.EventRepositoryImpl
+import com.eventfinder.app.data.repository.EventReviewRepository
+import com.eventfinder.app.data.repository.EventReviewRepositoryImpl
+import com.eventfinder.app.data.repository.GroupPlanningRepository
+import com.eventfinder.app.data.repository.GroupPlanningRepositoryImpl
+import com.eventfinder.app.data.repository.TicketRepository
+import com.eventfinder.app.data.repository.TicketRepositoryImpl
 import com.eventfinder.app.data.repository.OpenStreetMapRepository
 import com.eventfinder.app.data.repository.WeatherRepository
 import com.eventfinder.app.data.repository.WeatherRepositoryImpl
@@ -94,7 +101,26 @@ class AppContainer(context: Context) {
         )
     }
 
+    val eventReviewRepository: com.eventfinder.app.data.repository.EventReviewRepository by lazy {
+        EventReviewRepositoryImpl(
+            reviewDao = database.eventReviewDao(),
+            eventDao = database.eventDao(),
+            rsvpDao = database.rsvpDao(),
+            userDao = database.userDao(),
+            preferences = preferences
+        )
+    }
+
+    val groupPlanningRepository: GroupPlanningRepository by lazy {
+        GroupPlanningRepositoryImpl(database.groupPlanDao())
+    }
+
+    val ticketRepository: TicketRepository by lazy {
+        TicketRepositoryImpl(database.ticketDao())
+    }
+
     val weatherRepository: WeatherRepository by lazy {
+
         WeatherRepositoryImpl(ApiClient.openMeteoApi(appContext.cacheDir))
     }
 
@@ -132,12 +158,17 @@ class AppContainer(context: Context) {
         ApiClient.httpClient(appContext.cacheDir)
     }
 
+    private val eventImageResolver by lazy {
+        EventImageResolver(httpClient)
+    }
+
     val eventDiscoveryRepository: EventDiscoveryRepository by lazy {
         EventDiscoveryRepository(
             eventDao = database.eventDao(),
             sources = SouthAfricaEventSources.create(publicJsonEventClient, httpClient),
             geocoder = eventGeocoder,
-            apiClient = eventFinderApiClient
+            apiClient = eventFinderApiClient,
+            imageResolver = eventImageResolver
         )
     }
 

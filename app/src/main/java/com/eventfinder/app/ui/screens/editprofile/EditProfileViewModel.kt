@@ -22,6 +22,10 @@ import kotlinx.coroutines.launch
 data class EditProfileUiState(
     val fullName: String = "",
     val email: String = "",
+    val avatarType: String = "initials",
+    val avatarUrl: String? = null,
+    val avatarImageUrl: String? = null,
+    val avatarUploading: Boolean = false,
     val saving: Boolean = false,
     val nameError: Int? = null,
     val emailError: Int? = null,
@@ -47,13 +51,39 @@ class EditProfileViewModel(
         viewModelScope.launch {
             authRepository.currentUser.first()?.let { user ->
                 _uiState.update {
-                    it.copy(fullName = user.fullName, email = user.email)
+                    it.copy(
+                        fullName = user.fullName,
+                        email = user.email,
+                        avatarType = user.avatarType,
+                        avatarUrl = user.avatarUrl,
+                        avatarImageUrl = user.avatarImageUrl
+                    )
                 }
             }
         }
     }
 
-    fun onNameChange(v: String) = _uiState.update { it.copy(fullName = v, nameError = null) }
+    fun onAvatarTypeChange(v: String) =
+        _uiState.update { state ->
+            when (v) {
+                "uploaded" -> state.copy(avatarType = v)
+                else -> state.copy(avatarType = v, avatarUrl = null, avatarImageUrl = null)
+            }
+        }
+
+    fun onAvatarImageChange(url: String?) {
+        val normalized = url?.takeIf { it.isNotBlank() }
+        _uiState.update {
+            it.copy(
+                avatarType = "uploaded",
+                avatarUrl = normalized,
+                avatarImageUrl = normalized
+            )
+        }
+    }
+
+    fun setAvatarUploading(value: Boolean) =
+        _uiState.update { it.copy(avatarUploading = value) }    fun onNameChange(v: String) = _uiState.update { it.copy(fullName = v, nameError = null) }
     fun onEmailChange(v: String) = _uiState.update { it.copy(email = v, emailError = null) }
     fun onVerificationTokenChange(v: String) = _uiState.update { it.copy(verificationToken = v) }
 
@@ -94,6 +124,7 @@ class EditProfileViewModel(
         if (state.saving || !validate()) return
         viewModelScope.launch {
             _uiState.update { it.copy(saving = true) }
+            authRepository.updateAvatarType(state.avatarType, state.avatarImageUrl ?: state.avatarUrl)
             val result = authRepository.updateProfile(state.fullName.trim(), state.email.trim())
             _uiState.update { it.copy(saving = false) }
             result.fold(
