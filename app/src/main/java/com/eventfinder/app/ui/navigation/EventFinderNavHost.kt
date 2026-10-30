@@ -1,6 +1,30 @@
-package com.eventfinder.app.ui.navigation
+﻿package com.eventfinder.app.ui.navigation
 
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.material.icons.filled.Explore
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.outlined.AddCircle
+import androidx.compose.material.icons.outlined.Explore
+import androidx.compose.material.icons.outlined.FavoriteBorder
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Surface
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -227,13 +251,39 @@ fun EventFinderNavHost(
 private enum class EventFinderDestination(
     val route: String,
     val labelRes: Int,
-    val icon: ImageVector
+    val icon: ImageVector,
+    val selectedIcon: ImageVector
 ) {
-    HOME("home", R.string.discover_events, Icons.Outlined.Home),
-    SEARCH("search", R.string.search_title, Icons.Outlined.Search),
-    CREATE("create", R.string.create_event_title, Icons.Filled.AddCircle),
-    FAVORITES("favorites", R.string.favorites_title, Icons.Outlined.Favorite),
-    PROFILE("profile", R.string.profile_title, Icons.Outlined.Person)
+    HOME(
+        "home",
+        R.string.discover_events,
+        Icons.Outlined.Explore,
+        Icons.Filled.Explore
+    ),
+    SEARCH(
+        "search",
+        R.string.search_title,
+        Icons.Outlined.Search,
+        Icons.Filled.Search
+    ),
+    CREATE(
+        "create",
+        R.string.create_event_title,
+        Icons.Outlined.AddCircle,
+        Icons.Filled.AddCircle
+    ),
+    FAVORITES(
+        "favorites",
+        R.string.favorites_title,
+        Icons.Outlined.FavoriteBorder,
+        Icons.Filled.Favorite
+    ),
+    PROFILE(
+        "profile",
+        R.string.profile_title,
+        Icons.Outlined.Person,
+        Icons.Filled.Person
+    )
 }
 
 @Composable
@@ -241,36 +291,102 @@ private fun EventFinderBottomBar(
     currentRoute: String?,
     onNavigate: (String) -> Unit
 ) {
-    NavigationBar(
-        modifier = Modifier.fillMaxWidth()
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = MaterialTheme.colorScheme.surface,
+        shadowElevation = 12.dp
     ) {
-        EventFinderDestination.entries.forEach { destination ->
-            NavigationBarItem(
-                selected = currentRoute == destination.route,
-                onClick = {
-                    if (currentRoute != destination.route) {
-                        onNavigate(destination.route)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(
+                    horizontal = 10.dp,
+                    vertical = 9.dp
+                ),
+            horizontalArrangement = Arrangement.SpaceEvenly,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            EventFinderDestination.entries.forEach { destination ->
+
+                val selected = currentRoute == destination.route
+                val isCreate = destination == EventFinderDestination.CREATE
+
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(16.dp))
+                        .clickable {
+                            if (!selected) onNavigate(destination.route)
+                        }
+                        .padding(vertical = 5.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    if (isCreate) {
+                        Box(
+                            modifier = Modifier
+                                .size(48.dp)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.primary),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = destination.selectedIcon,
+                                contentDescription = stringResource(destination.labelRes),
+                                tint = MaterialTheme.colorScheme.onPrimary,
+                                modifier = Modifier.size(27.dp)
+                            )
+                        }
+                    } else {
+                        Box(
+                            modifier = Modifier
+                                .size(42.dp)
+                                .clip(RoundedCornerShape(14.dp))
+                                .background(
+                                    if (selected) {
+                                        MaterialTheme.colorScheme.primaryContainer
+                                    } else {
+                                        Color.Transparent
+                                    }
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = if (selected) {
+                                    destination.selectedIcon
+                                } else {
+                                    destination.icon
+                                },
+                                contentDescription = stringResource(destination.labelRes),
+                                tint = if (selected) {
+                                    MaterialTheme.colorScheme.primary
+                                } else {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                },
+                                modifier = Modifier.size(23.dp)
+                            )
+                        }
                     }
-                },
-                icon = {
-                    Icon(
-                        imageVector = destination.icon,
-                        contentDescription = stringResource(destination.labelRes)
-                    )
-                },
-                label = {
+
+                    Spacer(Modifier.height(3.dp))
+
                     Text(
                         text = stringResource(destination.labelRes),
-                        textAlign = TextAlign.Center,
-                        maxLines = 1
+                        maxLines = 1,
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = if (selected || isCreate) {
+                            FontWeight.Bold
+                        } else {
+                            FontWeight.Medium
+                        },
+                        color = when {
+                            isCreate -> MaterialTheme.colorScheme.primary
+                            selected -> MaterialTheme.colorScheme.primary
+                            else -> MaterialTheme.colorScheme.onSurfaceVariant
+                        }
                     )
-                },
-                alwaysShowLabel = true,
-                colors = NavigationBarItemDefaults.colors(
-                    indicatorColor = MaterialTheme.colorScheme.primaryContainer,
-                    selectedIconColor = MaterialTheme.colorScheme.primary
-                )
-            )
+                }
+            }
         }
     }
 }
@@ -322,3 +438,7 @@ private fun MainScreen(container: AppContainer, navController: NavHostController
         }
     }
 }
+
+
+
+
