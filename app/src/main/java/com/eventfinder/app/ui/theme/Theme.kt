@@ -14,29 +14,49 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 
 private val LightColors = lightColorScheme(
-    primary = Color(0xFF00766B),
+    primary = BrandGreen,
     onPrimary = Color.White,
-    primaryContainer = Color(0xFFB7F4EABF),
-    onPrimaryContainer = Color(0xFF0B3D2E),
-    secondary = Color(0xFFF5B800),
-    onSecondary = Color.White,
-    tertiary = Color(0xFF1B3A4B),
-    background = Color(0xFFF6F7F8),
-    surface = Color.White,
-    surfaceVariant = Color(0xFFE8EDF2),
-    error = Color(0xFFB3261E)
+    primaryContainer = Color(0xFFB2F5EA),
+    onPrimaryContainer = Color(0xFF00382E),
+    secondary = BrandAmber,
+    onSecondary = Color(0xFF3E2E00),
+    secondaryContainer = Color(0xFFFFE082),
+    onSecondaryContainer = Color(0xFF261A00),
+    tertiary = BrandPurple,
+    onTertiary = Color.White,
+    tertiaryContainer = Color(0xFFEDE7F6),
+    onTertiaryContainer = Color(0xFF1A0050),
+    background = SurfaceOffWhite,
+    surface = SurfaceCard,
+    surfaceVariant = Color(0xFFE3E8EF),
+    onSurfaceVariant = Color(0xFF444950),
+    error = BrandRed,
+    onError = Color.White,
+    errorContainer = Color(0xFFFFDAD6),
+    onErrorContainer = Color(0xFF410002)
 )
 
 private val DarkColors = darkColorScheme(
-    primary = Color(0xFF4ED7BD),
-    onPrimary = Color(0xFF0B3D2E),
-    primaryContainer = Color(0xFF0B5C45),
-    onPrimaryContainer = Color(0xFFB7F4EABF),
-    secondary = Color(0xFFFFCA4D),
-    tertiary = Color(0xFF8FB6FF),
-    background = Color(0xFF15171B),
-    surface = Color(0xFF21262D),
-    error = Color(0xFFFF8A80)
+    primary = BrandGreenGlow,
+    onPrimary = Color(0xFF00382E),
+    primaryContainer = Color(0xFF005045),
+    onPrimaryContainer = Color(0xFFB2F5EA),
+    secondary = BrandAmberGlow,
+    onSecondary = Color(0xFF3E2E00),
+    secondaryContainer = Color(0xFF5B4300),
+    onSecondaryContainer = Color(0xFFFFE082),
+    tertiary = BrandPurpleGlow,
+    onTertiary = Color(0xFF1A0050),
+    tertiaryContainer = Color(0xFF4A148C),
+    onTertiaryContainer = Color(0xFFEDE7F6),
+    background = SurfaceInk,
+    surface = SurfaceCardDark,
+    surfaceVariant = Color(0xFF2C313A),
+    onSurfaceVariant = Color(0xFFC4C9D1),
+    error = BrandRedGlow,
+    onError = Color(0xFF410002),
+    errorContainer = Color(0xFF93000A),
+    onErrorContainer = Color(0xFFFFDAD6)
 )
 
 @Composable
