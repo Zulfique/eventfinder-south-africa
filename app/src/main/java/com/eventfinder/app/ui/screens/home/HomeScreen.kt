@@ -1,4 +1,4 @@
-package com.eventfinder.app.ui.screens.home
+﻿package com.eventfinder.app.ui.screens.home
 
 import android.Manifest
 import android.annotation.SuppressLint
@@ -38,6 +38,7 @@ import androidx.compose.material.icons.outlined.Map
 import androidx.compose.material.icons.outlined.MyLocation
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.TrendingUp
+import androidx.compose.material.icons.automirrored.outlined.TrendingUp
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.FilterChip
@@ -83,6 +84,22 @@ import com.eventfinder.app.domain.model.EventSort
 import com.eventfinder.app.ui.components.CategoryChips
 import com.eventfinder.app.ui.components.EmptyState
 import com.eventfinder.app.ui.components.EventCard
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.outlined.FavoriteBorder
+import androidx.compose.material.icons.outlined.LocationOn
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.style.TextOverflow
+import coil.compose.AsyncImage
+import com.eventfinder.app.domain.model.EventView
+import com.eventfinder.app.ui.components.categoryLabel
+import com.eventfinder.app.utils.DateTimeUtils
 import com.eventfinder.app.ui.components.LoadingView
 import com.eventfinder.app.ui.components.ShimmerBox
 import com.eventfinder.app.ui.components.resolve
@@ -97,7 +114,7 @@ import org.osmdroid.views.MapView
  * This is deliberately *not* derived from the device language: an English
  * speaker in Durban and an Afrikaans speaker in Cape Town must both get the
  * same sensible starting point. The real centre comes from the device
- * position, or from the "Default city" preference in Settings — see
+ * position, or from the "Default city" preference in Settings â€” see
  * [PlaceResolver].
  */
 internal fun defaultSouthAfricaCenter(): Pair<Double, Double> {
@@ -226,18 +243,33 @@ fun HomeScreen(
         topBar = {
             TopAppBar(
                 title = {
-                    Column(verticalArrangement = Arrangement.spacedBy(0.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("Event", fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.onSurface)
-                            Text("Finder", fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.primary)
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(1.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Event",
+                                fontWeight = FontWeight.ExtraBold,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                style = MaterialTheme.typography.titleLarge
+                            )
+                            Text(
+                                text = "Finder",
+                                fontWeight = FontWeight.ExtraBold,
+                                color = MaterialTheme.colorScheme.primary,
+                                style = MaterialTheme.typography.titleLarge
+                            )
                         }
                         Text(
-                            "S O U T H   A F R I C A",
+                            text = "SOUTH AFRICA",
                             style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            letterSpacing = androidx.compose.ui.unit.TextUnit.Unspecified
                         )
-                    }
-                },
+                    }                },
                 actions = {
                     IconToggleButton(
                         checked = state.isMapView,
@@ -281,11 +313,20 @@ fun HomeScreen(
                 OutlinedTextField(
                     value = state.query,
                     onValueChange = viewModel::onQueryChange,
-                    placeholder = { Text(stringResource(R.string.search_placeholder)) },
-                    leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = "Search") },
+                    placeholder = {
+                        Text("What are you in the mood for?")
+                    },
+                    leadingIcon = {
+                        Icon(
+                            Icons.Outlined.Search,
+                            contentDescription = "Search events"
+                        )
+                    },
                     singleLine = true,
-                    shape = androidx.compose.foundation.shape.RoundedCornerShape(28.dp),
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)
+                    shape = RoundedCornerShape(18.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 12.dp)
                 )
 
                 Spacer(Modifier.height(4.dp))
@@ -401,56 +442,279 @@ private fun ColumnScope.EventList(
     onFavoriteToggle: (String) -> Unit,
     onRetry: () -> Unit = {}
 ) {
-                if (state.events.isEmpty()) {
-                    Column(
-                        modifier = Modifier.weight(1f),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center
-                    ) {
-                        EmptyState(
-                            icon = Icons.Outlined.EventBusy,
-                            title = stringResource(R.string.no_events)
+    if (state.events.isEmpty()) {
+        Column(
+            modifier = Modifier.weight(1f),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            EmptyState(
+                icon = Icons.Outlined.EventBusy,
+                title = stringResource(R.string.no_events),
+                subtitle = "Try changing your filters or check again later."
+            )
+
+            Spacer(Modifier.height(8.dp))
+
+            TextButton(onClick = onRetry) {
+                Text("Refresh events")
+            }
+        }
+
+        return
+    }
+
+    val columns =
+        if (androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp >= 600) 2
+        else 1
+
+    if (columns == 1) {
+        LazyColumn(
+            modifier = Modifier.weight(1f),
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                horizontal = 16.dp,
+                vertical = 12.dp
+            ),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column {
+                        Text(
+                            text = "Featured event",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.ExtraBold
                         )
-                        Spacer(Modifier.height(8.dp))
-                        TextButton(onClick = onRetry) {
-                            Text("Retry")
-                        }
+                        Text(
+                            text = "A highlight from around South Africa",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
-                } else {
-        val columns = if (androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp >= 600) 2 else 1
-        if (columns == 1) {
-            LazyColumn(
-                modifier = Modifier.weight(1f),
-                contentPadding = androidx.compose.foundation.layout.PaddingValues(
-                    horizontal = 16.dp, vertical = 8.dp
-                ),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                items(state.events, key = { it.event.id }) { eventView ->
-                    EventCard(
-                        view = eventView,
-                        onClick = { onEventClick(eventView.event.id) },
-                        onFavoriteToggle = { onFavoriteToggle(eventView.event.id) }
+
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Outlined.TrendingUp,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary
                     )
                 }
             }
-        } else {
-            LazyVerticalGrid(
-                columns = GridCells.Fixed(columns),
-                modifier = Modifier.weight(1f),
-                contentPadding = androidx.compose.foundation.layout.PaddingValues(
-                    horizontal = 16.dp, vertical = 8.dp
-                ),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                items(state.events, key = { it.event.id }) { eventView ->
-                    EventCard(
-                        view = eventView,
-                        onClick = { onEventClick(eventView.event.id) },
-                        onFavoriteToggle = { onFavoriteToggle(eventView.event.id) }
+
+            item {
+                FeaturedEventCard(
+                    view = state.events.first(),
+                    onClick = {
+                        onEventClick(state.events.first().event.id)
+                    },
+                    onFavoriteToggle = {
+                        onFavoriteToggle(state.events.first().event.id)
+                    }
+                )
+            }
+
+            item {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 4.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Upcoming events",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.ExtraBold
+                    )
+
+                    Text(
+                        text = "${state.events.size} events",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
+            }
+
+            items(
+                items = state.events.drop(1),
+                key = { it.event.id }
+            ) { eventView ->
+                EventCard(
+                    view = eventView,
+                    onClick = {
+                        onEventClick(eventView.event.id)
+                    },
+                    onFavoriteToggle = {
+                        onFavoriteToggle(eventView.event.id)
+                    }
+                )
+            }
+        }
+    } else {
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(columns),
+            modifier = Modifier.weight(1f),
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                horizontal = 16.dp,
+                vertical = 12.dp
+            ),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            items(
+                items = state.events,
+                key = { it.event.id }
+            ) { eventView ->
+                EventCard(
+                    view = eventView,
+                    onClick = {
+                        onEventClick(eventView.event.id)
+                    },
+                    onFavoriteToggle = {
+                        onFavoriteToggle(eventView.event.id)
+                    }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun FeaturedEventCard(
+    view: EventView,
+    onClick: () -> Unit,
+    onFavoriteToggle: () -> Unit
+) {
+    val event = view.event
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(240.dp)
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(24.dp),
+        elevation = CardDefaults.cardElevation(
+            defaultElevation = 3.dp
+        )
+    ) {
+        Box(modifier = Modifier.fillMaxSize()) {
+            AsyncImage(
+                model = event.imageUrl,
+                contentDescription = event.title,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize()
+            )
+
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        Brush.verticalGradient(
+                            colors = listOf(
+                                Color.Transparent,
+                                Color(0x33000000),
+                                Color(0xE6000000)
+                            )
+                        )
+                    )
+            )
+
+            Surface(
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(14.dp),
+                shape = RoundedCornerShape(50),
+                color = MaterialTheme.colorScheme.primary
+            ) {
+                Text(
+                    text = stringResource(categoryLabel(event.category)),
+                    modifier = Modifier.padding(
+                        horizontal = 12.dp,
+                        vertical = 7.dp
+                    ),
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onPrimary
+                )
+            }
+
+            IconButton(
+                onClick = onFavoriteToggle,
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(8.dp)
+                    .background(
+                        Color.Black.copy(alpha = 0.38f),
+                        RoundedCornerShape(50)
+                    )
+            ) {
+                Icon(
+                    imageVector = if (view.isFavorite) {
+                        Icons.Filled.Favorite
+                    } else {
+                        Icons.Outlined.FavoriteBorder
+                    },
+                    contentDescription = if (view.isFavorite) {
+                        "Remove from favourites"
+                    } else {
+                        "Add to favourites"
+                    },
+                    tint = if (view.isFavorite) {
+                        Color(0xFFFF6B6B)
+                    } else {
+                        Color.White
+                    }
+                )
+            }
+
+            Column(
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .fillMaxWidth()
+                    .padding(18.dp)
+            ) {
+                Text(
+                    text = event.title,
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = Color.White,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+
+                Spacer(Modifier.height(8.dp))
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.LocationOn,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(17.dp)
+                    )
+
+                    Spacer(Modifier.width(5.dp))
+
+                    Text(
+                        text = event.venueName,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.White,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+
+                Spacer(Modifier.height(4.dp))
+
+                Text(
+                    text = DateTimeUtils.formatShortDate(event.startDate),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = Color.White.copy(alpha = 0.9f)
+                )
             }
         }
     }
@@ -512,3 +776,9 @@ private fun FilterSheet(
         }
     }
 }
+
+
+
+
+
+
