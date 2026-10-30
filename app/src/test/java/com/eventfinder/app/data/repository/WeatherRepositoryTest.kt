@@ -199,6 +199,7 @@ class WeatherRepositoryTest {
         var seenForecastDays: Int? = -1
         var seenStart: String? = null
         var seenEnd: String? = null
+        var seenTimezone: String? = null
 
         val api = object : OpenMeteoApi {
             override suspend fun getForecast(
@@ -216,6 +217,7 @@ class WeatherRepositoryTest {
                 seenForecastDays = forecastDays
                 seenStart = startDate
                 seenEnd = endDate
+                seenTimezone = timezone
                 return OmForecastResponse(
                     timezone = zone.id,
                     hourly = OmHourly(
@@ -230,6 +232,7 @@ class WeatherRepositoryTest {
         WeatherRepositoryImpl(api).forecastFor("event-1", -33.9, 18.4, startDate)
 
         assertEquals(null, seenForecastDays)
+        assertEquals("Africa/Johannesburg", seenTimezone)
         assertEquals(isoDate, seenStart)
         assertEquals(isoDate, seenEnd)
     }
