@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.material.ExperimentalMaterialApi::class)
+
 package com.eventfinder.app.ui.screens.home
 
 import android.Manifest
@@ -71,7 +73,10 @@ import com.eventfinder.app.domain.model.EventSort
 import com.eventfinder.app.ui.components.CategoryChips
 import com.eventfinder.app.ui.components.EmptyState
 import com.eventfinder.app.ui.components.EventCard
-import com.eventfinder.app.ui.components.LoadingView
+import androidx.compose.material.pullrefresh.PullRefreshIndicator
+import androidx.compose.material.pullrefresh.pullRefresh
+import androidx.compose.material.pullrefresh.rememberPullRefreshState
+import com.eventfinder.app.ui.components.EventListSkeleton
 import com.eventfinder.app.ui.components.resolve
 import com.eventfinder.app.utils.AppLogger
 import com.eventfinder.app.utils.LocationUtils
@@ -233,7 +238,22 @@ fun HomeScreen(
         },
         snackbarHost = { SnackbarHost(snackbarHostState) }
     ) { padding ->
-        Box(Modifier.fillMaxSize().padding(padding)) {
+        val pullRefreshState = rememberPullRefreshState(
+            refreshing = state.isRefreshing,
+            onRefresh = { viewModel.refresh() }
+        )
+        Box(
+            Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .pullRefresh(pullRefreshState)
+        ) {
+            PullRefreshIndicator(
+                refreshing = state.isRefreshing,
+                state = pullRefreshState,
+                modifier = Modifier.align(Alignment.TopCenter),
+                contentColor = MaterialTheme.colorScheme.primary
+            )
             Column(Modifier.fillMaxSize()) {
                 if (state.isOffline) {
                     Surface(color = MaterialTheme.colorScheme.secondaryContainer) {
@@ -264,7 +284,7 @@ fun HomeScreen(
                 Spacer(Modifier.height(8.dp))
 
                 if (state.isLoading && state.events.isEmpty()) {
-                    LoadingView(stringResource(R.string.loading_events))
+                    EventListSkeleton()
                 } else if (state.isMapView) {
                     // weight(1f) keeps the map inside the space left by the search
                     // field and the category chips. fillMaxSize() made the map

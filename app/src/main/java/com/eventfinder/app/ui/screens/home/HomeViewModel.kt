@@ -45,7 +45,8 @@ data class HomeUiState(
     val userLat: Double? = null,
     val userLng: Double? = null,
     val isMapView: Boolean = false,
-    val showFilterSheet: Boolean = false
+    val showFilterSheet: Boolean = false,
+    val isRefreshing: Boolean = false
 )
 
 /**
@@ -125,6 +126,10 @@ class HomeViewModel(
                     AppLogger.e("HomeViewModel", "Event discovery failed", it)
                 }
             }
+
+            // Initial load finished: reveal either the events or the empty
+            // state (the skeleton stays up until this point or real content).
+            _uiState.update { it.copy(isLoading = false) }
         }
 
         val combinedFlow = combine(
@@ -148,7 +153,12 @@ class HomeViewModel(
         viewModelScope.launch {
             combinedFlow.combine(controlsFlow) { combined, controls -> applyControls(combined, controls) }
                 .collect { views ->
-                    _uiState.value = _uiState.value.copy(events = views, isLoading = false)
+                    // Keep the skeleton up until real content arrives or the
+                    // initial seed/discovery pass above finishes.
+                    _uiState.value = _uiState.value.copy(
+                        events = views,
+                        isLoading = if (views.isNotEmpty()) false else _uiState.value.isLoading
+                    )
                 }
         }
 
@@ -303,18 +313,26 @@ class HomeViewModel(
 
     fun refresh() {
         viewModelScope.launch {
+            AppLogger.i("HomeViewModel", "refresh() called, online=${networkMonitor.isCurrentlyOnline()}")
             if (!networkMonitor.isCurrentlyOnline()) {
                 _uiState.update { it.copy(isLoading = false, isOffline = true) }
                 return@launch
             }
 
-            _uiState.update { it.copy(isLoading = true, isOffline = false) }
+            _uiState.update { it.copy(isLoading = true, isOffline = false, isRefreshing = true) }
 
-            runCatching { eventDiscoveryRepository.refresh() }.onFailure {
-                AppLogger.e("HomeViewModel", "Event discovery failed on refresh", it)
-            }
+            runCatching { eventDiscoveryRepository.refresh() }
+                .onSuccess {
+                    AppLogger.i(
+                        "HomeViewModel",
+                        "Pull refresh: fetched=${it.fetched}, inserted=${it.inserted}, failedSources=${it.failedSources}"
+                    )
+                }
+                .onFailure {
+                    AppLogger.e("HomeViewModel", "Event discovery failed on refresh", it)
+                }
 
-            _uiState.update { it.copy(isLoading = false) }
+            _uiState.update { it.copy(isLoading = false, isRefreshing = false) }
         }
     }
 

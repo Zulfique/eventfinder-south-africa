@@ -135,6 +135,9 @@ dependencies {
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material:material-icons-extended")
+    // Material (M2) is pulled in only for its stable pull-to-refresh API;
+    // Material3 1.2 (BOM 2024.02) does not ship one yet.
+    implementation("androidx.compose.material:material")
 
     // ---- AndroidX core & lifecycle ----
     implementation("androidx.core:core-ktx:1.12.0")
