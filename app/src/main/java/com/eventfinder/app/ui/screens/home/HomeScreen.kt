@@ -7,8 +7,6 @@ import android.content.pm.PackageManager
 import android.location.Location
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.rememberHorizontalScrollState
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -28,6 +26,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.EventBusy
@@ -50,6 +51,7 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.Switch
@@ -82,56 +84,7 @@ import com.eventfinder.app.ui.components.CategoryChips
 import com.eventfinder.app.ui.components.EmptyState
 import com.eventfinder.app.ui.components.EventCard
 import com.eventfinder.app.ui.components.LoadingView
-import com.eventfinder.app.ui.components.resolve
-import com.eventfinder.app.utils.AppLogger
-import com.eventfinder.app.utils.LocationUtils
-import com.eventfinder.app.utils.SouthAfricanPlaces
-import org.osmdroid.views.MapView
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FloatingActionButton
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.IconToggleButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Slider
-import androidx.compose.material3.SnackbarHost
-import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.Switch
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
-import kotlinx.coroutines.launch
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clipToBounds
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
-import androidx.core.content.ContextCompat
-import androidx.lifecycle.viewmodel.compose.viewModel
-import com.eventfinder.app.R
-import com.eventfinder.app.di.AppContainer
-import com.eventfinder.app.domain.model.EventSort
-import com.eventfinder.app.ui.components.CategoryChips
-import com.eventfinder.app.ui.components.EmptyState
-import com.eventfinder.app.ui.components.EventCard
-import com.eventfinder.app.ui.components.LoadingView
+import com.eventfinder.app.ui.components.ShimmerBox
 import com.eventfinder.app.ui.components.resolve
 import com.eventfinder.app.utils.AppLogger
 import com.eventfinder.app.utils.LocationUtils
@@ -304,12 +257,20 @@ fun HomeScreen(
                         )
                     }
                 }
+                if (state.lastRefreshAt > 0L) {
+                    Text(
+                        "Last updated ${((System.currentTimeMillis() - state.lastRefreshAt) / 60000)} min ago",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp)
+                    )
+                }
 
                 OutlinedTextField(
                     value = state.query,
                     onValueChange = viewModel::onQueryChange,
                     placeholder = { Text(stringResource(R.string.search_placeholder)) },
-                    leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null) },
+                    leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = "Search") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)
                 )
@@ -324,7 +285,11 @@ fun HomeScreen(
                 Spacer(Modifier.height(8.dp))
 
                 if (state.isLoading && state.events.isEmpty()) {
-                    LoadingView(stringResource(R.string.loading_events))
+                    Column(Modifier.weight(1f).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        repeat(4) {
+                            ShimmerBox(Modifier.fillMaxWidth().height(96.dp))
+                        }
+                    }
                 } else if (state.isMapView) {
                     // weight(1f) keeps the map inside the space left by the search
                     // field and the category chips. fillMaxSize() made the map
@@ -396,7 +361,8 @@ fun HomeScreen(
                     EventList(
                         state = state,
                         onEventClick = onEventClick,
-                        onFavoriteToggle = viewModel::toggleFavorite
+                        onFavoriteToggle = viewModel::toggleFavorite,
+                        onRetry = viewModel::refresh
                     )
                 }
             }
@@ -419,28 +385,59 @@ fun HomeScreen(
 private fun ColumnScope.EventList(
     state: HomeUiState,
     onEventClick: (String) -> Unit,
-    onFavoriteToggle: (String) -> Unit
+    onFavoriteToggle: (String) -> Unit,
+    onRetry: () -> Unit = {}
 ) {
-    if (state.events.isEmpty()) {
-        EmptyState(
-            icon = Icons.Outlined.EventBusy,
-            title = stringResource(R.string.no_events),
-            modifier = Modifier.weight(1f)
-        )
-    } else {
-        LazyColumn(
-            modifier = Modifier.weight(1f),
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(
-                horizontal = 16.dp, vertical = 8.dp
-            ),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            items(state.events, key = { it.event.id }) { eventView ->
-                EventCard(
-                    view = eventView,
-                    onClick = { onEventClick(eventView.event.id) },
-                    onFavoriteToggle = { onFavoriteToggle(eventView.event.id) }
-                )
+                if (state.events.isEmpty()) {
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        EmptyState(
+                            icon = Icons.Outlined.EventBusy,
+                            title = stringResource(R.string.no_events)
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        TextButton(onClick = onRetry) {
+                            Text("Retry")
+                        }
+                    }
+                } else {
+        val columns = if (androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp >= 600) 2 else 1
+        if (columns == 1) {
+            LazyColumn(
+                modifier = Modifier.weight(1f),
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                    horizontal = 16.dp, vertical = 8.dp
+                ),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                items(state.events, key = { it.event.id }) { eventView ->
+                    EventCard(
+                        view = eventView,
+                        onClick = { onEventClick(eventView.event.id) },
+                        onFavoriteToggle = { onFavoriteToggle(eventView.event.id) }
+                    )
+                }
+            }
+        } else {
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(columns),
+                modifier = Modifier.weight(1f),
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                    horizontal = 16.dp, vertical = 8.dp
+                ),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                items(state.events, key = { it.event.id }) { eventView ->
+                    EventCard(
+                        view = eventView,
+                        onClick = { onEventClick(eventView.event.id) },
+                        onFavoriteToggle = { onFavoriteToggle(eventView.event.id) }
+                    )
+                }
             }
         }
     }

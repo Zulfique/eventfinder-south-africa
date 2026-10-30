@@ -27,7 +27,8 @@ object EventFilterer {
         category: EventCategory? = null,
         userLat: Double? = null,
         userLng: Double? = null,
-        radiusKm: Int = 0
+        radiusKm: Int = 0,
+        accessibilityNeeds: Set<String> = emptySet()
     ): List<Event> {
         val normalizedQuery = query?.trim()?.lowercase()
         return events.filter { event ->
@@ -47,7 +48,16 @@ object EventFilterer {
                         userLat, userLng, event.latitude, event.longitude
                     ) <= radiusKm)
 
-            matchesQuery && matchesCategory && matchesRadius
+            val matchesAccessibility = accessibilityNeeds.isEmpty() || accessibilityNeeds.all { need ->
+                when (need) {
+                    "wheelchair" -> event.wheelchairAccessible
+                    "lowSensory" -> event.sensoryFriendly && !event.loudMusic && !event.strobeLights
+                    "hearing" -> true // no specific field; pass through
+                    else -> true
+                }
+            }
+
+            matchesQuery && matchesCategory && matchesRadius && matchesAccessibility
         }
     }
 
@@ -67,6 +77,12 @@ object EventFilterer {
                 else DistanceCalculator.between(userLat, userLng, event.latitude, event.longitude)
             }
         }
+        EventSort.ACCESSIBILITY -> events.sortedWith(
+            compareByDescending<Event> { it.sensoryFriendly }
+                .thenByDescending { it.wheelchairAccessible }
+                .thenBy { it.loudMusic }
+                .thenBy { it.strobeLights }
+        )
     }
 
     /**

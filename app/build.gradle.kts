@@ -87,6 +87,15 @@ android {
             signingConfig = signingConfigs.findByName("release")
                 ?: signingConfigs.getByName("debug")
         }
+        create("staging") {
+            initWith(getByName("release"))
+            buildConfigField(
+                "String",
+                "API_BASE_URL",
+                "\"${project.findProperty("EVENTFINDER_API_STAGING_URL") ?: "https://eventfinder-api-o1t1.onrender.com/"}\""
+            )
+            matchingFallbacks += listOf("release")
+        }
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17

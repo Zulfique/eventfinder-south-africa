@@ -30,5 +30,6 @@ data class EventReviewEntity(
     val authorName: String,
     val rating: Int,
     val comment: String,
-    val createdAt: Long
+    val createdAt: Long,
+    val verifiedAttendance: Boolean = false
 )

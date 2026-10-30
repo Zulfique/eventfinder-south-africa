@@ -35,8 +35,18 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -173,6 +183,7 @@ fun EventCard(
     modifier: Modifier = Modifier
 ) {
     val event = view.event
+    val haptic = LocalHapticFeedback.current
     Card(
         modifier = modifier.fillMaxWidth().clickable(onClick = onClick),
         shape = RoundedCornerShape(20.dp),
@@ -269,7 +280,10 @@ fun EventCard(
                 Box(
                     modifier = Modifier
                         .size(48.dp)
-                        .clickable { onFavoriteToggle() },
+                        .clickable {
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            onFavoriteToggle()
+                        },
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
@@ -283,4 +297,28 @@ fun EventCard(
             }
         }
     }
+}
+/** Shimmer placeholder used for skeleton loading states. */
+@Composable
+fun ShimmerBox(modifier: Modifier = Modifier) {
+    val transition = rememberInfiniteTransition(label = "shimmer")
+    val x = transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1000f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1200, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "shimmerX"
+    ).value
+    val brush = Brush.linearGradient(
+        colors = listOf(
+            MaterialTheme.colorScheme.surfaceVariant,
+            MaterialTheme.colorScheme.surface,
+            MaterialTheme.colorScheme.surfaceVariant
+        ),
+        start = Offset(x - 200f, 0f),
+        end = Offset(x, 0f)
+    )
+    Box(modifier = modifier.background(brush, RoundedCornerShape(8.dp)))
 }

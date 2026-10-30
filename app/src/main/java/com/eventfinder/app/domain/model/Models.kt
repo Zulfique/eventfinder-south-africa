@@ -13,7 +13,7 @@ enum class RsvpStatus(val storage: String) {
 }
 
 /** Sorting options exposed on the Home filter sheet. */
-enum class EventSort { DATE, DISTANCE, NAME }
+enum class EventSort { DATE, DISTANCE, NAME, ACCESSIBILITY }
 
 /**
  * Domain model for an event. All events in the local Room catalogue share
@@ -43,7 +43,25 @@ data class Event(
     val organizerIsVerified: Boolean = false,
     val attendeeCount: Int,
     val isFavorite: Boolean,
-    val isCreatedByUser: Boolean
+    val isCreatedByUser: Boolean,
+    /** Accessibility flags for the venue/event. */
+    val wheelchairAccessible: Boolean = false,
+    val loudMusic: Boolean = false,
+    val sensoryFriendly: Boolean = false,
+    val strobeLights: Boolean = false,
+    /** Data provenance: live / cached / imported / sample. */
+    val provenance: String = "live",
+    /** Age-sensitive content warning. */
+    val ageRestricted: Boolean = false,
+    /** Recurring event support. */
+    val isRecurring: Boolean = false,
+    val recurrenceRule: String? = null,
+    val parentEventId: String? = null,
+    /** Event collection grouping. */
+    val collectionId: String? = null,
+    /** Conflict resolution: version + last-updated for last-write-wins merge. */
+    val version: Int = 1,
+    val updatedAt: Long = 0L
 )
 
 /** Event combined with the viewing user's context (distance + RSVP state). */
@@ -65,7 +83,8 @@ data class EventReview(
     val authorName: String,
     val rating: Int,
     val comment: String,
-    val createdAt: Long
+    val createdAt: Long,
+    val verifiedAttendance: Boolean = false
 )
 
 /** A coordinated group plan for attending a specific event. */
@@ -105,5 +124,10 @@ data class User(
     val avatarUrl: String? = null,
     val avatarImageUrl: String? = null,
     val isVerified: Boolean = false,
-    val trustScore: Double = 0.0
+    val trustScore: Double = 0.0,
+    /** Personalization + accessibility preferences. */
+    val commuteTimeMinutes: Int = 30,
+    val preferredCategories: String = "",
+    val skipReminders: Boolean = false,
+    val accessibilityNeeds: String = ""
 )

@@ -99,6 +99,11 @@ class EventRepositoryTest {
             emit()
         }
 
+        override suspend fun deleteStale(cutoff: Long) {
+            rows.values.filter { !it.isCreatedByUser && it.endDate < cutoff }.map { it.id }.forEach { rows.remove(it) }
+            emit()
+        }
+
         override suspend fun deleteCreatedByUser() {
             rows.values.filter { it.isCreatedByUser }.map { it.id }.forEach { rows.remove(it) }
             emit()

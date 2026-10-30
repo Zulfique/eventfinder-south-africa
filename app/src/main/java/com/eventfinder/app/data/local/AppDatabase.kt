@@ -238,6 +238,67 @@ private val MIGRATION_14_15 = object : Migration(14, 15) {
     }
 }
 
+private val MIGRATION_15_16 = object : Migration(15, 16) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE events ADD COLUMN wheelchairAccessible INTEGER NOT NULL DEFAULT 0")
+        db.execSQL("ALTER TABLE events ADD COLUMN loudMusic INTEGER NOT NULL DEFAULT 0")
+        db.execSQL("ALTER TABLE events ADD COLUMN sensoryFriendly INTEGER NOT NULL DEFAULT 0")
+        db.execSQL("ALTER TABLE events ADD COLUMN strobeLights INTEGER NOT NULL DEFAULT 0")
+        db.execSQL("ALTER TABLE users ADD COLUMN commuteTimeMinutes INTEGER NOT NULL DEFAULT 30")
+        db.execSQL("ALTER TABLE users ADD COLUMN preferredCategories TEXT NOT NULL DEFAULT ''")
+        db.execSQL("ALTER TABLE users ADD COLUMN skipReminders INTEGER NOT NULL DEFAULT 0")
+        db.execSQL("ALTER TABLE users ADD COLUMN accessibilityNeeds TEXT NOT NULL DEFAULT ''")
+    }
+}
+
+private val MIGRATION_16_17 = object : Migration(16, 17) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE event_reviews ADD COLUMN verifiedAttendance INTEGER NOT NULL DEFAULT 0")
+    }
+}
+
+private val MIGRATION_17_18 = object : Migration(17, 18) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE events ADD COLUMN provenance TEXT NOT NULL DEFAULT 'live'")
+        db.execSQL("ALTER TABLE events ADD COLUMN ageRestricted INTEGER NOT NULL DEFAULT 0")
+        db.execSQL("ALTER TABLE events ADD COLUMN isRecurring INTEGER NOT NULL DEFAULT 0")
+        db.execSQL("ALTER TABLE events ADD COLUMN recurrenceRule TEXT")
+        db.execSQL("ALTER TABLE events ADD COLUMN parentEventId TEXT")
+        db.execSQL("ALTER TABLE events ADD COLUMN collectionId TEXT")
+    }
+}
+
+private val MIGRATION_18_19 = object : Migration(18, 19) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS reports " +
+            "(id TEXT NOT NULL, reporterId TEXT NOT NULL, targetType TEXT NOT NULL, " +
+            "targetId TEXT NOT NULL, reason TEXT NOT NULL, createdAt INTEGER NOT NULL, " +
+            "resolved INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(id))"
+        )
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS blocked_users " +
+            "(userId TEXT NOT NULL, blockedUserId TEXT NOT NULL, createdAt INTEGER NOT NULL, " +
+            "PRIMARY KEY(userId, blockedUserId))"
+        )
+    }
+}
+
+private val MIGRATION_19_20 = object : Migration(19, 20) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE events ADD COLUMN version INTEGER NOT NULL DEFAULT 1")
+        db.execSQL("ALTER TABLE events ADD COLUMN updatedAt INTEGER NOT NULL DEFAULT 0")
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS event_drafts " +
+            "(id TEXT NOT NULL, userId TEXT NOT NULL, title TEXT NOT NULL, " +
+            "description TEXT NOT NULL, category TEXT NOT NULL, venueName TEXT NOT NULL, " +
+            "address TEXT NOT NULL, latitude REAL, longitude REAL, imageUrl TEXT, " +
+            "startDate INTEGER NOT NULL, endDate INTEGER NOT NULL, savedAt INTEGER NOT NULL, " +
+            "PRIMARY KEY(id))"
+        )
+    }
+}
+
   @Database(
     entities = [
         UserEntity::class,
@@ -247,9 +308,13 @@ private val MIGRATION_14_15 = object : Migration(14, 15) {
         SourceSyncEntity::class,
         GeocodeCacheEntity::class,
         EventReviewEntity::class,
-        TicketEntity::class
+        GroupPlanEntity::class,
+        TicketEntity::class,
+        ReportEntity::class,
+        BlockedUserEntity::class,
+        DraftEntity::class
     ],
-    version = 15,
+    version = 20,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase(), DatabaseTransactionHelper {
@@ -262,6 +327,8 @@ abstract class AppDatabase : RoomDatabase(), DatabaseTransactionHelper {
     abstract fun eventReviewDao(): EventReviewDao
     abstract fun groupPlanDao(): GroupPlanDao
     abstract fun ticketDao(): TicketDao
+    abstract fun reportDao(): ReportDao
+    abstract fun draftDao(): DraftDao
 
 
 
@@ -317,7 +384,7 @@ abstract class AppDatabase : RoomDatabase(), DatabaseTransactionHelper {
                 AppDatabase::class.java,
                 DB_NAME
             )
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18, MIGRATION_18_19, MIGRATION_19_20)
                                 .build()
     }
 }
@@ -334,7 +401,11 @@ fun UserEntity.toDomain(): User = User(
     createdAt = createdAt,
     avatarType = avatarType,
     avatarUrl = avatarUrl,
-    avatarImageUrl = avatarImageUrl
+    avatarImageUrl = avatarImageUrl,
+    commuteTimeMinutes = commuteTimeMinutes,
+    preferredCategories = preferredCategories,
+    skipReminders = skipReminders,
+    accessibilityNeeds = accessibilityNeeds
 )
 
 /** Maps a Room event row onto the immutable domain model. */
@@ -358,5 +429,17 @@ fun EventEntity.toDomain(): com.eventfinder.app.domain.model.Event =
         organizerName = organizerName,
         attendeeCount = attendeeCount,
         isFavorite = false,
-        isCreatedByUser = isCreatedByUser
+        isCreatedByUser = isCreatedByUser,
+        wheelchairAccessible = wheelchairAccessible,
+        loudMusic = loudMusic,
+        sensoryFriendly = sensoryFriendly,
+        strobeLights = strobeLights,
+        provenance = provenance,
+        ageRestricted = ageRestricted,
+        isRecurring = isRecurring,
+        recurrenceRule = recurrenceRule,
+        parentEventId = parentEventId,
+        collectionId = collectionId,
+        version = version,
+        updatedAt = updatedAt
     )

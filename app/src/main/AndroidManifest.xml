@@ -27,6 +27,7 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.EventFinder"
         android:networkSecurityConfig="@xml/network_security_config"
+        android:enableOnBackInvokedCallback="true"
         android:usesCleartextTraffic="false"
         tools:targetApi="34">
 

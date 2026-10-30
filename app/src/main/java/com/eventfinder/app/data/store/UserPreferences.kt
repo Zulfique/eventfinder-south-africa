@@ -182,6 +182,114 @@ class UserPreferences(private val context: Context) : SessionProvider {
         }
     }
 
+    // ---- GDPR/POPIA consent toggles ----
+
+    val analyticsConsent: Flow<Boolean> = sessionUserId.flatMapLatest { userId ->
+        if (userId.isNullOrBlank()) flowOf(false)
+        else context.eventFinderDataStore.data.map { prefs ->
+            prefs[userBoolKey("consent_analytics", userId)] ?: false
+        }
+    }
+
+    suspend fun setAnalyticsConsent(enabled: Boolean) {
+        val userId = sessionUserId.first() ?: return
+        context.eventFinderDataStore.edit {
+            it[userBoolKey("consent_analytics", userId)] = enabled
+        }
+    }
+
+    val locationConsent: Flow<Boolean> = sessionUserId.flatMapLatest { userId ->
+        if (userId.isNullOrBlank()) flowOf(false)
+        else context.eventFinderDataStore.data.map { prefs ->
+            prefs[userBoolKey("consent_location", userId)] ?: false
+        }
+    }
+
+    suspend fun setLocationConsent(enabled: Boolean) {
+        val userId = sessionUserId.first() ?: return
+        context.eventFinderDataStore.edit {
+            it[userBoolKey("consent_location", userId)] = enabled
+        }
+    }
+
+    // ---- Accessibility profile toggles ----
+
+    val wheelchairNeeded: Flow<Boolean> = sessionUserId.flatMapLatest { userId ->
+        if (userId.isNullOrBlank()) flowOf(false)
+        else context.eventFinderDataStore.data.map { prefs ->
+            prefs[userBoolKey("a11y_wheelchair", userId)] ?: false
+        }
+    }
+
+    suspend fun setWheelchairNeeded(enabled: Boolean) {
+        val userId = sessionUserId.first() ?: return
+        context.eventFinderDataStore.edit {
+            it[userBoolKey("a11y_wheelchair", userId)] = enabled
+        }
+    }
+
+    val lowSensoryNeeded: Flow<Boolean> = sessionUserId.flatMapLatest { userId ->
+        if (userId.isNullOrBlank()) flowOf(false)
+        else context.eventFinderDataStore.data.map { prefs ->
+            prefs[userBoolKey("a11y_low_sensory", userId)] ?: false
+        }
+    }
+
+    suspend fun setLowSensoryNeeded(enabled: Boolean) {
+        val userId = sessionUserId.first() ?: return
+        context.eventFinderDataStore.edit {
+            it[userBoolKey("a11y_low_sensory", userId)] = enabled
+        }
+    }
+
+    // ---- Reduced motion toggle ----
+
+    val reducedMotion: Flow<Boolean> = sessionUserId.flatMapLatest { userId ->
+        if (userId.isNullOrBlank()) flowOf(false)
+        else context.eventFinderDataStore.data.map { prefs ->
+            prefs[userBoolKey("reduced_motion", userId)] ?: false
+        }
+    }
+
+    suspend fun setReducedMotion(enabled: Boolean) {
+        val userId = sessionUserId.first() ?: return
+        context.eventFinderDataStore.edit {
+            it[userBoolKey("reduced_motion", userId)] = enabled
+        }
+    }
+
+    // ---- High contrast toggle ----
+
+    val highContrast: Flow<Boolean> = sessionUserId.flatMapLatest { userId ->
+        if (userId.isNullOrBlank()) flowOf(false)
+        else context.eventFinderDataStore.data.map { prefs ->
+            prefs[userBoolKey("high_contrast", userId)] ?: false
+        }
+    }
+
+    suspend fun setHighContrast(enabled: Boolean) {
+        val userId = sessionUserId.first() ?: return
+        context.eventFinderDataStore.edit {
+            it[userBoolKey("high_contrast", userId)] = enabled
+        }
+    }
+
+    // ---- Last refresh timestamp (offline freshness) ----
+
+    val lastRefreshAt: Flow<Long> = sessionUserId.flatMapLatest { userId ->
+        if (userId.isNullOrBlank()) flowOf(0L)
+        else context.eventFinderDataStore.data.map { prefs ->
+            prefs[userStringKey("last_refresh_at", userId)]?.toLongOrNull() ?: 0L
+        }
+    }
+
+    suspend fun setLastRefreshAt(timestamp: Long = System.currentTimeMillis()) {
+        val userId = sessionUserId.first() ?: return
+        context.eventFinderDataStore.edit {
+            it[userStringKey("last_refresh_at", userId)] = timestamp.toString()
+        }
+    }
+
     // ---- User-scoped location radius default ----
 
     val defaultRadiusKm: Flow<Int> = sessionUserId.flatMapLatest { userId ->

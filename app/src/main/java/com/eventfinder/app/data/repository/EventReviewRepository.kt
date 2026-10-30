@@ -75,7 +75,8 @@ class EventReviewRepositoryImpl(
                     comment = comment.trim().take(500),
                     authorName = user?.fullName?.trim()?.ifBlank { null } ?: user?.email?.trim().orEmpty().ifBlank { "User" },
                     createdAt = existing?.createdAt
-                        ?: event.startDate.coerceAtMost(System.currentTimeMillis())
+                        ?: event.startDate.coerceAtMost(System.currentTimeMillis()),
+                    verifiedAttendance = true
                 )
             )
         }
@@ -87,6 +88,7 @@ class EventReviewRepositoryImpl(
             authorName = authorName,
             rating = rating,
             comment = comment,
-            createdAt = createdAt
+            createdAt = createdAt,
+            verifiedAttendance = verifiedAttendance
         )
 }

@@ -43,10 +43,20 @@ private val DarkColors = darkColorScheme(
 fun EventFinderTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     dynamicColor: Boolean = true,
+    highContrast: Boolean = false,
     content: @Composable () -> Unit
 ) {
     val context = LocalContext.current
     val colors = when {
+        highContrast -> if (darkTheme) darkColorScheme(
+            primary = Color.White, onPrimary = Color.Black,
+            background = Color.Black, surface = Color.Black,
+            onBackground = Color.White, onSurface = Color.White
+        ) else lightColorScheme(
+            primary = Color.Black, onPrimary = Color.White,
+            background = Color.White, surface = Color.White,
+            onBackground = Color.Black, onSurface = Color.Black
+        )
         dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S ->
             if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
         else -> if (darkTheme) DarkColors else LightColors

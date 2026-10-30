@@ -78,6 +78,9 @@ suspend fun countNonUserCreated(): Int
     @Query("DELETE FROM events WHERE isCreatedByUser = 0")
     suspend fun deleteNonUserCreated()
 
+    @Query("DELETE FROM events WHERE isCreatedByUser = 0 AND endDate < :cutoff")
+    suspend fun deleteStale(cutoff: Long)
+
     @Query("SELECT id FROM events WHERE isCreatedByUser = 0")
     suspend fun findNonUserCreatedIds(): List<String>
 

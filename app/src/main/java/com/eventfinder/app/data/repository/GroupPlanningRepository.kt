@@ -43,6 +43,18 @@ class GroupPlanningRepositoryImpl(
         groupPlanDao.deleteById(planId)
     }
 
+    private fun GroupPlan.toEntity() = GroupPlanEntity(
+        id = id,
+        eventId = eventId,
+        creatorId = creatorId,
+        members = members.joinToString(","),
+        meetingPointLabel = meetingPointLabel,
+        meetingLat = meetingLat,
+        meetingLng = meetingLng,
+        proposedTime = proposedTime,
+        createdAt = createdAt
+    )
+
     private fun GroupPlanEntity.toDomain() = GroupPlan(
         id = id,
         eventId = eventId,

@@ -69,8 +69,11 @@ class EventDiscoveryRepositoryTest {
             rows.values.filter { !it.isCreatedByUser }
 
         override suspend fun deleteNonUserCreated() {
-            rows.values.filter { !it.isCreatedByUser }.forEach { rows.remove(it.id) }
-            emit()
+            rows.values.filter { !it.isCreatedByUser }.map { it.id }.forEach { rows.remove(it) }
+        }
+
+        override suspend fun deleteStale(cutoff: Long) {
+            rows.values.filter { !it.isCreatedByUser && it.endDate < cutoff }.map { it.id }.forEach { rows.remove(it) }
         }
 
         override suspend fun deleteCreatedByUser() {

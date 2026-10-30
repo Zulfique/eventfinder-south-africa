@@ -18,6 +18,8 @@ import com.eventfinder.app.data.repository.EventReviewRepository
 import com.eventfinder.app.data.repository.EventReviewRepositoryImpl
 import com.eventfinder.app.data.repository.GroupPlanningRepository
 import com.eventfinder.app.data.repository.GroupPlanningRepositoryImpl
+import com.eventfinder.app.data.repository.ReportRepository
+import com.eventfinder.app.data.repository.ReportRepositoryImpl
 import com.eventfinder.app.data.repository.TicketRepository
 import com.eventfinder.app.data.repository.TicketRepositoryImpl
 import com.eventfinder.app.data.repository.OpenStreetMapRepository
@@ -117,6 +119,10 @@ class AppContainer(context: Context) {
 
     val ticketRepository: TicketRepository by lazy {
         TicketRepositoryImpl(database.ticketDao())
+    }
+
+    val reportRepository: ReportRepository by lazy {
+        ReportRepositoryImpl(database.reportDao())
     }
 
     val weatherRepository: WeatherRepository by lazy {

@@ -189,6 +189,82 @@ fun SettingsScreen(
 
             Card(Modifier.fillMaxWidth()) {
                 Column {
+                    ListItem(
+                        headlineContent = { Text("Analytics consent") },
+                        supportingContent = { Text("Allow anonymous usage analytics") },
+                        trailingContent = {
+                            Switch(
+                                checked = state.analyticsConsent,
+                                onCheckedChange = viewModel::setAnalyticsConsent
+                            )
+                        }
+                    )
+                    HorizontalDivider()
+                    ListItem(
+                        headlineContent = { Text("Location consent") },
+                        supportingContent = { Text("Allow location-based discovery") },
+                        trailingContent = {
+                            Switch(
+                                checked = state.locationConsent,
+                                onCheckedChange = viewModel::setLocationConsent
+                            )
+                        }
+                    )
+                }
+            }
+
+            Card(Modifier.fillMaxWidth()) {
+                Column {
+                    ListItem(
+                        headlineContent = { Text("Wheelchair accessible venues only") },
+                        trailingContent = {
+                            Switch(
+                                checked = state.wheelchairNeeded,
+                                onCheckedChange = viewModel::setWheelchairNeeded
+                            )
+                        }
+                    )
+                    HorizontalDivider()
+                    ListItem(
+                        headlineContent = { Text("Low-sensory events only") },
+                        trailingContent = {
+                            Switch(
+                                checked = state.lowSensoryNeeded,
+                                onCheckedChange = viewModel::setLowSensoryNeeded
+                            )
+                        }
+                    )
+                    HorizontalDivider()
+                    ListItem(
+                        headlineContent = { Text("Reduced motion") },
+                        trailingContent = {
+                            Switch(
+                                checked = state.reducedMotion,
+                                onCheckedChange = viewModel::setReducedMotion
+                            )
+                        }
+                    )
+                    HorizontalDivider()
+                    ListItem(
+                        headlineContent = { Text("High contrast") },
+                        trailingContent = {
+                            Switch(
+                                checked = state.highContrast,
+                                onCheckedChange = viewModel::setHighContrast
+                            )
+                        }
+                    )
+                    HorizontalDivider()
+                    ListItem(
+                        headlineContent = { Text("Export my data") },
+                        supportingContent = { Text("Download a copy of your data") },
+                        modifier = Modifier.clickable { viewModel.exportData() }
+                    )
+                }
+            }
+
+            Card(Modifier.fillMaxWidth()) {
+                Column {
                     LanguageSelector(state.language, viewModel::setLanguage)
                     HorizontalDivider()
                     ListItem(

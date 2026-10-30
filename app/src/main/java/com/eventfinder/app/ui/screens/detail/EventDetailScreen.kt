@@ -31,6 +31,7 @@ import androidx.compose.material.icons.outlined.LocationOn
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.Navigation
 import androidx.compose.material.icons.outlined.Person
+import androidx.compose.material.icons.outlined.QrCodeScanner
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.Star
 import androidx.compose.material.icons.outlined.StarOutline
@@ -58,6 +59,8 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -242,6 +245,12 @@ fun EventDetailScreen(
 
                         Column(Modifier.padding(16.dp)) {
                             Text(event.title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                            Spacer(Modifier.height(4.dp))
+                            Text(
+                                "Source: ${event.provenance}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                             Spacer(Modifier.height(6.dp))
                             Text(
                                 stringResource(categoryLabel(event.category)),
@@ -257,7 +266,7 @@ fun EventDetailScreen(
                             Spacer(Modifier.height(8.dp))
 
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Outlined.CalendarMonth, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Icon(Icons.Outlined.CalendarMonth, contentDescription = "Date", modifier = Modifier.size(20.dp))
                                 Spacer(Modifier.size(6.dp))
                                 Text(
                                     DateTimeUtils.formatFullDateTime(event.startDate),
@@ -287,7 +296,7 @@ fun EventDetailScreen(
                             Spacer(Modifier.height(6.dp))
 
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Outlined.LocationOn, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Icon(Icons.Outlined.LocationOn, contentDescription = "Location", modifier = Modifier.size(20.dp))
                                 Spacer(Modifier.size(6.dp))
                                 Text(event.venueName, style = MaterialTheme.typography.bodyMedium)
                             }
@@ -299,14 +308,14 @@ fun EventDetailScreen(
                             Spacer(Modifier.height(8.dp))
 
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Outlined.Person, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Icon(Icons.Outlined.Person, contentDescription = "Organizer", modifier = Modifier.size(20.dp))
                                 Spacer(Modifier.size(6.dp))
                                 Text(stringResource(R.string.organizer), style = MaterialTheme.typography.labelMedium)
                                 Spacer(Modifier.size(4.dp))
                                 Text(event.organizerName, style = MaterialTheme.typography.bodyMedium)
                             }
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Outlined.Group, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Icon(Icons.Outlined.Group, contentDescription = "Attendees", modifier = Modifier.size(20.dp))
                                 Spacer(Modifier.size(6.dp))
                                 Text(
                                     "${event.attendeeCount} ${stringResource(R.string.attendees)}",
@@ -320,10 +329,7 @@ fun EventDetailScreen(
                             WeatherCard(state)
                             Spacer(Modifier.height(12.dp))
 
-                            Text(
-                                stringResource(R.string.reviews),
-                                style = MaterialTheme.typography.titleMedium
-                            )
+                            Text(stringResource(R.string.reviews), style = MaterialTheme.typography.titleMedium)
                             Spacer(Modifier.height(4.dp))
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 val average = state.averageRating
@@ -356,13 +362,12 @@ fun EventDetailScreen(
                                     repeat(5) { index ->
                                         val star = index + 1
                                         IconButton(onClick = { viewModel.setReviewRating(star) }) {
-                                            Text(if (state.reviewDraftRating >= star) "â˜…" else "â˜†", color = if (state.reviewDraftRating >= star) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 18.sp)
-
-
-
-
-
-
+                                            Icon(
+                                                imageVector = if (state.reviewDraftRating >= star) Icons.Outlined.Star else Icons.Outlined.StarOutline,
+                                                contentDescription = null,
+                                                tint = if (state.reviewDraftRating >= star) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
                                     }
                                 }
                                 OutlinedTextField(
@@ -395,7 +400,7 @@ fun EventDetailScreen(
                                                                 imageVector = if (index < review.rating) Icons.Outlined.Star else Icons.Outlined.StarOutline,
                                                                 contentDescription = null,
                                                                 modifier = Modifier.size(14.dp),
-                                                                tint = if (index < review.rating) MaterialTheme.colorScheme.primary else MaterialTheme.colorHcolorScheme.onSurfaceVariant
+                                                                tint = if (index < review.rating) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                                                             )
                                                         }
                                                     }
@@ -500,7 +505,7 @@ fun EventDetailScreen(
                                     },
                                     modifier = Modifier.weight(1f).height(44.dp)
                                 ) {
-                                    Icon(Icons.Outlined.Navigation, contentDescription = null)
+                                    Icon(Icons.Outlined.Navigation, contentDescription = "Directions")
                                     Spacer(Modifier.size(6.dp))
                                     Text(stringResource(R.string.directions))
                                 }
@@ -509,7 +514,7 @@ fun EventDetailScreen(
                                  onClick = { onPlanWithFriends(event.id) },
                                  modifier = Modifier.fillMaxWidth().height(44.dp)
                              ) {
-                                 Icon(Icons.Outlined.Group, contentDescription = null)
+                                 Icon(Icons.Outlined.Group, contentDescription = "Plan with friends")
                                  Spacer(Modifier.size(6.dp))
                                  Text("Plan with Friends")
                              }
@@ -519,7 +524,7 @@ fun EventDetailScreen(
                                      onClick = { onOpenScanner(event.id) },
                                      modifier = Modifier.fillMaxWidth().height(44.dp)
                                  ) {
-                                     Icon(Icons.Outlined.QrCodeScanner, contentDescription = null)
+                                     Icon(Icons.Outlined.QrCodeScanner, contentDescription = "Check-in scanner")
                                      Spacer(Modifier.size(6.dp))
                                      Text("Check-in Attendees")
                                  }
@@ -539,13 +544,38 @@ fun EventDetailScreen(
                                  },
                                  modifier = Modifier.fillMaxWidth().height(44.dp)
                              ) {
-                                 Icon(Icons.Outlined.Share, contentDescription = null)
+                                 Icon(Icons.Outlined.Share, contentDescription = "Share")
                                  Spacer(Modifier.size(6.dp))
                                  Text(stringResource(R.string.share))
                              }
 
+                            val reportScope = rememberCoroutineScope()
+                            TextButton(
+                                onClick = {
+                                    reportScope.launch {
+                                        container.reportRepository.report(
+                                            targetType = "event",
+                                            targetId = event.id,
+                                            reason = "user_report",
+                                            reporterId = ""
+                                        )
+                                    }
+                                },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text("Report this event")
+                            }
+
                             Spacer(Modifier.height(24.dp))
 
+                            if (event.ageRestricted) {
+                                Text(
+                                    "Age-restricted event (18+)",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.error
+                                )
+                                Spacer(Modifier.height(8.dp))
+                            }
                             Text(stringResource(R.string.about_event), style = MaterialTheme.typography.titleMedium)
                             Spacer(Modifier.height(8.dp))
                             Text(event.description, style = MaterialTheme.typography.bodyMedium)
@@ -569,7 +599,7 @@ private fun WeatherCard(state: EventDetailUiState) {
             modifier = Modifier.fillMaxWidth().padding(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(Icons.Outlined.WbSunny, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimaryContainer)
+            Icon(Icons.Outlined.WbSunny, contentDescription = "Weather", tint = MaterialTheme.colorScheme.onPrimaryContainer)
             Spacer(Modifier.size(10.dp))
             Column {
                 Text(

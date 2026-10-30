@@ -38,7 +38,11 @@ data class UserEntity(
     val avatarUrl: String? = null,
     val avatarImageUrl: String? = null,
     val isVerified: Boolean = false,
-    val trustScore: Double = 0.0
+    val trustScore: Double = 0.0,
+    val commuteTimeMinutes: Int = 30,
+    val preferredCategories: String = "",
+    val skipReminders: Boolean = false,
+    val accessibilityNeeds: String = ""
 )
 
 /**
@@ -70,7 +74,19 @@ data class EventEntity(
     val organizerId: String,
     val organizerName: String,
     val attendeeCount: Int,
-    val isCreatedByUser: Boolean
+    val isCreatedByUser: Boolean,
+    val wheelchairAccessible: Boolean = false,
+    val loudMusic: Boolean = false,
+    val sensoryFriendly: Boolean = false,
+    val strobeLights: Boolean = false,
+    val provenance: String = "live",
+    val ageRestricted: Boolean = false,
+    val isRecurring: Boolean = false,
+    val recurrenceRule: String? = null,
+    val parentEventId: String? = null,
+    val collectionId: String? = null,
+    val version: Int = 1,
+    val updatedAt: Long = 0L
 )
 
 /** Room entity for a favourite link. */

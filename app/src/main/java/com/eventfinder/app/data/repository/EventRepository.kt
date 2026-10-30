@@ -66,6 +66,7 @@ interface EventRepository {
      * Returns the number of active RSVPs that blocked the clear (0 = cleared).
      */
     suspend fun clearLocalCache(): Int
+    suspend fun expireStaleEvents(): Int
 }
 
 class EventRepositoryImpl(
@@ -110,7 +111,7 @@ class EventRepositoryImpl(
                 rows.filter { event ->
                         (event.isPublic || (!userId.isNullOrBlank() && event.organizerId == userId)) &&
                         event.latitude != null && event.longitude != null &&
-                        com.eventfinder.app.utils.DistanceCalculator.calculateDistance(
+                        com.eventfinder.app.utils.DistanceCalculator.between(
                             lat, lng, event.latitude, event.longitude
                         ) <= radiusKm
                     }.map { it.toDomain() }
@@ -131,16 +132,6 @@ class EventRepositoryImpl(
                      .map { it.toDomain() }
             }
         }
-    @OptIn(ExperimentalCoroutinesApi::class)
-    override fun observeFavoriteIds(): Flow<Set<String>> =
-        preferences.sessionUserId.flatMapLatest { userId ->
-            if (userId.isNullOrBlank()) {
-                flowOf(emptySet())
-            } else {
-                favoriteDao.observeAllForUser(userId).map { rows -> rows.map { it.eventId }.toSet() }
-            }
-        }
-
     @OptIn(ExperimentalCoroutinesApi::class)
     override fun observeFavoriteIds(): Flow<Set<String>> =
         preferences.sessionUserId.flatMapLatest { userId ->
@@ -174,33 +165,6 @@ class EventRepositoryImpl(
         }
 
     @OptIn(ExperimentalCoroutinesApi::class)
-    override fun observeEventsNearMe(lat: Double, lng: Double, radiusKm: Int): Flow<List<Event>> =
-        preferences.sessionUserId.flatMapLatest { userId ->
-            eventDao.observeAll().map { rows ->
-                rows.filter { event ->
-                        (event.isPublic || (!userId.isNullOrBlank() && event.organizerId == userId)) &&
-                        event.latitude != null && event.longitude != null &&
-                        com.eventfinder.app.utils.DistanceCalculator.calculateDistance(
-                            lat, lng, event.latitude, event.longitude
-                        ) <= radiusKm
-                    }.map { it.toDomain() }
-            }
-        }
-
-    @OptIn(ExperimentalCoroutinesApi::class)
-    override fun observeTrendingEvents(): Flow<List<Event>> =
-        preferences.sessionUserId.flatMapLatest { userId ->
-            eventDao.observeAll().map { rows ->
-                val now = System.currentTimeMillis()
-                rows.filter { event ->
-                        (event.isPublic || (!userId.isNullOrBlank() && event.organizerId == userId)) &&
-                        event.startDate >= now &&
-                        event.startDate <= now + (7 * 24 * 60 * 60 * 1000L) // Next 7 days
-                    }.sortedByDescending { it.attendeeCount }
-                     .take(20)
-                     .map { it.toDomain() }
-            }
-        }
 override suspend fun ensureSeeded() {
     val now = System.currentTimeMillis()
     val upcomingSamples = eventDao.countUpcomingSampleEvents(now)
@@ -460,6 +424,13 @@ override suspend fun ensureSeeded() {
         return 0
     }
 
+    override suspend fun expireStaleEvents(): Int {
+        val cutoff = System.currentTimeMillis() - (7L * 24L * 60L * 60L * 1000L)
+        eventDao.deleteStale(cutoff)
+        AppLogger.i(tag, "Expired stale cached events older than 7 days")
+        return 0
+    }
+
     private fun Event.toEntity(isCreatedByUser: Boolean): EventEntity =
         EventEntity(
             id = id,
@@ -477,6 +448,18 @@ override suspend fun ensureSeeded() {
             organizerId = organizerId,
             organizerName = organizerName,
             attendeeCount = attendeeCount,
-            isCreatedByUser = isCreatedByUser
+            isCreatedByUser = isCreatedByUser,
+            wheelchairAccessible = wheelchairAccessible,
+            loudMusic = loudMusic,
+            sensoryFriendly = sensoryFriendly,
+            strobeLights = strobeLights,
+            provenance = provenance,
+            ageRestricted = ageRestricted,
+            isRecurring = isRecurring,
+            recurrenceRule = recurrenceRule,
+            parentEventId = parentEventId,
+            collectionId = collectionId,
+            version = version,
+            updatedAt = updatedAt
         )
 }

@@ -30,7 +30,13 @@ data class SettingsUiState(
     val remindersEnabled: Boolean = true,
     val newEventsAlerts: Boolean = true,
     val defaultCity: String = "",
-    val defaultRadiusKm: Int = 50
+    val defaultRadiusKm: Int = 50,
+    val analyticsConsent: Boolean = false,
+    val locationConsent: Boolean = false,
+    val wheelchairNeeded: Boolean = false,
+    val lowSensoryNeeded: Boolean = false,
+    val reducedMotion: Boolean = false,
+    val highContrast: Boolean = false
 )
 
 /**
@@ -48,6 +54,18 @@ class SettingsViewModel(
     private val _messages = MutableSharedFlow<UiMessage>()
     val messages = _messages.asSharedFlow()
 
+    val consentFlow = kotlinx.coroutines.flow.combine(
+        preferences.analyticsConsent,
+        preferences.locationConsent
+    ) { analytics, location -> Pair(analytics, location) }
+
+    val a11yFlow = kotlinx.coroutines.flow.combine(
+        preferences.wheelchairNeeded,
+        preferences.lowSensoryNeeded,
+        preferences.reducedMotion,
+        preferences.highContrast
+    ) { w, l, r, h -> listOf(w, l, r, h) }
+
     val uiState = kotlinx.coroutines.flow.combine(
         kotlinx.coroutines.flow.combine(
             preferences.language.map { SupportedLanguage.fromCode(it) },
@@ -58,8 +76,10 @@ class SettingsViewModel(
             listOf(lang, bio, rem, alerts)
         },
         preferences.defaultCity,
-        preferences.defaultRadiusKm
-    ) { base, city, radius ->
+        preferences.defaultRadiusKm,
+        consentFlow,
+        a11yFlow
+    ) { base, city, radius, consent, a11y ->
         @Suppress("UNCHECKED_CAST")
         SettingsUiState(
             language = base[0] as SupportedLanguage,
@@ -67,7 +87,13 @@ class SettingsViewModel(
             remindersEnabled = base[2] as Boolean,
             newEventsAlerts = base[3] as Boolean,
             defaultCity = city,
-            defaultRadiusKm = radius
+            defaultRadiusKm = radius,
+            analyticsConsent = consent.first,
+            locationConsent = consent.second,
+            wheelchairNeeded = a11y[0] as Boolean,
+            lowSensoryNeeded = a11y[1] as Boolean,
+            reducedMotion = a11y[2] as Boolean,
+            highContrast = a11y[3] as Boolean
         )
     }.stateIn(
         scope = viewModelScope,
@@ -103,6 +129,59 @@ class SettingsViewModel(
 
     fun setNewEventsAlerts(enabled: Boolean) {
         viewModelScope.launch { preferences.setNewEventAlertsEnabled(enabled) }
+    }
+
+    fun setAnalyticsConsent(enabled: Boolean) {
+        viewModelScope.launch { preferences.setAnalyticsConsent(enabled) }
+    }
+
+    fun setLocationConsent(enabled: Boolean) {
+        viewModelScope.launch { preferences.setLocationConsent(enabled) }
+    }
+
+    fun setWheelchairNeeded(enabled: Boolean) {
+        viewModelScope.launch { preferences.setWheelchairNeeded(enabled) }
+    }
+
+    fun setLowSensoryNeeded(enabled: Boolean) {
+        viewModelScope.launch { preferences.setLowSensoryNeeded(enabled) }
+    }
+
+    fun setReducedMotion(enabled: Boolean) {
+        viewModelScope.launch { preferences.setReducedMotion(enabled) }
+    }
+
+    fun setHighContrast(enabled: Boolean) {
+        viewModelScope.launch { preferences.setHighContrast(enabled) }
+    }
+
+    private val _exportPath = kotlinx.coroutines.flow.MutableSharedFlow<String>()
+    val exportPath = _exportPath.asSharedFlow()
+
+    fun exportData() {
+        viewModelScope.launch {
+            try {
+                val userId = preferences.sessionUserId.first()
+                val events = eventRepository.observeAllEvents().first()
+                val json = buildString {
+                    append("{")
+                    append("\"userId\":\"").append(userId ?: "").append("\",")
+                    append("\"exportedAt\":").append(System.currentTimeMillis()).append(",")
+                    append("\"events\":[")
+                    events.forEachIndexed { i, e ->
+                        if (i > 0) append(",")
+                        append("{\"id\":\"").append(e.id).append("\",\"title\":\"").append(e.title).append("\"}")
+                    }
+                    append("]}")
+                }
+                val file = java.io.File(context.cacheDir, "eventfinder_export.json")
+                file.writeText(json)
+                _exportPath.emit(file.absolutePath)
+                _messages.emit(com.eventfinder.app.ui.components.UiMessage.Literal("Data exported"))
+            } catch (e: Exception) {
+                _messages.emit(com.eventfinder.app.ui.components.UiMessage.Literal("Export failed"))
+            }
+        }
     }
 
     fun setDefaultCity(city: String) {
