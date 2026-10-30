@@ -609,7 +609,7 @@ private fun WeatherCard(state: EventDetailUiState) {
                 )
                 when {
                     state.weather != null -> Text(
-                        "${describeWeatherCode(state.weather.weatherCode)} ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â· " +
+                        "${describeWeatherCode(state.weather.weatherCode)} - " +
                             "${state.weather.temperatureCelsius}${state.weather.unit}",
                         style = MaterialTheme.typography.titleMedium,
                         color = MaterialTheme.colorScheme.onPrimaryContainer
@@ -629,3 +629,4 @@ private fun WeatherCard(state: EventDetailUiState) {
         }
     }
 }
+
