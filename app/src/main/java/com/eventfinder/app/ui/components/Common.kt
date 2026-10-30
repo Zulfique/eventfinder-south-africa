@@ -1,4 +1,4 @@
-package com.eventfinder.app.ui.components
+﻿package com.eventfinder.app.ui.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -27,9 +27,9 @@ import androidx.compose.material.icons.outlined.LocationOn
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Icon
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -184,10 +184,18 @@ fun EventCard(
 ) {
     val event = view.event
     val haptic = LocalHapticFeedback.current
+
     Card(
-        modifier = modifier.fillMaxWidth().clickable(onClick = onClick),
+        modifier = modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
         shape = RoundedCornerShape(20.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface
+        ),
+        elevation = CardDefaults.cardElevation(
+            defaultElevation = 1.dp
+        )
     ) {
         Row(
             modifier = Modifier.padding(12.dp),
@@ -200,104 +208,112 @@ fun EventCard(
                 placeholder = painterResource(R.drawable.ic_image_placeholder),
                 error = painterResource(R.drawable.ic_image_placeholder),
                 modifier = Modifier
-                    .size(88.dp)
-                    .clip(RoundedCornerShape(14.dp))
+                    .size(width = 108.dp, height = 112.dp)
+                    .clip(RoundedCornerShape(16.dp))
                     .background(MaterialTheme.colorScheme.surfaceVariant)
             )
-            Spacer(Modifier.width(12.dp))
-            Column(Modifier.weight(1f)) {
+
+            Spacer(Modifier.width(14.dp))
+
+            Column(
+                modifier = Modifier.weight(1f)
+            ) {
                 Text(
-                    event.title,
+                    text = event.category.name.lowercase()
+                        .replaceFirstChar { it.uppercase() },
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.Bold
+                )
+
+                Spacer(Modifier.height(4.dp))
+
+                Text(
+                    text = event.title,
                     style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
+                    fontWeight = FontWeight.Bold,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
-                Spacer(Modifier.height(4.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
+
+                Spacer(Modifier.height(8.dp))
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     Icon(
                         Icons.Outlined.CalendarMonth,
                         contentDescription = null,
-                        modifier = Modifier.size(16.dp),
+                        modifier = Modifier.size(15.dp),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    Spacer(Modifier.width(4.dp))
+
+                    Spacer(Modifier.width(5.dp))
+
                     Text(
-                        DateTimeUtils.formatShortDate(event.startDate),
-                        style = MaterialTheme.typography.bodySmall
+                        text = DateTimeUtils.formatShortDate(event.startDate),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1
                     )
                 }
-                Spacer(Modifier.height(2.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
+
+                Spacer(Modifier.height(4.dp))
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     Icon(
                         Icons.Outlined.LocationOn,
                         contentDescription = null,
-                        modifier = Modifier.size(16.dp),
+                        modifier = Modifier.size(15.dp),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    Spacer(Modifier.width(4.dp))
+
+                    Spacer(Modifier.width(5.dp))
+
                     Text(
-                        event.venueName,
+                        text = event.venueName,
                         style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
                 }
-                if (view.distanceKm != null) {
-                    Spacer(Modifier.height(2.dp))
-                    Text(
-                        "${com.eventfinder.app.utils.DistanceCalculator.displayDistanceKm(view.distanceKm)} km " +
-                            stringResource(R.string.distance_away),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                }
-                if (view.averageRating != null && view.reviewCount > 0) {
-                    Spacer(Modifier.height(2.dp))
-                    val average = view.averageRating!!
-                    Text(
-                        "${"★".repeat(average.toInt().coerceIn(0, 5))}${
-                            "☆".repeat((5 - average.toInt().coerceIn(0, 5)).coerceIn(0, 5))
-                        } %.1f (%d)".format(average, view.reviewCount),
-                        style = MaterialTheme.typography.labelSmall
-                    )
-                }
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    stringResource(categoryLabel(event.category)),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSecondaryContainer,
-                    modifier = Modifier
-                        .background(
-                            MaterialTheme.colorScheme.secondaryContainer,
-                            RoundedCornerShape(6.dp)
-                        )
-                        .padding(horizontal = 8.dp, vertical = 2.dp)
-                )
             }
+
             if (onFavoriteToggle != null) {
-                Spacer(Modifier.width(8.dp))
-                Box(
-                    modifier = Modifier
-                        .size(48.dp)
-                        .clickable {
-                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                            onFavoriteToggle()
-                        },
-                    contentAlignment = Alignment.Center
+                IconButton(
+                    onClick = {
+                        haptic.performHapticFeedback(
+                            HapticFeedbackType.TextHandleMove
+                        )
+                        onFavoriteToggle()
+                    }
                 ) {
                     Icon(
-                        if (view.isFavorite) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
-                        contentDescription = stringResource(
-                            if (view.isFavorite) R.string.favorite_remove else R.string.favorite_add
-                        ),
-                        tint = if (view.isFavorite) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
+                        imageVector = if (view.isFavorite) {
+                            Icons.Filled.Favorite
+                        } else {
+                            Icons.Outlined.FavoriteBorder
+                        },
+                        contentDescription = if (view.isFavorite) {
+                            "Remove from favourites"
+                        } else {
+                            "Add to favourites"
+                        },
+                        tint = if (view.isFavorite) {
+                            MaterialTheme.colorScheme.error
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        }
                     )
                 }
             }
         }
     }
 }
+
 /** Shimmer placeholder used for skeleton loading states. */
 @Composable
 fun ShimmerBox(modifier: Modifier = Modifier) {
@@ -322,3 +338,8 @@ fun ShimmerBox(modifier: Modifier = Modifier) {
     )
     Box(modifier = modifier.background(brush, RoundedCornerShape(8.dp)))
 }
+
+
+
+
+
