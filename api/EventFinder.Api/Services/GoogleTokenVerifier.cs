@@ -74,22 +74,26 @@ public class GoogleTokenVerifier(HttpClient http, IConfiguration configuration)
                 if (string.IsNullOrEmpty(info.Sub) || string.IsNullOrEmpty(info.Email)) return null;
                 if (!string.Equals(Get("aud"), expectedAudience, StringComparison.Ordinal)) return null;
 
+                // tokeninfo returns "exp" as a JSON *string* ("1793234669").
+                // TryGetInt64 only accepts numbers, so a string used to collapse
+                // to MinValue here and every otherwise-valid token was rejected
+                // as expired. Accept both shapes.
                 long? expSeconds = null;
                 if (root.TryGetProperty("exp", out var expEl))
                 {
-                    if (expEl.ValueKind == JsonValueKind.Number && expEl.TryGetInt64(out var parsedInt))
+                    if (expEl.ValueKind == JsonValueKind.Number && expEl.TryGetInt64(out var expNumber))
                     {
-                        expSeconds = parsedInt;
+                        expSeconds = expNumber;
                     }
-                    else if (expEl.ValueKind == JsonValueKind.String
-                             && long.TryParse(expEl.GetString(), out var parsedString))
+                    else if (expEl.ValueKind == JsonValueKind.String &&
+                             long.TryParse(expEl.GetString(), out var expString))
                     {
-                        expSeconds = parsedString;
+                        expSeconds = expString;
                     }
                 }
 
-                var exp = expSeconds.HasValue
-                    ? DateTimeOffset.FromUnixTimeSeconds(expSeconds.Value)
+                var exp = expSeconds is { } seconds
+                    ? DateTimeOffset.FromUnixTimeSeconds(seconds)
                     : DateTimeOffset.MinValue;
                 if (exp <= DateTimeOffset.UtcNow) return null;
 

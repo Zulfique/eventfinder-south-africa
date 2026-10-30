@@ -22,6 +22,31 @@ data class GroupPlanEntity(
 
  * The password is stored as a salted PBKDF2 hash.
  */
+/** Cached server review for an event (one row per reviewer). */
+@Entity(
+    tableName = "event_reviews",
+    indices = [Index("eventId")]
+)
+data class CachedReviewEntity(
+    @PrimaryKey val reviewId: String,
+    val eventId: String,
+    val userId: String,
+    val userName: String,
+    val rating: Int,
+    val comment: String?,
+    val isVerifiedAttendee: Boolean,
+    val createdAt: Long,
+    val updatedAt: Long
+)
+
+/** Cached aggregate rating for an event (shown on cards and detail header). */
+@Entity(tableName = "event_review_summaries")
+data class CachedReviewSummaryEntity(
+    @PrimaryKey val eventId: String,
+    val average: Double,
+    val count: Int
+)
+
 @Entity(tableName = "users")
 data class UserEntity(
     @PrimaryKey val id: String,

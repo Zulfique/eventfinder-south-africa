@@ -168,15 +168,10 @@ class EventRepositoryImpl(
 override suspend fun ensureSeeded() {
     val now = System.currentTimeMillis()
     val upcomingSamples = eventDao.countUpcomingSampleEvents(now)
+    val seed = SampleEventsProvider.johannesburgAndCapeTown()
 
     if (upcomingSamples == 0) {
         eventDao.deleteSampleEvents()
-
-        val seed = SampleEventsProvider.johannesburgAndCapeTown()
-
-        eventDao.upsertAll(
-            seed.map { it.toEntity(isCreatedByUser = false) }
-        )
 
         AppLogger.i(
             tag,
@@ -188,6 +183,13 @@ override suspend fun ensureSeeded() {
             "Upcoming sample catalogue already contains $upcomingSamples events"
         )
     }
+
+    // Always upsert: rows written by an older build keep their old cover art
+    // otherwise (the picturesum placeholders survived for weeks this way), and
+    // REPLACE also rolls the demo dates forward so they stay upcoming.
+    eventDao.upsertAll(
+        seed.map { it.toEntity(isCreatedByUser = false) }
+    )
 }
 
     override suspend fun toggleFavorite(eventId: String): Boolean {

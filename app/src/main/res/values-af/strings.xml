@@ -290,4 +290,28 @@
   <string name="default_city">Verstek stad</string>
   <string name="default_city_hint">bv. Johannesburg — gebruik wanneer ligging af is</string>
   <string name="default_radius">Soekradius</string>
-  <string name="radius_km_value">%d km</string></resources>
+  <string name="radius_km_value">%d km</string>  <!-- Avatar / profile photo -->
+  <string name="avatar_style_default">Verstek</string>
+  <string name="avatar_style_male">Manlik</string>
+  <string name="avatar_style_female">Vroulik</string>
+  <string name="photo_import_failed">Kon die foto nie lees nie. Kies asseblief ’n ander een.</string>
+  <string name="email_verification_token">E-pos verifiëringstoken</string>
+  <string name="verify_email_change">Verifieer wysiging</string>
+  <string name="avatar_desc_photo">Profielfoto</string>
+  <string name="avatar_desc_male">Profielavatar, manlik</string>
+  <string name="avatar_desc_female">Profielavatar, vroulik</string>
+  <string name="avatar_desc_initials">Profielavatar, initialle</string>
+  <!-- Ratings & reviews -->
+  <string name="reviews_title">Graderings en resensies</string>
+  <string name="write_review">Skryf ’n resensie</string>
+  <string name="no_reviews">Nog geen resensies nie — wees die eerste.</string>
+  <string name="reviews_count">%1$d resensies</string>
+  <string name="verified_attendee">Geverifieerde bywoner</string>
+  <string name="delete_review">Deleteer resensie</string>
+  <string name="submit_review">Dien in</string>
+  <string name="review_comment_hint">Wat het jy gedink? (opsioneel)</string>
+  <string name="rate_stars">Gradeer %1$d sterre</string>
+  <string name="review_saved">Resensie gestoor</string>
+  <string name="review_deleted">Resensie verwyder</string>
+  <string name="review_failed">Kon die resensie nie stoor nie. Probeer weer.</string>
+</resources>

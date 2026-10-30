@@ -40,8 +40,13 @@ interface OpenMeteoApi {
                 "precipitation_sum,precipitation_probability_max," +
                 "sunrise,sunset,uv_index_max",
 
-@Query("forecast_days")
-forecastDays: Int? = null,
+        // Nullable so Retrofit omits it entirely when null. Open-Meteo rejects
+        // `forecast_days` together with `start_date`/`end_date` with a 400
+        // ("Parameter 'forecast_days' is mutually exclusive with 'start_date'
+        // and 'end_date'"), and every forecast in this app is requested for an
+        // explicit event date. Sending both made *every* weather lookup fail.
+        @Query("forecast_days")
+        forecastDays: Int? = null,
 
         @Query("temperature_unit")
         temperatureUnit: String = "celsius",

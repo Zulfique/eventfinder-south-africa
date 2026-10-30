@@ -108,6 +108,42 @@ public class Rsvp
     public DateTime UpdatedAt { get; set; }
 }
 
+/// <summary>
+/// One review per user per event. <c>EventId</c> is the app-side event key as
+/// a string: Guid-based API events and imported (RSS/ICS) event ids both land
+/// here, so every event in the app can carry reviews.
+/// </summary>
+[Index(nameof(EventId), nameof(CreatedAt))]
+[Index(nameof(EventId), nameof(UserId), IsUnique = true)]
+public class EventReview
+{
+    [Key]
+    public Guid Id { get; set; }
+
+    [Required, MaxLength(64)]
+    public string EventId { get; set; } = string.Empty;
+
+    public Guid UserId { get; set; }
+
+    public User? User { get; set; }
+
+    /// <summary>1–5 stars.</summary>
+    public int Rating { get; set; }
+
+    [MaxLength(2000)]
+    public string? Comment { get; set; }
+
+    /// <summary>
+    /// True when the reviewer had an "attending" RSVP for this event at the
+    /// time of writing (Guid events only — imported events have no backend
+    /// RSVP record).
+    /// </summary>
+    public bool IsVerifiedAttendee { get; set; }
+
+    public DateTime CreatedAt { get; set; }
+    public DateTime UpdatedAt { get; set; }
+}
+
 public class PasswordResetToken
 {
     [Key]

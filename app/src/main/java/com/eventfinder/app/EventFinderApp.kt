@@ -4,9 +4,12 @@ import android.app.Application
 import android.content.Context
 import android.os.Build
 import android.util.Log
+import coil.ImageLoader
+import coil.ImageLoaderFactory
 import com.eventfinder.app.di.AppContainer
 import com.eventfinder.app.notifications.EventFinderMessagingService
 import com.eventfinder.app.utils.AppLogger
+import okhttp3.OkHttpClient
 import org.osmdroid.config.Configuration
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory
 
@@ -15,11 +18,34 @@ import org.osmdroid.tileprovider.tilesource.TileSourceFactory
  * one-time global setup (logging, osmdroid configuration, Firebase topics,
  * automatic reconnect sync) described below.
  */
-class EventFinderApp : Application() {
+class EventFinderApp : Application(), ImageLoaderFactory {
 
     /** Late-initialised dependency graph. */
     lateinit var container: AppContainer
         private set
+
+    /**
+     * Shared client for Coil. Wikimedia returns **403** for OkHttp's default
+     * "okhttp/x.y.z" user-agent, which made every Commons cover-art URL fail to
+     * render in the app while the very same URL opened fine in the browser.
+     * Every image request therefore carries an identifying user-agent.
+     */
+    private val imageHttpClient: OkHttpClient by lazy {
+        OkHttpClient.Builder()
+            .addInterceptor { chain ->
+                chain.proceed(
+                    chain.request().newBuilder()
+                        .header("User-Agent", IMAGE_USER_AGENT)
+                        .build()
+                )
+            }
+            .build()
+    }
+
+    override fun newImageLoader(): ImageLoader =
+        ImageLoader.Builder(this)
+            .callFactory(imageHttpClient)
+            .build()
 
     override fun onCreate() {
         super.onCreate()
@@ -70,8 +96,12 @@ class EventFinderApp : Application() {
             createDeviceProtectedStorageContext(),
             createDeviceProtectedStorageContext().getSharedPreferences("${packageName}_preferences", Context.MODE_PRIVATE)
         )
-        Configuration.getInstance().userAgentValue =
-            "EventFinder/1.1 (https://github.com/Zulfique/eventfinder-south-africa)"
+        Configuration.getInstance().userAgentValue = IMAGE_USER_AGENT
         AppLogger.d("EventFinderApp", "osmdroid configured with ${TileSourceFactory.MAPNIK.name()}")
+    }
+
+    companion object {
+        private const val IMAGE_USER_AGENT =
+            "EventFinder/1.1 (https://github.com/Zulfique/eventfinder-south-africa)"
     }
 }

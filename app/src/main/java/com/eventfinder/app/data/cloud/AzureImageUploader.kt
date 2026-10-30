@@ -46,7 +46,7 @@ class AzureImageUploader(
 
         val fileName = fileNameFor(localUri, eventId)
 
-        val result = api.uploadBlob(bearer, fileName, bytes)
+        val result = api.uploadBlob("Bearer $bearer", fileName, bytes)
         val uploaded = result.getOrNull()
         if (uploaded != null) {
             AppLogger.i(tag, "Uploaded event image to Azure Blob Storage: ${uploaded.url}")
@@ -54,6 +54,38 @@ class AzureImageUploader(
         }
 
         AppLogger.w(tag, "Blob upload failed (${result.exceptionOrNull()?.message}) - keeping the local image")
+        return null
+    }
+
+    /**
+     * Uploads a picked profile photo and returns its permanent public URL, or
+     * null when the upload could not complete (the caller then keeps the local
+     * file URI so the photo still renders offline).
+     */
+    suspend fun uploadProfilePhoto(localUri: String): String? {
+        val bearer = bearerToken() ?: run {
+            AppLogger.d(tag, "No session token - keeping the local profile photo")
+            return null
+        }
+
+        val bytes = readBytes(localUri) ?: run {
+            AppLogger.w(tag, "Could not read the profile photo - keeping it local")
+            return null
+        }
+
+        val extension = localUri.substringAfterLast('.', "")
+            .lowercase()
+            .takeIf { it.length in 2..5 } ?: "jpg"
+        val fileName = "profile_${java.util.UUID.randomUUID()}.$extension"
+
+        val result = api.uploadBlob("Bearer $bearer", fileName, bytes)
+        val uploaded = result.getOrNull()
+        if (uploaded != null) {
+            AppLogger.i(tag, "Uploaded profile photo to Azure Blob Storage: ${uploaded.url}")
+            return uploaded.url
+        }
+
+        AppLogger.w(tag, "Profile photo upload failed (${result.exceptionOrNull()?.message}) - keeping the local copy")
         return null
     }
 
@@ -67,7 +99,7 @@ class AzureImageUploader(
         val bearer = bearerToken() ?: return
         val key = api.blobKeyFromUrl(url) ?: return
 
-        val result = api.deleteBlob(bearer, key)
+        val result = api.deleteBlob("Bearer $bearer", key)
         if (result.isFailure) {
             AppLogger.d(tag, "Blob delete skipped: ${result.exceptionOrNull()?.message}")
         }

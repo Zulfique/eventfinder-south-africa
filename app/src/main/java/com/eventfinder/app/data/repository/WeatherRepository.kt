@@ -59,6 +59,9 @@ class WeatherRepositoryImpl(
             val response: OmForecastResponse = openMeteoApi.getForecast(
                 latitude = latitude,
                 longitude = longitude,
+                // Must stay null: Open-Meteo 400s when forecast_days is sent
+                // alongside start_date/end_date.
+                forecastDays = null,
                 startDate = isoDate,
                 endDate = isoDate
             )
@@ -112,10 +115,10 @@ class WeatherRepositoryImpl(
                 return Result.failure(IllegalStateException("forecast_too_far"))
             }
 
+            // Code 0 means "clear skies" in the WMO table, so defaulting a
+            // missing entry to 0 would report sunny weather we never received.
             val weatherCode = codes.getOrNull(bestIndex)
-                ?: return Result.failure(
-                    IllegalStateException("missing_weather_code")
-                )
+                ?: return Result.failure(IllegalStateException("missing_weather_code"))
 
             val summary = WeatherSummary(
                 temperatureCelsius = temperatures[bestIndex],

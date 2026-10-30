@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.eventfinder.app.utils.AppLogger
@@ -64,6 +65,37 @@ class UserPreferences(private val context: Context) : SessionProvider {
     /** Builds a boolean preference key scoped to a specific user. */
     private fun userBoolKey(name: String, userId: String) =
         booleanPreferencesKey("user_${userId}_$name")
+
+    /** Builds an integer preference key scoped to a specific user. */
+    private fun userIntKey(name: String, userId: String) =
+        intPreferencesKey("user_${userId}_$name")
+
+    // ---- Profile avatar (per user) ----
+
+    /**
+     * Profile-photo URL: a permanent Azure blob URL after a successful upload,
+     * or a local file:// URI when the upload could not complete. Null means the
+     * generated avatar (initials or the male/female silhouette) is used.
+     */
+    suspend fun avatarUrl(userId: String): String? =
+        context.eventFinderDataStore.data.first()[userStringKey("avatar_url", userId)]
+
+    suspend fun setAvatarUrl(userId: String, url: String?) {
+        context.eventFinderDataStore.edit { prefs ->
+            val key = userStringKey("avatar_url", userId)
+            if (url.isNullOrBlank()) prefs.remove(key) else prefs[key] = url
+        }
+    }
+
+    /** Generated avatar style: 0 = initials, 1 = male silhouette, 2 = female silhouette. */
+    suspend fun avatarStyle(userId: String): Int =
+        context.eventFinderDataStore.data.first()[userIntKey("avatar_style", userId)] ?: 0
+
+    suspend fun setAvatarStyle(userId: String, style: Int) {
+        context.eventFinderDataStore.edit { prefs ->
+            prefs[userIntKey("avatar_style", userId)] = style
+        }
+    }
 
     // ---- Session (global) ----
 

@@ -340,7 +340,7 @@ the app falls back to purely local auth when they are blank):
 ```properties
 # local.properties (gitignored) — used by app/build.gradle.kts
 GOOGLE_SERVER_CLIENT_ID=<OAuth web client ID from Google Cloud console>
-EVENTFINDER_API_URL=https://eventfinder-api-nlc2.onrender.com/
+EVENTFINDER_API_URL=https://eventfinder-api-o1t1.onrender.com/
 ```
 
 ### 4. Build & install

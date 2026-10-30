@@ -224,6 +224,7 @@ app.MapGet("/health", (IBlobStorageService blobStorage) => Results.Json(new
 
 app.MapAuthEndpoints();
 app.MapEventEndpoints();
+app.MapReviewEndpoints();
 app.MapBlobEndpoints();
 
 app.Run();

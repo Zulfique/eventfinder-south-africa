@@ -28,6 +28,8 @@ class WeatherRepositoryTest {
         assertEquals("Drizzle", describeWeatherCode(53))
         assertEquals("Rain", describeWeatherCode(65))
         assertEquals("Snow", describeWeatherCode(73))
+        assertEquals("Snow", describeWeatherCode(85))
+        assertEquals("Snow", describeWeatherCode(86))
         assertEquals("Showers", describeWeatherCode(81))
         assertEquals("Thunderstorm", describeWeatherCode(95))
         assertEquals("Thunderstorm with hail", describeWeatherCode(99))
@@ -163,5 +165,72 @@ class WeatherRepositoryTest {
         val api = FakeOpenMeteoApi(OmForecastResponse(hourly = null))
         val result = WeatherRepositoryImpl(api).forecastFor("event-1", -33.9, 18.4, startDate)
         assertTrue(result.isFailure)
+    }
+
+    @Test
+    fun `never reports clear weather when the weather_code array is incomplete`() = runTest {
+        // The event starts at 12:00, so the matching sample is index 2, but only
+        // one weather_code was returned. Defaulting the gap to 0 would have
+        // shown a confident "Clear".
+        val noonStart = LocalDate.of(2026, 10, 3)
+            .atTime(12, 0).atZone(zone).toInstant().toEpochMilli()
+
+        val api = FakeOpenMeteoApi(
+            OmForecastResponse(
+                timezone = zone.id,
+                hourly = OmHourly(
+                    time = listOf("2026-10-03T00:00", "2026-10-03T09:00", "2026-10-03T12:00"),
+                    temperature2m = listOf(12.0, 18.5, 22.0),
+                    weatherCode = listOf(0)
+                )
+            )
+        )
+
+        val result = WeatherRepositoryImpl(api).forecastFor("event-1", -26.2, 28.0, noonStart)
+
+        assertTrue(result.isFailure)
+        assertEquals("missing_weather_code", result.exceptionOrNull()?.message)
+    }
+
+    @Test
+    fun `requests a single explicit date and never forecast_days alongside it`() = runTest {
+        // Regression guard for the Open-Meteo 400 that broke every lookup:
+        // `forecast_days` is mutually exclusive with start_date/end_date.
+        var seenForecastDays: Int? = -1
+        var seenStart: String? = null
+        var seenEnd: String? = null
+
+        val api = object : OpenMeteoApi {
+            override suspend fun getForecast(
+                latitude: Double,
+                longitude: Double,
+                hourly: String,
+                daily: String,
+                forecastDays: Int?,
+                temperatureUnit: String,
+                windSpeedUnit: String,
+                timezone: String,
+                startDate: String?,
+                endDate: String?
+            ): OmForecastResponse {
+                seenForecastDays = forecastDays
+                seenStart = startDate
+                seenEnd = endDate
+                return OmForecastResponse(
+                    timezone = zone.id,
+                    hourly = OmHourly(
+                        time = listOf("2026-10-03T12:00"),
+                        temperature2m = listOf(21.0),
+                        weatherCode = listOf(1)
+                    )
+                )
+            }
+        }
+
+        WeatherRepositoryImpl(api).forecastFor("event-1", -33.9, 18.4, startDate)
+
+        assertEquals(null, seenForecastDays)
+        assertEquals(isoDate, seenStart)
+        assertEquals(isoDate, seenEnd)
     }
 }

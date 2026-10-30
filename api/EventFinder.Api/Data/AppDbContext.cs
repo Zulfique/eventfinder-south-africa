@@ -7,6 +7,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<User> Users => Set<User>();
     public DbSet<EventEntity> Events => Set<EventEntity>();
     public DbSet<Rsvp> Rsvps => Set<Rsvp>();
+    public DbSet<EventReview> EventReviews => Set<EventReview>();
     public DbSet<PasswordResetToken> PasswordResetTokens => Set<PasswordResetToken>();
     public DbSet<EmailChangeToken> EmailChangeTokens => Set<EmailChangeToken>();
 
@@ -25,6 +26,12 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             .OnDelete(DeleteBehavior.Cascade);
 
         modelBuilder.Entity<Rsvp>()
+            .HasOne(r => r.User)
+            .WithMany()
+            .HasForeignKey(r => r.UserId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<EventReview>()
             .HasOne(r => r.User)
             .WithMany()
             .HasForeignKey(r => r.UserId)

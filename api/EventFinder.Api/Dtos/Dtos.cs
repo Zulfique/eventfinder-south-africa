@@ -100,6 +100,29 @@ public record AuthResponse(UserDto User, string Token, DateTime ExpiresAt);
 
 public record AttendeeDto(Guid UserId, string FullName, string Status, DateTime RsvpUpdatedAt);
 
+public record ReviewDto(
+    Guid Id,
+    string EventId,
+    Guid UserId,
+    string FullName,
+    int Rating,
+    string? Comment,
+    bool IsVerifiedAttendee,
+    DateTime CreatedAt,
+    DateTime UpdatedAt);
+
+public record ReviewListDto(
+    double Average,
+    int Count,
+    List<ReviewDto> Items,
+    ReviewDto? Mine);
+
+public record ReviewSummaryItemDto(string EventId, double Average, int Count);
+
+public record UpsertReviewRequest(
+    [property: Range(1, 5)] int Rating,
+    [property: MaxLength(2000)] string? Comment);
+
 public static class RequestValidator
 {
     public static Dictionary<string, string[]> Validate(object request)
