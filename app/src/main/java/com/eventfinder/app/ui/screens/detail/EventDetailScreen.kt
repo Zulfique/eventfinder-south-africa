@@ -1,4 +1,4 @@
-package com.eventfinder.app.ui.screens.detail
+﻿package com.eventfinder.app.ui.screens.detail
 
 import android.content.Intent
 import android.net.Uri
@@ -149,7 +149,7 @@ fun EventDetailScreen(
                         Modifier.fillMaxSize().verticalScroll(rememberScrollState())
                     ) {
                         // Hero image with back + favourite controls
-                        Box(Modifier.fillMaxWidth().height(230.dp)) {
+                        Box(Modifier.fillMaxWidth().height(300.dp)) {
                             AsyncImage(
                                 model = event.imageUrl,
                                 contentDescription = stringResource(R.string.event_image),
@@ -246,7 +246,18 @@ fun EventDetailScreen(
                             )
                         }
 
-                        Column(Modifier.padding(16.dp)) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(
+                                    RoundedCornerShape(
+                                        topStart = 28.dp,
+                                        topEnd = 28.dp
+                                    )
+                                )
+                                .background(MaterialTheme.colorScheme.background)
+                                .padding(horizontal = 20.dp, vertical = 22.dp)
+                        ) {
                             Text(event.title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
                             Spacer(Modifier.height(4.dp))
                             Text(
@@ -278,7 +289,7 @@ fun EventDetailScreen(
                                 if (view.distanceKm != null) {
                                     Spacer(Modifier.size(8.dp))
                                     Text(
-                                        "ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â· ${com.eventfinder.app.utils.DistanceCalculator.displayDistanceKm(view.distanceKm)} km " +
+                                        "ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â· ${com.eventfinder.app.utils.DistanceCalculator.displayDistanceKm(view.distanceKm)} km " +
                                             stringResource(R.string.distance_away),
                                         color = MaterialTheme.colorScheme.primary,
                                         style = MaterialTheme.typography.bodyMedium
@@ -632,4 +643,5 @@ private fun WeatherCard(state: EventDetailUiState) {
         }
     }
 }
+
 

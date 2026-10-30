@@ -1,4 +1,4 @@
-package com.eventfinder.app.ui.screens.profile
+﻿package com.eventfinder.app.ui.screens.profile
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Person
@@ -31,6 +32,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -96,79 +98,99 @@ fun ProfileScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             item {
-                Card(Modifier.fillMaxWidth()) {
-                    Row(
-                        Modifier.fillMaxWidth().padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(24.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surface
+                    ),
+                    elevation = CardDefaults.cardElevation(
+                        defaultElevation = 2.dp
+                    )
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(20.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         Box(
-                            Modifier.size(64.dp).clip(CircleShape)
+                            modifier = Modifier
+                                .size(92.dp)
+                                .clip(CircleShape)
                                 .background(MaterialTheme.colorScheme.primaryContainer)
                                 .clickable(onClick = onEditProfile),
                             contentAlignment = Alignment.Center
                         ) {
                             val type = state.avatarType.ifBlank { "initials" }
                             val url = state.avatarImageUrl ?: state.avatarUrl
-                            val contentDescription = when (type) {
-                                "male" -> "Profile avatar, male"
-                                "female" -> "Profile avatar, female"
-                                "uploaded" -> "Profile avatar, uploaded photo"
-                                else -> "Profile avatar, initials"
-                            }
+
                             when (type) {
                                 "male" -> Image(
                                     painter = painterResource(R.drawable.avatar_male),
-                                    contentDescription = contentDescription,
+                                    contentDescription = "Profile avatar",
                                     contentScale = ContentScale.Crop,
-                                    modifier = Modifier.size(64.dp).clip(CircleShape)
+                                    modifier = Modifier
+                                        .size(92.dp)
+                                        .clip(CircleShape)
                                 )
+
                                 "female" -> Image(
                                     painter = painterResource(R.drawable.avatar_female),
-                                    contentDescription = contentDescription,
+                                    contentDescription = "Profile avatar",
                                     contentScale = ContentScale.Crop,
-                                    modifier = Modifier.size(64.dp).clip(CircleShape)
+                                    modifier = Modifier
+                                        .size(92.dp)
+                                        .clip(CircleShape)
                                 )
-                                "uploaded" -> if (!url.isNullOrBlank()) {
-                                    AsyncImage(
-                                        model = url,
-                                        contentDescription = contentDescription,
-                                        contentScale = ContentScale.Crop,
-                                        placeholder = painterResource(R.drawable.avatar_male),
-                                        error = painterResource(R.drawable.avatar_male),
-                                        modifier = Modifier.size(64.dp).clip(CircleShape)
-                                    )
-                                } else {
-                                    Text(
-                                        state.fullName.take(2).uppercase(),
-                                        style = MaterialTheme.typography.titleLarge,
-                                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                                        color = MaterialTheme.colorScheme.onPrimaryContainer
-                                    )
+
+                                "uploaded" -> {
+                                    if (!url.isNullOrBlank()) {
+                                        AsyncImage(
+                                            model = url,
+                                            contentDescription = "Profile photo",
+                                            contentScale = ContentScale.Crop,
+                                            modifier = Modifier
+                                                .size(92.dp)
+                                                .clip(CircleShape)
+                                        )
+                                    } else {
+                                        ProfileInitials(state.fullName)
+                                    }
                                 }
-                                else -> if (state.fullName.isBlank()) {
-                                    Icon(
-                                        Icons.Outlined.Person,
-                                        contentDescription = contentDescription,
-                                        modifier = Modifier.size(32.dp),
-                                        tint = MaterialTheme.colorScheme.onPrimaryContainer
-                                    )
-                                } else {
-                                    Text(
-                                        state.fullName.take(2).uppercase(),
-                                        style = MaterialTheme.typography.titleLarge,
-                                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                                        color = MaterialTheme.colorScheme.onPrimaryContainer
-                                    )
-                                }
+
+                                else -> ProfileInitials(state.fullName)
                             }
                         }
-                        Spacer(Modifier.size(12.dp))
-                        Column {
-                            Text(state.fullName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+
+                        Spacer(Modifier.height(14.dp))
+
+                        Text(
+                            text = state.fullName.ifBlank { "EventFinder Guest" },
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.ExtraBold
+                        )
+
+                        Spacer(Modifier.height(4.dp))
+
+                        Text(
+                            text = state.email.ifBlank { "Sign in to personalise your experience" },
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+
+                        Spacer(Modifier.height(14.dp))
+
+                        OutlinedButton(
+                            onClick = if (isGuest) onLogin else onEditProfile,
+                            shape = RoundedCornerShape(14.dp)
+                        ) {
                             Text(
-                                state.email,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                if (isGuest) {
+                                    stringResource(R.string.login)
+                                } else {
+                                    stringResource(R.string.edit_profile)
+                                }
                             )
                         }
                     }
@@ -184,7 +206,11 @@ fun ProfileScreen(
             }
 
             item {
-                Text(stringResource(R.string.my_events), style = MaterialTheme.typography.titleMedium)
+                Text(
+                    text = stringResource(R.string.my_events),
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.ExtraBold
+                )
             }
             if (state.myEvents.isEmpty()) {
                 item {
@@ -205,7 +231,11 @@ fun ProfileScreen(
             }
 
             item {
-                Text(stringResource(R.string.attending), style = MaterialTheme.typography.titleMedium)
+                Text(
+                    text = stringResource(R.string.attending),
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.ExtraBold
+                )
             }
             if (state.attending.isEmpty()) {
                 item {
@@ -249,14 +279,59 @@ fun ProfileScreen(
 }
 
 @Composable
-private fun StatCard(label: String, value: String, modifier: Modifier = Modifier) {
+private fun StatCard(
+    label: String,
+    value: String,
+    modifier: Modifier = Modifier
+) {
     Card(
         modifier = modifier,
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface
+        ),
+        elevation = CardDefaults.cardElevation(
+            defaultElevation = 1.dp
+        )
     ) {
-        Column(Modifier.fillMaxWidth().padding(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(value, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-            Text(label, style = MaterialTheme.typography.labelMedium)
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 18.dp, horizontal = 6.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                text = value,
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.ExtraBold,
+                color = MaterialTheme.colorScheme.primary
+            )
+
+            Spacer(Modifier.height(4.dp))
+
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }
+
+@Composable
+private fun ProfileInitials(name: String) {
+    Text(
+        text = name
+            .trim()
+            .split(Regex("\\s+"))
+            .take(2)
+            .mapNotNull { it.firstOrNull()?.uppercaseChar() }
+            .joinToString("")
+            .ifBlank { "EF" },
+        style = MaterialTheme.typography.headlineMedium,
+        fontWeight = FontWeight.ExtraBold,
+        color = MaterialTheme.colorScheme.onPrimaryContainer
+    )
+}
+
+

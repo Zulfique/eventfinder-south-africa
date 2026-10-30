@@ -1,8 +1,9 @@
-package com.eventfinder.app.ui.screens.create
+﻿package com.eventfinder.app.ui.screens.create
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.layout.Arrangement
@@ -27,6 +28,7 @@ import androidx.compose.material.icons.outlined.EditCalendar
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
@@ -164,6 +166,7 @@ fun CreateEventScreen(
     }
 
     Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
                 title = {
@@ -182,19 +185,24 @@ fun CreateEventScreen(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         bottomBar = {
             Row(
-                Modifier.fillMaxWidth().padding(16.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(MaterialTheme.colorScheme.surface)
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 if (state.step > 1) {
                     FilledTonalButton(
                         onClick = viewModel::previousStep,
-                        modifier = Modifier.weight(1f).height(48.dp)
+                        modifier = Modifier.weight(1f).height(54.dp),
+                        shape = RoundedCornerShape(16.dp)
                     ) { Text(stringResource(R.string.back)) }
                 }
                 if (state.step < CREATE_STEPS) {
                     Button(
                         onClick = viewModel::nextStep,
-                        modifier = Modifier.weight(1f).height(48.dp)
+                        modifier = Modifier.weight(1f).height(54.dp),
+                        shape = RoundedCornerShape(16.dp)
                     ) {
                         Text(if (state.step == CREATE_STEPS - 1) stringResource(R.string.preview)
                         else stringResource(R.string.next))
@@ -204,7 +212,8 @@ fun CreateEventScreen(
                     Button(
                         onClick = viewModel::publish,
                         enabled = !state.isSubmitting,
-                        modifier = Modifier.weight(1f).height(48.dp)
+                        modifier = Modifier.weight(1f).height(54.dp),
+                        shape = RoundedCornerShape(16.dp)
                     ) {
                         if (state.isSubmitting) {
                             CircularProgressIndicator(Modifier.height(20.dp).width(20.dp))
@@ -224,18 +233,48 @@ fun CreateEventScreen(
         }
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
-            LinearProgressIndicator(
-                progress = { state.step / CREATE_STEPS.toFloat() },
-                modifier = Modifier.fillMaxWidth()
-            )
-            Text(
-                getString(R.string.step_pattern, state.step, CREATE_STEPS),
-                style = MaterialTheme.typography.labelMedium,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
-            )
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                shape = RoundedCornerShape(18.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surface
+                )
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Text(
+                        text = when (state.step) {
+                            1 -> "Event details"
+                            2 -> "Date and location"
+                            else -> "Review and publish"
+                        },
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = "Step ${'$'}{state.step} of ${'$'}CREATE_STEPS",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    LinearProgressIndicator(
+                        progress = { state.step / CREATE_STEPS.toFloat() },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(7.dp)
+                            .clip(RoundedCornerShape(50))
+                    )
+                }
+            }
             Column(
-                Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                modifier = Modifier
+                    .weight(1f)
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 18.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 when (state.step) {
                     1 -> StepDetails(viewModel, onPickImage = pickImage)
@@ -475,3 +514,6 @@ private fun StepReview(state: CreateEventUiState) {
         }
     }
 }
+
+
+
