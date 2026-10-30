@@ -244,10 +244,30 @@ private val MIGRATION_15_16 = object : Migration(15, 16) {
         db.execSQL("ALTER TABLE events ADD COLUMN loudMusic INTEGER NOT NULL DEFAULT 0")
         db.execSQL("ALTER TABLE events ADD COLUMN sensoryFriendly INTEGER NOT NULL DEFAULT 0")
         db.execSQL("ALTER TABLE events ADD COLUMN strobeLights INTEGER NOT NULL DEFAULT 0")
-        db.execSQL("ALTER TABLE users ADD COLUMN commuteTimeMinutes INTEGER NOT NULL DEFAULT 30")
-        db.execSQL("ALTER TABLE users ADD COLUMN preferredCategories TEXT NOT NULL DEFAULT ''")
-        db.execSQL("ALTER TABLE users ADD COLUMN skipReminders INTEGER NOT NULL DEFAULT 0")
-        db.execSQL("ALTER TABLE users ADD COLUMN accessibilityNeeds TEXT NOT NULL DEFAULT ''")
+        // Recreate users table to add new columns (ALTER TABLE ADD COLUMN with
+        // NOT NULL + DEFAULT can be unreliable across SQLite versions).
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS users_new (" +
+            "id TEXT NOT NULL PRIMARY KEY, fullName TEXT NOT NULL, email TEXT NOT NULL, " +
+            "passwordHash TEXT NOT NULL, preferredLanguage TEXT NOT NULL, defaultCity TEXT NOT NULL, " +
+            "defaultRadiusKm INTEGER NOT NULL, biometricEnabled INTEGER NOT NULL, createdAt INTEGER NOT NULL, " +
+            "serverBacked INTEGER NOT NULL DEFAULT 0, avatarType TEXT NOT NULL DEFAULT 'initials', " +
+            "avatarUrl TEXT, avatarImageUrl TEXT, isVerified INTEGER NOT NULL DEFAULT 0, " +
+            "trustScore REAL NOT NULL DEFAULT 0.0, commuteTimeMinutes INTEGER NOT NULL DEFAULT 30, " +
+            "preferredCategories TEXT NOT NULL DEFAULT '', skipReminders INTEGER NOT NULL DEFAULT 0, " +
+            "accessibilityNeeds TEXT NOT NULL DEFAULT '')"
+        )
+        db.execSQL(
+            "INSERT INTO users_new (id, fullName, email, passwordHash, preferredLanguage, defaultCity, " +
+            "defaultRadiusKm, biometricEnabled, createdAt, serverBacked, avatarType, avatarUrl, " +
+            "avatarImageUrl, isVerified, trustScore, commuteTimeMinutes, preferredCategories, " +
+            "skipReminders, accessibilityNeeds) " +
+            "SELECT id, fullName, email, passwordHash, preferredLanguage, defaultCity, defaultRadiusKm, " +
+            "biometricEnabled, createdAt, serverBacked, avatarType, avatarUrl, avatarImageUrl, " +
+            "isVerified, trustScore, 30, '', 0, '' FROM users"
+        )
+        db.execSQL("DROP TABLE users")
+        db.execSQL("ALTER TABLE users_new RENAME TO users")
     }
 }
 
