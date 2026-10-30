@@ -51,6 +51,8 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -79,8 +81,10 @@ fun SettingsScreen(
     val context = LocalContext.current
     val viewModel: SettingsViewModel = viewModel(factory = SettingsViewModel.factory(container, context))
     val state by viewModel.uiState.collectAsState()
+    val themeMode by container.preferences.themeMode.collectAsState(initial = "system")
     val biometricSupported = BiometricAuth.isAvailable(context)
     val snackbarHostState = remember { SnackbarHostState() }
+    val screenScope = rememberCoroutineScope()
 
     var showChangePassword by remember { mutableStateOf(false) }
     var showDeleteAccount by remember { mutableStateOf(false) }
@@ -265,6 +269,27 @@ fun SettingsScreen(
 
             Card(Modifier.fillMaxWidth()) {
                 Column {
+                    ListItem(
+                        headlineContent = { Text("Appearance") },
+                        supportingContent = { Text("Choose light, dark or follow your device") },
+                        trailingContent = {
+                            var themeExpanded by remember { mutableStateOf(false) }
+                            Box {
+                                TextButton(onClick = { themeExpanded = true }) {
+                                    Text(when (themeMode) { "light" -> "Light"; "dark" -> "Dark"; else -> "System" })
+                                }
+                                DropdownMenu(expanded = themeExpanded, onDismissRequest = { themeExpanded = false }) {
+                                    listOf("system" to "System default", "light" to "Light", "dark" to "Dark").forEach { (value, label) ->
+                                        DropdownMenuItem(text = { Text(label) }, onClick = {
+                                            themeExpanded = false
+                                            screenScope.launch { container.preferences.setThemeMode(value) }
+                                        })
+                                    }
+                                }
+                            }
+                        }
+                    )
+                    HorizontalDivider()
                     LanguageSelector(state.language, viewModel::setLanguage)
                     HorizontalDivider()
                     ListItem(

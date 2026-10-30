@@ -51,6 +51,7 @@ class UserPreferences(private val context: Context) : SessionProvider {
         val SESSION_USER_ID = stringPreferencesKey("session_user_id")
         val BIOMETRIC_USER_ID = stringPreferencesKey("biometric_user_id")
         val LANGUAGE = stringPreferencesKey("language")
+        val THEME_MODE = stringPreferencesKey("theme_mode")
         val PENDING_NAVIGATION_ROUTE = stringPreferencesKey("pending_navigation_route")
         val AUTH_TOKEN = stringPreferencesKey("auth_token")
         val FIREBASE_UID = stringPreferencesKey("firebase_uid")
@@ -146,6 +147,15 @@ class UserPreferences(private val context: Context) : SessionProvider {
     override suspend fun setLanguage(lang: String) {
         context.eventFinderDataStore.edit { it[Keys.LANGUAGE] = lang }
         AppLogger.i("UserPreferences", "Language preference saved: $lang")
+    }
+
+    // ---- Appearance (global device preference; available before login) ----
+    val themeMode: Flow<String> = context.eventFinderDataStore.data
+        .map { it[Keys.THEME_MODE] ?: "system" }
+
+    suspend fun setThemeMode(mode: String) {
+        val safeMode = mode.lowercase().takeIf { it in setOf("system", "light", "dark") } ?: "system"
+        context.eventFinderDataStore.edit { it[Keys.THEME_MODE] = safeMode }
     }
 
     // ---- Biometric auth (global device-level, needed before login for biometric prompt) ----

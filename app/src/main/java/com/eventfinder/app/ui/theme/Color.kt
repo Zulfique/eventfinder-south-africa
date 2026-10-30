@@ -1,36 +1,37 @@
-﻿package com.eventfinder.app.ui.theme
+package com.eventfinder.app.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-// Original brand palette: green + yellow (amber), kept for 2026 UI.
-val BrandGreen = Color(0xFF00766B)
-val BrandGreenDark = Color(0xFF004D42)
-val BrandGreenGlow = Color(0xFF26A69A)
-val BrandAmber = Color(0xFFF5B800)
-val BrandAmberGlow = Color(0xFFFFCA28)
-val BrandNavy = Color(0xFF1B3A4B)
-val BrandNavyGlow = Color(0xFF546E7A)
-val BrandRed = Color(0xFF8B1E3F)
-val BrandRedGlow = Color(0xFFC62828)
+// Exact South African brand palette supplied for EventFinder.
+val BrandRed = Color(0xFFE03C31)
+val BrandWhite = Color(0xFFFFFFFF)
+val BrandGreen = Color(0xFF007749)
+val BrandBlue = Color(0xFF001489)
+val BrandGold = Color(0xFFFFB81C)
+val BrandBlack = Color(0xFF000000)
+
+// Compatibility names used by existing screens.
+val BrandGreenDark = Color(0xFF005638)
+val BrandGreenGlow = Color(0xFF35A879)
+val BrandAmber = BrandGold
+val BrandAmberGlow = Color(0xFFFFD166)
+val BrandNavy = BrandBlue
+val BrandNavyGlow = Color(0xFF5265C4)
+val BrandRedGlow = Color(0xFFFF746B)
 val BrandPurple = Color(0xFF5E35B1)
 val BrandPurpleGlow = Color(0xFF7E57C2)
-
-val SurfaceOffWhite = Color(0xFFF6F7F8)
-val SurfaceInk = Color(0xFF16191D)
-val SurfaceInkHigh = Color(0xFF21262D)
-val SurfaceCard = Color(0xFFFFFFFF)
-val SurfaceCardDark = Color(0xFF21262D)
-
-// Glow overlay colors (used for elevated cards / hero sections).
-val GlowGreen = Color(0x3300766B)
-val GlowAmber = Color(0x33F5B800)
+val SurfaceOffWhite = Color(0xFFF7F8FA)
+val SurfaceInk = Color(0xFF101722)
+val SurfaceInkHigh = Color(0xFF172334)
+val SurfaceCard = BrandWhite
+val SurfaceCardDark = Color(0xFF18263A)
+val GlowGreen = Color(0x33007749)
+val GlowAmber = Color(0x33FFB81C)
 val GlowPurple = Color(0x335E35B1)
-
-// Temporary aliases for the 2026 tonal palette.
 val Green = BrandGreen
 val GreenDark = BrandGreenDark
-val Amber = BrandAmber
-val Navy = BrandNavy
+val Amber = BrandGold
+val Navy = BrandBlue
 val Red = BrandRed
 val OffWhite = SurfaceOffWhite
 val Charcoal = SurfaceInk

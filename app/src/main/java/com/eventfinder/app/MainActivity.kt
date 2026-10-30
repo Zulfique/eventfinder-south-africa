@@ -8,6 +8,9 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
@@ -66,7 +69,13 @@ class MainActivity : FragmentActivity() {
 
 
         setContent {
-            EventFinderTheme {
+            val themeMode by container.preferences.themeMode.collectAsState(initial = "system")
+            val darkTheme = when (themeMode) {
+                "light" -> false
+                "dark" -> true
+                else -> isSystemInDarkTheme()
+            }
+            EventFinderTheme(darkTheme = darkTheme) {
                 EventFinderNavHost(
                     container = container,
                     deepLinkEventId = deepLinkEventId

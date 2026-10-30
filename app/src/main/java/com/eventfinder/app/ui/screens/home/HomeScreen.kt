@@ -225,7 +225,19 @@ fun HomeScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(stringResource(R.string.discover_events), fontWeight = FontWeight.SemiBold) },
+                title = {
+                    Column(verticalArrangement = Arrangement.spacedBy(0.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("Event", fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.onSurface)
+                            Text("Finder", fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.primary)
+                        }
+                        Text(
+                            "S O U T H   A F R I C A",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                },
                 actions = {
                     IconToggleButton(
                         checked = state.isMapView,
@@ -272,6 +284,7 @@ fun HomeScreen(
                     placeholder = { Text(stringResource(R.string.search_placeholder)) },
                     leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = "Search") },
                     singleLine = true,
+                    shape = androidx.compose.foundation.shape.RoundedCornerShape(28.dp),
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)
                 )
 
