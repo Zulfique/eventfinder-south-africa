@@ -75,14 +75,43 @@ class CommonsImageSearch(private val httpClient: OkHttpClient?) {
      */
     internal fun imageQueries(title: String, place: String): List<String> {
         val town = cleanPlace(place)
-        val sport = sportKeyword(title)
+        val keyword = sportKeyword(title) ?: categoryKeyword(title)
         val queries = mutableListOf<String>()
         if (town.isNotEmpty()) {
-            if (sport != null) queries += "$sport $town"
+            if (keyword != null) queries += "$keyword $town"
             queries += town
         }
-        if (sport != null) queries += "$sport South Africa"
+        if (keyword != null) queries += "$keyword South Africa"
         return queries.distinct().take(MAX_QUERIES)
+    }
+
+    /**
+     * General category keywords so tier 3 (Commons) also serves non-motorsport
+     * events — music, food, arts, sports, business and outdoors — before the
+     * pipeline falls through to the stock-photo tiers.
+     */
+    internal fun categoryKeyword(title: String): String? {
+        val upper = title.uppercase()
+        return when {
+            listOf("MUSIC", "CONCERT", "JAZZ", "GIG", "BAND", "DJ ", "CHOIR").any { upper.contains(it) } ->
+                "music concert"
+            listOf("FESTIVAL").any { upper.contains(it) } -> "festival"
+            listOf("FOOD", "WINE", "BRAAI", "CULINARY", "BEER", "TASTE").any { upper.contains(it) } ->
+                "food festival"
+            listOf("ART", "GALLERY", "EXHIBITION", "CULTURE", "MUSEUM").any { upper.contains(it) } ->
+                "art exhibition"
+            listOf("THEATRE", "THEATER", "PLAY", "BALLET", "OPERA", "DRAMA").any { upper.contains(it) } ->
+                "theatre performance"
+            listOf("COMEDY", "STAND-UP").any { upper.contains(it) } -> "comedy performance"
+            listOf("MARATHON", "RUN", "CYCLE", "RUGBY", "FOOTBALL", "CRICKET", "SPORT", "TOURNAMENT").any { upper.contains(it) } ->
+                "sport event"
+            listOf("BUSINESS", "NETWORK", "CONFERENCE", "SEMINAR", "TECH", "HACKATHON").any { upper.contains(it) } ->
+                "conference"
+            listOf("MARKET", "CRAFT", "FLEA").any { upper.contains(it) } -> "street market"
+            listOf("HIKE", "OUTDOOR", "NATURE", "TRAIL", "BEACH", "SURF").any { upper.contains(it) } ->
+                "outdoors nature"
+            else -> null
+        }
     }
 
     /** Maps a motorsport event title to the sport Commons is likely to have. */

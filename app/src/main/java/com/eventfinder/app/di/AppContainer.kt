@@ -7,8 +7,11 @@ import com.eventfinder.app.data.cloud.SyncCoordinator
 import com.eventfinder.app.data.local.AppDatabase
 import com.eventfinder.app.data.remote.ApiClient
 import com.eventfinder.app.data.remote.EventGeocoder
+import com.eventfinder.app.data.remote.CommonsImageSearch
 import com.eventfinder.app.data.remote.EventImageResolver
 import com.eventfinder.app.data.remote.PublicJsonEventClient
+import com.eventfinder.app.data.remote.StockImageSearch
+import com.eventfinder.app.BuildConfig
 import com.eventfinder.app.data.repository.AuthRepository
 import com.eventfinder.app.data.repository.AuthRepositoryImpl
 import com.eventfinder.app.data.repository.EventDiscoveryRepository
@@ -164,8 +167,22 @@ class AppContainer(context: Context) {
         ApiClient.httpClient(appContext.cacheDir)
     }
 
+    /** Tier 3: authentic, openly licensed South African imagery from Commons. */
+    private val commonsImageSearch by lazy {
+        CommonsImageSearch(httpClient)
+    }
+
+    /** Tiers 4-5: Unsplash then Pixabay stock photos (keys from BuildConfig). */
+    private val stockImageSearch by lazy {
+        StockImageSearch(
+            httpClient = httpClient,
+            unsplashAccessKey = BuildConfig.UNSPLASH_ACCESS_KEY,
+            pixabayKey = BuildConfig.PIXABAY_API_KEY
+        )
+    }
+
     private val eventImageResolver by lazy {
-        EventImageResolver(httpClient)
+        EventImageResolver(httpClient, commonsImageSearch, stockImageSearch)
     }
 
     val eventDiscoveryRepository: EventDiscoveryRepository by lazy {

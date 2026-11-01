@@ -76,6 +76,8 @@ import com.eventfinder.app.di.AppContainer
 import com.eventfinder.app.data.repository.IMAGE_REMOVED
 import com.eventfinder.app.domain.model.EventCategory
 import com.eventfinder.app.ui.components.categoryLabel
+import com.eventfinder.app.ui.components.categoryPngIcon
+import com.eventfinder.app.ui.components.InteractivePngIcon
 import com.eventfinder.app.ui.components.resolve
 import com.eventfinder.app.utils.DateTimeUtils
 import java.util.Calendar
@@ -366,6 +368,14 @@ private fun StepDetails(viewModel: CreateEventViewModel, onPickImage: () -> Unit
                 selected = state.category == category,
                 onClick = null
             )
+            Spacer(Modifier.width(4.dp))
+            InteractivePngIcon(
+                iconRes = categoryPngIcon(category),
+                contentDescription = null,
+                active = state.category == category,
+                size = 20.dp
+            )
+            Spacer(Modifier.width(10.dp))
             Text(stringResource(categoryLabel(category)))
         }
     }

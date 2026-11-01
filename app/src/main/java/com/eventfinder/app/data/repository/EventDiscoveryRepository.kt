@@ -288,18 +288,40 @@ class EventDiscoveryRepository(
     private fun mapCategory(raw: String): String {
         val value = raw.trim().lowercase()
         return when {
-            value.contains("music") || value.contains("concert") || value.contains("festival") ->
-                EventCategory.MUSIC.labelKey
+            value.contains("festival") -> EventCategory.FESTIVALS.labelKey
+            value.contains("music") -> EventCategory.MUSIC.labelKey
+            value.contains("concert") -> EventCategory.CONCERTS.labelKey
+            value.contains("nightlife") || value.contains("night club") || value.contains("club") || value.contains("rave") ->
+                EventCategory.NIGHTLIFE.labelKey
             value.contains("sport") || value.contains("football") || value.contains("rugby") || value.contains("running") ->
                 EventCategory.SPORTS.labelKey
-            value.contains("food") || value.contains("market") || value.contains("restaurant") ->
+            value.contains("market") -> EventCategory.MARKETS.labelKey
+            value.contains("food") || value.contains("restaurant") || value.contains("dinner") ->
                 EventCategory.FOOD.labelKey
-            value.contains("art") || value.contains("theatre") || value.contains("theater") || value.contains("culture") || value.contains("museum") ->
-                EventCategory.ARTS.labelKey
-            value.contains("business") || value.contains("conference") || value.contains("network") ->
-                EventCategory.BUSINESS.labelKey
-            value.contains("community") || value.contains("charity") ->
-                EventCategory.COMMUNITY.labelKey
+            value.contains("comedy") || value.contains("stand-up") || value.contains("stand up") ->
+                EventCategory.COMEDY.labelKey
+            value.contains("art") || value.contains("theatre") || value.contains("theater") || value.contains("culture") || value.contains("museum") -> EventCategory.ARTS.labelKey
+            value.contains("network") -> EventCategory.NETWORKING.labelKey
+            value.contains("business") || value.contains("conference") -> EventCategory.BUSINESS.labelKey
+            value.contains("tech") || value.contains("hackathon") || value.contains("software") ->
+                EventCategory.TECHNOLOGY.labelKey
+            value.contains("education") || value.contains("workshop") || value.contains("course") || value.contains("seminar") -> EventCategory.EDUCATION.labelKey
+            value.contains("family") || value.contains("kids") -> EventCategory.FAMILY.labelKey
+            value.contains("outdoor") || value.contains("hike") || value.contains("nature") ->
+                EventCategory.OUTDOORS.labelKey
+            value.contains("travel") || value.contains("tour") -> EventCategory.TRAVEL.labelKey
+            value.contains("charity") || value.contains("fundraiser") -> EventCategory.CHARITY.labelKey
+            value.contains("movie") || value.contains("cinema") || value.contains("film") ->
+                EventCategory.MOVIES.labelKey
+            value.contains("fashion") -> EventCategory.FASHION.labelKey
+            value.contains("cars ") || value.endsWith("car") || value.contains("motorsport") ||
+                value.contains("car show") || value.contains("auto show") ->
+                EventCategory.CARS.labelKey
+            value.contains("yoga") || value.contains("wellness") || value.contains("meditation") ->
+                EventCategory.WELLNESS.labelKey
+            value.contains("church") || value.contains("faith") || value.contains("worship") ->
+                EventCategory.RELIGION.labelKey
+            value.contains("community") -> EventCategory.COMMUNITY.labelKey
             else -> EventCategory.OTHER.labelKey
         }
     }

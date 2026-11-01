@@ -60,7 +60,11 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.collectAsState
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -81,9 +85,13 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.eventfinder.app.R
 import com.eventfinder.app.di.AppContainer
 import com.eventfinder.app.domain.model.EventSort
+import androidx.compose.foundation.Image
+import androidx.compose.ui.res.painterResource
 import com.eventfinder.app.ui.components.CategoryChips
 import com.eventfinder.app.ui.components.EmptyState
 import com.eventfinder.app.ui.components.EventCard
+import com.eventfinder.app.ui.components.FavoritePngIcon
+import com.eventfinder.app.ui.components.InteractivePngIcon
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -149,6 +157,7 @@ fun HomeScreen(
         factory = HomeViewModel.factory(container, context.applicationContext)
     )
     val state by viewModel.uiState.collectAsState()
+    val themeMode by container.preferences.themeMode.collectAsState(initial = "system")
     val snackbarHostState = remember { SnackbarHostState() }
 
     var userLocation by rememberSaveable { mutableStateOf<Location?>(null) }
@@ -271,20 +280,12 @@ fun HomeScreen(
                         )
                     }                },
                 actions = {
-                    IconToggleButton(
-                        checked = state.isMapView,
-                        onCheckedChange = { viewModel.onToggleMapView() }
-                    ) {
-                        Icon(
-                            if (state.isMapView) Icons.AutoMirrored.Outlined.List else Icons.Outlined.Map,
-                            contentDescription = stringResource(
-                                if (state.isMapView) R.string.list_view else R.string.map_view
-                            )
-                        )
-                    }
-                    IconButton(onClick = { viewModel.onShowFilterSheet(true) }) {
-                        Icon(Icons.Outlined.FilterList, contentDescription = stringResource(R.string.filter))
-                    }
+                    ThemeModeToggle(
+                        themeMode = themeMode,
+                        onSelect = { mode ->
+                            scope.launch { container.preferences.setThemeMode(mode) }
+                        }
+                    )
                 }
             )
         },
@@ -301,6 +302,13 @@ fun HomeScreen(
                         )
                     }
                 }
+
+                LocationSelectorPill(
+                    label = state.cityLabel,
+                    onCitySelected = viewModel::selectCity,
+                    onUseGps = viewModel::useCurrentLocation,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
+                )
                 if (state.lastRefreshAt > 0L) {
                     Text(
                         "Last updated ${((System.currentTimeMillis() - state.lastRefreshAt) / 60000)} min ago",
@@ -317,9 +325,10 @@ fun HomeScreen(
                         Text("What are you in the mood for?")
                     },
                     leadingIcon = {
-                        Icon(
-                            Icons.Outlined.Search,
-                            contentDescription = "Search events"
+                        Image(
+                            painter = painterResource(R.drawable.evt_search),
+                            contentDescription = "Search events",
+                            modifier = Modifier.size(22.dp)
                         )
                     },
                     singleLine = true,
@@ -582,6 +591,113 @@ private fun ColumnScope.EventList(
     }
 }
 
+/**
+ * Header theme switch: full-colour sun and moon PNGs in a pill.
+ * Tapping a half switches light/dark mode; the active half scales up and brightens.
+ */
+@Composable
+private fun ThemeModeToggle(
+    themeMode: String,
+    onSelect: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val systemDark = isSystemInDarkTheme()
+    val darkActive = when (themeMode) {
+        "dark" -> true
+        "light" -> false
+        else -> systemDark
+    }
+    Row(
+        modifier = modifier
+            .clip(RoundedCornerShape(50))
+            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .padding(horizontal = 5.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        InteractivePngIcon(
+            iconRes = R.drawable.hdr_sun,
+            contentDescription = "Light mode",
+            active = !darkActive,
+            dimWhenInactive = true,
+            size = 22.dp,
+            onToggle = { onSelect("light") }
+        )
+        Spacer(Modifier.width(4.dp))
+        InteractivePngIcon(
+            iconRes = R.drawable.hdr_moon,
+            contentDescription = "Dark mode",
+            active = darkActive,
+            dimWhenInactive = true,
+            size = 22.dp,
+            onToggle = { onSelect("dark") }
+        )
+    }
+}
+
+/** Header location selector: full-colour pin + chevron opening the SA city list. */
+@Composable
+private fun LocationSelectorPill(
+    label: String,
+    onCitySelected: (String) -> Unit,
+    onUseGps: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var expanded by remember { mutableStateOf(false) }
+    Box(modifier = modifier) {
+        Row(
+            modifier = Modifier
+                .clip(RoundedCornerShape(50))
+                .background(MaterialTheme.colorScheme.surfaceVariant)
+                .clickable { expanded = true }
+                .padding(horizontal = 14.dp, vertical = 9.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Image(
+                painter = painterResource(R.drawable.hdr_map_pin),
+                contentDescription = "Location: $label",
+                modifier = Modifier.size(18.dp)
+            )
+            Spacer(Modifier.width(6.dp))
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Spacer(Modifier.width(5.dp))
+            Image(
+                painter = painterResource(R.drawable.hdr_chevron_down),
+                contentDescription = null,
+                modifier = Modifier.size(16.dp)
+            )
+        }
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false }
+        ) {
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.location_use_gps)) },
+                onClick = {
+                    expanded = false
+                    onUseGps()
+                }
+            )
+            HorizontalDivider()
+            SouthAfricanPlaces.all
+                .filter { it.name != "Cape Town CBD" && it.name != "Nelspruit" }
+                .forEach { place ->
+                    DropdownMenuItem(
+                        text = { Text("${place.name}, ZA") },
+                        onClick = {
+                            expanded = false
+                            onCitySelected(place.name)
+                        }
+                    )
+                }
+        }
+    }
+}
+
 @Composable
 private fun FeaturedEventCard(
     view: EventView,
@@ -651,22 +767,11 @@ private fun FeaturedEventCard(
                         RoundedCornerShape(50)
                     )
             ) {
-                Icon(
-                    imageVector = if (view.isFavorite) {
-                        Icons.Filled.Favorite
-                    } else {
-                        Icons.Outlined.FavoriteBorder
-                    },
-                    contentDescription = if (view.isFavorite) {
-                        "Remove from favourites"
-                    } else {
-                        "Add to favourites"
-                    },
-                    tint = if (view.isFavorite) {
-                        Color(0xFFFF6B6B)
-                    } else {
-                        Color.White
-                    }
+                FavoritePngIcon(
+                    isFavorite = view.isFavorite,
+                    onToggle = onFavoriteToggle,
+                    size = 26.dp,
+                    outlineRes = R.drawable.heart_outline_white
                 )
             }
 

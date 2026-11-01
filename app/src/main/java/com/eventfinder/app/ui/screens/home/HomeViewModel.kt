@@ -45,7 +45,8 @@ data class HomeUiState(
     val userLat: Double? = null,
     val userLng: Double? = null,
     val isMapView: Boolean = false,
-    val showFilterSheet: Boolean = false
+    val showFilterSheet: Boolean = false,
+    val cityLabel: String = "South Africa"
 )
 
 /**
@@ -78,6 +79,9 @@ class HomeViewModel(
     private val radiusEnabledFlow = MutableStateFlow(false)
     private val locationFlow = MutableStateFlow<Pair<Double, Double>?>(null)
 
+    /** True while an explicit city from the header selector overrides the GPS fix. */
+    private var manualCityActive = false
+
     private data class Combined(
         val events: List<Event>,
         val rsvps: Map<String, RsvpStatus>,
@@ -96,6 +100,14 @@ class HomeViewModel(
     init {
         viewModelScope.launch {
             preferences.defaultRadiusKm.first().let { radiusFlow.value = it }
+        }
+
+        // Restore the header location selector's saved city.
+        viewModelScope.launch {
+            preferences.selectedCity.first()?.let { city ->
+                manualCityActive = true
+                _uiState.update { it.copy(cityLabel = "$city, ZA") }
+            }
         }
 
         // Seed demo events, then attempt to discover public JSON feeds when online.
@@ -238,6 +250,7 @@ class HomeViewModel(
     }
 
     fun setUserLocation(lat: Double, lng: Double) {
+        if (manualCityActive) return
         locationFlow.value = lat to lng
         _uiState.value = _uiState.value.copy(
             userLat = lat,
@@ -248,6 +261,39 @@ class HomeViewModel(
 
     fun manualLocation() {
         LocationUtils.lastKnown(appContext)?.let { (lat, lng) -> setUserLocation(lat, lng) }
+    }
+
+    /** Header location selector: show events around [cityName] instead of the device fix. */
+    fun selectCity(cityName: String) {
+        viewModelScope.launch {
+            preferences.setSelectedCity(cityName)
+            manualCityActive = true
+            _uiState.update { it.copy(cityLabel = "$cityName, ZA") }
+
+            val place = runCatching { container.placeResolver.resolveCity(cityName) }.getOrNull()
+            if (place != null) {
+                locationFlow.value = place.latitude to place.longitude
+                _uiState.update {
+                    it.copy(userLat = place.latitude, userLng = place.longitude)
+                }
+                AppLogger.i("HomeViewModel", "Location selector -> $cityName (${place.latitude}, ${place.longitude})")
+            } else {
+                _messages.emit(UiMessage.Literal("Could not locate $cityName — check your connection"))
+            }
+        }
+    }
+
+    /** Header location selector: hand control back to the device's GPS fix. */
+    fun useCurrentLocation() {
+        viewModelScope.launch {
+            preferences.setSelectedCity(null)
+            manualCityActive = false
+            _uiState.update { it.copy(cityLabel = "South Africa") }
+            LocationUtils.lastKnown(appContext)?.let { (lat, lng) ->
+                locationFlow.value = lat to lng
+                _uiState.update { it.copy(userLat = lat, userLng = lng) }
+            }
+        }
     }
 
     fun toggleFavorite(eventId: String) {

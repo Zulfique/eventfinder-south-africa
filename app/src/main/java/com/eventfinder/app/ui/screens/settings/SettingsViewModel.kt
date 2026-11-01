@@ -36,7 +36,11 @@ data class SettingsUiState(
     val wheelchairNeeded: Boolean = false,
     val lowSensoryNeeded: Boolean = false,
     val reducedMotion: Boolean = false,
-    val highContrast: Boolean = false
+    val highContrast: Boolean = false,
+    val loudNoiseNeeded: Boolean = false,
+    val noMusicNeeded: Boolean = false,
+    val notificationConsent: Boolean = true,
+    val dynamicColor: Boolean = false
 )
 
 /**
@@ -56,15 +60,17 @@ class SettingsViewModel(
 
     val consentFlow = kotlinx.coroutines.flow.combine(
         preferences.analyticsConsent,
-        preferences.locationConsent
-    ) { analytics, location -> Pair(analytics, location) }
+        preferences.locationConsent,
+        preferences.notificationConsent
+    ) { analytics, location, notifications -> listOf(analytics, location, notifications) }
 
     val a11yFlow = kotlinx.coroutines.flow.combine(
         preferences.wheelchairNeeded,
         preferences.lowSensoryNeeded,
         preferences.reducedMotion,
-        preferences.highContrast
-    ) { w, l, r, h -> listOf(w, l, r, h) }
+        preferences.highContrast,
+        preferences.loudNoiseNeeded
+    ) { w, l, r, h, loud -> listOf(w, l, r, h, loud) }
 
     val uiState = kotlinx.coroutines.flow.combine(
         kotlinx.coroutines.flow.combine(
@@ -78,8 +84,12 @@ class SettingsViewModel(
         preferences.defaultCity,
         preferences.defaultRadiusKm,
         consentFlow,
-        a11yFlow
-    ) { base, city, radius, consent, a11y ->
+        kotlinx.coroutines.flow.combine(
+            a11yFlow,
+            preferences.noMusicNeeded,
+            preferences.dynamicColorEnabled
+        ) { a11y, noMusic, dynamic -> listOf(a11y, noMusic, dynamic) }
+    ) { base, city, radius, consent, extra ->
         @Suppress("UNCHECKED_CAST")
         SettingsUiState(
             language = base[0] as SupportedLanguage,
@@ -88,12 +98,16 @@ class SettingsViewModel(
             newEventsAlerts = base[3] as Boolean,
             defaultCity = city,
             defaultRadiusKm = radius,
-            analyticsConsent = consent.first,
-            locationConsent = consent.second,
-            wheelchairNeeded = a11y[0] as Boolean,
-            lowSensoryNeeded = a11y[1] as Boolean,
-            reducedMotion = a11y[2] as Boolean,
-            highContrast = a11y[3] as Boolean
+            analyticsConsent = consent[0] as Boolean,
+            locationConsent = consent[1] as Boolean,
+            notificationConsent = consent[2] as Boolean,
+            wheelchairNeeded = (extra[0] as List<Boolean>)[0],
+            lowSensoryNeeded = (extra[0] as List<Boolean>)[1],
+            reducedMotion = (extra[0] as List<Boolean>)[2],
+            highContrast = (extra[0] as List<Boolean>)[3],
+            loudNoiseNeeded = (extra[0] as List<Boolean>)[4],
+            noMusicNeeded = extra[1] as Boolean,
+            dynamicColor = extra[2] as Boolean
         )
     }.stateIn(
         scope = viewModelScope,
@@ -153,6 +167,22 @@ class SettingsViewModel(
 
     fun setHighContrast(enabled: Boolean) {
         viewModelScope.launch { preferences.setHighContrast(enabled) }
+    }
+
+    fun setLoudNoiseNeeded(enabled: Boolean) {
+        viewModelScope.launch { preferences.setLoudNoiseNeeded(enabled) }
+    }
+
+    fun setNoMusicNeeded(enabled: Boolean) {
+        viewModelScope.launch { preferences.setNoMusicNeeded(enabled) }
+    }
+
+    fun setNotificationConsent(enabled: Boolean) {
+        viewModelScope.launch { preferences.setNotificationConsent(enabled) }
+    }
+
+    fun setDynamicColor(enabled: Boolean) {
+        viewModelScope.launch { preferences.setDynamicColorEnabled(enabled) }
     }
 
     private val _exportPath = kotlinx.coroutines.flow.MutableSharedFlow<String>()
@@ -229,6 +259,23 @@ class SettingsViewModel(
                     UiMessage.Resource(R.string.cache_cleared)
                 }
             )
+        }
+    }
+
+    /**
+     * Admin "Repair local data" action: rebuilds the local event cache by
+     * reseeding the curated demo catalogue (idempotent — only missing rows are
+     * restored) so a corrupted or partial Room cache recovers without a wipe.
+     */
+    fun repairLocalData() {
+        viewModelScope.launch {
+            runCatching { eventRepository.ensureSeeded() }
+                .onSuccess {
+                    _messages.emit(UiMessage.Resource(R.string.local_data_repaired))
+                }
+                .onFailure {
+                    _messages.emit(UiMessage.Resource(R.string.local_data_repair_failed))
+                }
         }
     }
 

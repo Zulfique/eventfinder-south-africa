@@ -25,4 +25,13 @@ interface TicketDao {
 
     @Query("SELECT * FROM tickets WHERE eventId = :eventId")
     suspend fun getAllTicketsForEvent(eventId: String): List<TicketEntity>
+
+    @Query("SELECT * FROM tickets WHERE eventId = :eventId AND userId = :userId LIMIT 1")
+    suspend fun findForUser(eventId: String, userId: String): TicketEntity?
+
+    @Query("SELECT * FROM tickets WHERE userId = :userId ORDER BY issuedAt DESC")
+    suspend fun getAllForUser(userId: String): List<TicketEntity>
+
+    @Query("SELECT * FROM tickets WHERE userId = :userId ORDER BY issuedAt DESC")
+    fun observeForUser(userId: String): Flow<List<TicketEntity>>
 }

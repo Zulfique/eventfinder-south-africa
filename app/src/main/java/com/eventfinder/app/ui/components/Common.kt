@@ -1,6 +1,9 @@
 ﻿package com.eventfinder.app.ui.components
 
+import androidx.annotation.DrawableRes
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -33,6 +36,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -109,11 +113,11 @@ fun EmptyState(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        Icon(
-            imageVector = icon,
+        // Brand-coloured illustration instead of a bare glyph (FR-04).
+        Image(
+            painter = painterResource(R.drawable.img_empty_state),
             contentDescription = null,
-            modifier = Modifier.size(56.dp),
-            tint = MaterialTheme.colorScheme.onSurfaceVariant
+            modifier = Modifier.size(140.dp)
         )
         Spacer(Modifier.height(12.dp))
         Text(
@@ -133,6 +137,58 @@ fun EmptyState(
     }
 }
 
+/**
+ * Interactive category chip: a full-colour PNG icon that springs when tapped and
+ * a chip container that flips to brand green with a white label while selected.
+ */
+@Composable
+fun PngCategoryChip(
+    selected: Boolean,
+    onClick: () -> Unit,
+    label: String,
+    @DrawableRes iconRes: Int,
+    modifier: Modifier = Modifier
+) {
+    val container by androidx.compose.animation.animateColorAsState(
+        targetValue = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
+        label = "chipContainer"
+    )
+    val borderColor by androidx.compose.animation.animateColorAsState(
+        targetValue = if (selected) MaterialTheme.colorScheme.primary
+        else MaterialTheme.colorScheme.outlineVariant,
+        label = "chipBorder"
+    )
+
+    Row(
+        modifier = modifier
+            .clip(RoundedCornerShape(12.dp))
+            .background(container)
+            .border(
+                width = 1.dp,
+                color = borderColor,
+                shape = RoundedCornerShape(12.dp)
+            )
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 9.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        InteractivePngIcon(
+            iconRes,
+            contentDescription = null,
+            active = selected,
+            size = 18.dp
+        )
+        Spacer(Modifier.width(6.dp))
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+            color = if (selected) MaterialTheme.colorScheme.onPrimary
+            else MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
 /** Horizontal scrolling category chips (Screen 4 of the design). */
 @Composable
 fun CategoryChips(
@@ -146,18 +202,19 @@ fun CategoryChips(
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         item {
-            FilterChip(
+            PngCategoryChip(
                 selected = selected == null,
                 onClick = { onSelect(null) },
-                label = { Text(stringResource(R.string.all_categories)) },
-                leadingIcon = { Icon(Icons.Outlined.Category, contentDescription = null) }
+                label = stringResource(R.string.all_categories),
+                iconRes = R.drawable.cat_all
             )
         }
         items(EventCategory.entries.filter { it != EventCategory.OTHER }) { category ->
-            FilterChip(
+            PngCategoryChip(
                 selected = selected == category,
                 onClick = { onSelect(if (selected == category) null else category) },
-                label = { Text(stringResource(categoryLabel(category))) }
+                label = stringResource(categoryLabel(category)),
+                iconRes = categoryPngIcon(category)
             )
         }
     }
@@ -166,11 +223,29 @@ fun CategoryChips(
 /** Maps a category to its localized label resource. */
 fun categoryLabel(category: EventCategory): Int = when (category) {
     EventCategory.MUSIC -> R.string.cat_music
-    EventCategory.SPORTS -> R.string.cat_sports
+    EventCategory.CONCERTS -> R.string.cat_concerts
+    EventCategory.FESTIVALS -> R.string.cat_festivals
+    EventCategory.NIGHTLIFE -> R.string.cat_nightlife
     EventCategory.FOOD -> R.string.cat_food
+    EventCategory.SPORTS -> R.string.cat_sports
     EventCategory.ARTS -> R.string.cat_arts
-    EventCategory.COMMUNITY -> R.string.cat_community
+    EventCategory.COMEDY -> R.string.cat_comedy
     EventCategory.BUSINESS -> R.string.cat_business
+    EventCategory.NETWORKING -> R.string.cat_networking
+    EventCategory.TECHNOLOGY -> R.string.cat_technology
+    EventCategory.EDUCATION -> R.string.cat_education
+    EventCategory.FAMILY -> R.string.cat_family
+    EventCategory.MARKETS -> R.string.cat_markets
+    EventCategory.OUTDOORS -> R.string.cat_outdoors
+    EventCategory.TRAVEL -> R.string.cat_travel
+    EventCategory.CHARITY -> R.string.cat_charity
+    EventCategory.THEATRE -> R.string.cat_theatre
+    EventCategory.MOVIES -> R.string.cat_movies
+    EventCategory.FASHION -> R.string.cat_fashion
+    EventCategory.CARS -> R.string.cat_cars
+    EventCategory.WELLNESS -> R.string.cat_wellness
+    EventCategory.RELIGION -> R.string.cat_religion
+    EventCategory.COMMUNITY -> R.string.cat_community
     EventCategory.OTHER -> R.string.all_categories
 }
 
@@ -241,11 +316,10 @@ fun EventCard(
                 Row(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(
-                        Icons.Outlined.CalendarMonth,
+                    Image(
+                        painter = painterResource(R.drawable.evt_calendar),
                         contentDescription = null,
-                        modifier = Modifier.size(15.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        modifier = Modifier.size(15.dp)
                     )
 
                     Spacer(Modifier.width(5.dp))
@@ -263,11 +337,10 @@ fun EventCard(
                 Row(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(
-                        Icons.Outlined.LocationOn,
+                    Image(
+                        painter = painterResource(R.drawable.evt_venue),
                         contentDescription = null,
-                        modifier = Modifier.size(15.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        modifier = Modifier.size(15.dp)
                     )
 
                     Spacer(Modifier.width(5.dp))
@@ -283,29 +356,18 @@ fun EventCard(
             }
 
             if (onFavoriteToggle != null) {
-                IconButton(
-                    onClick = {
-                        haptic.performHapticFeedback(
-                            HapticFeedbackType.TextHandleMove
-                        )
-                        onFavoriteToggle()
-                    }
+                Box(
+                    modifier = Modifier.size(44.dp),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Icon(
-                        imageVector = if (view.isFavorite) {
-                            Icons.Filled.Favorite
-                        } else {
-                            Icons.Outlined.FavoriteBorder
-                        },
-                        contentDescription = if (view.isFavorite) {
-                            "Remove from favourites"
-                        } else {
-                            "Add to favourites"
-                        },
-                        tint = if (view.isFavorite) {
-                            MaterialTheme.colorScheme.error
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant
+                    FavoritePngIcon(
+                        isFavorite = view.isFavorite,
+                        size = 26.dp,
+                        onToggle = {
+                            haptic.performHapticFeedback(
+                                HapticFeedbackType.TextHandleMove
+                            )
+                            onFavoriteToggle()
                         }
                     )
                 }

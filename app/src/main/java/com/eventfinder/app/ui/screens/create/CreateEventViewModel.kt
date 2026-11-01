@@ -22,6 +22,7 @@ import com.eventfinder.app.utils.ImageStorage
 import com.eventfinder.app.utils.PlaceResolver
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
@@ -108,7 +109,9 @@ class CreateEventViewModel(
     private val authRepository: AuthRepository,
     private val eventId: String? = null,
     private val imageUploader: AzureImageUploader? = null,
-    private val placeResolver: PlaceResolver? = null
+    private val placeResolver: PlaceResolver? = null,
+    private val draftDao: com.eventfinder.app.data.local.DraftDao? = null,
+    private val userIdProvider: suspend () -> String? = { null }
 ) : ViewModel() {
 
     /** True when the wizard is editing an existing user-created event. */
@@ -127,6 +130,94 @@ class CreateEventViewModel(
     init {
         if (eventId != null) {
             viewModelScope.launch { loadEvent(eventId) }
+        } else {
+            // Create mode: crash/lifecycle recovery — restore the last autosaved
+            // draft, then keep it refreshed while the user fills the wizard in.
+            viewModelScope.launch { restoreDraft() }
+            viewModelScope.launch { autosaveDrafts() }
+        }
+    }
+
+    /** Stable id of the autosaved draft row (kept across restores). */
+    private var draftId: String = java.util.UUID.randomUUID().toString()
+
+    /**
+     * Draft restoration (FR-10): pre-fills the wizard from the latest draft
+     * saved for the signed-in/guest user so an interrupted session resumes.
+     */
+    private suspend fun restoreDraft() {
+        val dao = draftDao ?: return
+        val userId = userIdProvider() ?: return
+        val latest = runCatching { dao.forUser(userId).firstOrNull() }.getOrNull() ?: return
+        if (latest.title.isBlank() && latest.description.isBlank()) return
+        draftId = latest.id
+        _uiState.update {
+            it.copy(
+                title = latest.title,
+                description = latest.description,
+                category = runCatching { EventCategory.valueOf(latest.category) }
+                    .getOrDefault(EventCategory.COMMUNITY),
+                dateMillis = latest.startDate,
+                venueName = latest.venueName,
+                address = latest.address,
+                latitude = latest.latitude?.toString() ?: "",
+                longitude = latest.longitude?.toString() ?: "",
+                imageUrl = latest.imageUrl
+            )
+        }
+        _messages.tryEmit(UiMessage.Resource(R.string.draft_restored))
+    }
+
+    /**
+     * Debounced autosave: a MutableStateFlow conflates bursts, so the short
+     * delay below turns rapid typing into a single Room upsert.
+     */
+    private suspend fun autosaveDrafts() {
+        var lastSaved = ""
+        uiState.collect { state ->
+            kotlinx.coroutines.delay(750)
+            val snapshot = listOf(
+                state.title, state.description, state.venueName,
+                state.address, state.latitude, state.longitude,
+                state.dateMillis.toString(), state.category.name,
+                state.imageUrl ?: ""
+            ).joinToString("\u0001")
+            if (snapshot == lastSaved) return@collect
+            val dao = draftDao ?: return@collect
+            val userId = userIdProvider() ?: return@collect
+            if (state.title.isBlank() && state.description.isBlank()) return@collect
+            runCatching {
+                dao.upsert(
+                    com.eventfinder.app.data.local.DraftEntity(
+                        id = draftId,
+                        userId = userId,
+                        title = state.title,
+                        description = state.description,
+                        category = state.category.name,
+                        venueName = state.venueName,
+                        address = state.address,
+                        latitude = state.latitude.toDoubleOrNull(),
+                        longitude = state.longitude.toDoubleOrNull(),
+                        imageUrl = state.imageUrl,
+                        startDate = state.dateMillis,
+                        endDate = state.dateMillis + TimeUnit.HOURS.toMillis(2),
+                        savedAt = System.currentTimeMillis()
+                    )
+                )
+                lastSaved = snapshot
+            }
+        }
+    }
+
+    /** Discards the autosaved draft and starts the form fresh. */
+    fun discardDraft() {
+        viewModelScope.launch {
+            val dao = draftDao
+            val userId = userIdProvider()
+            if (dao != null && userId != null) {
+                runCatching { dao.delete(draftId) }
+            }
+            reset()
         }
     }
 
@@ -305,6 +396,8 @@ class CreateEventViewModel(
                     _completed.emit(Unit)
                 } else {
                     AppLogger.i("CreateEventViewModel", "Published event: ${result.getOrNull()}")
+                    // The wizard succeeded — its autosaved draft is now stale.
+                    runCatching { draftDao?.delete(draftId) }
                     _messages.emit(UiMessage.Resource(R.string.event_published))
                     reset()
                 }
@@ -333,7 +426,9 @@ class CreateEventViewModel(
                     container.authRepository,
                     eventId,
                     container.imageUploader,
-                    container.placeResolver
+                    container.placeResolver,
+                    draftDao = container.database.draftDao(),
+                    userIdProvider = { container.preferences.sessionUserId.first() }
                 )
             }
         }

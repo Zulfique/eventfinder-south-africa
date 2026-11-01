@@ -5,25 +5,86 @@ import com.eventfinder.app.data.remote.model.RemoteEvent
 import okhttp3.OkHttpClient
 import okhttp3.Request
 
-class EventImageResolver(private val client: OkHttpClient) {
+/**
+ * Resolves an event's cover image through the app's priority pipeline:
+ *
+ *  1. Event organizer's own cover — [RemoteEvent.imageUrl] already set, so the
+ *     resolver returns immediately (accurate event branding).
+ *  2. Original event website `og:image` (and twitter:image) scraped from the
+ *     event page ([EventImageResolver.extractImage]).
+ *  3. Wikimedia Commons — authentic South African location imagery via
+ *     [CommonsImageSearch] (keyless, openly licensed).
+ *  4. Unsplash — high-quality event photography via [StockImageSearch].
+ *  5. Pixabay — category-specific fallback photos via [StockImageSearch].
+ *
+ * Tiers 3–5 only run when every better option failed, and any failure leaves
+ * the event untouched so the UI's branded placeholder art still shows.
+ */
+class EventImageResolver(
+    private val client: OkHttpClient,
+    private val commons: CommonsImageSearch? = null,
+    private val stock: StockImageSearch? = null
+) {
+
     suspend fun resolve(event: RemoteEvent): RemoteEvent {
+        // 1. The organiser's own cover wins outright.
         if (!event.imageUrl.isNullOrBlank()) return event
+
+        // 2. The event page's og:image.
         val sourceUrl = event.sourceUrl?.trim().orEmpty()
-        if (sourceUrl.isBlank()) return event
-
-        return try {
-            val html = client.newCall(
-                Request.Builder().url(sourceUrl).get().build()
-            ).execute().use { response ->
-                if (!response.isSuccessful) return@resolve event
-                response.body?.string() ?: return@resolve event
+        var resolved: String? = null
+        if (sourceUrl.isNotBlank()) {
+            resolved = try {
+                val html = client.newCall(
+                    Request.Builder().url(sourceUrl).get().build()
+                ).execute().use { response ->
+                    if (!response.isSuccessful) return@use null
+                    response.body?.string()
+                }
+                html?.let { extractImage(it, sourceUrl) }
+            } catch (_: Exception) {
+                null
             }
-
-            val resolved = extractImage(html, sourceUrl)
-            if (resolved == null) event else event.copy(imageUrl = resolved)
-        } catch (_: Exception) {
-            event
         }
+
+        // 3. Wikimedia Commons — authentic South African imagery.
+        if (resolved == null) {
+            resolved = runCatching {
+                commons?.findImage(event.title, commonsPlace(event))?.url
+            }.getOrNull()
+        }
+
+        // 4-5. Unsplash, then Pixabay stock photography.
+        if (resolved == null) {
+            resolved = runCatching {
+                stock?.findImage(stockQuery(event))?.url
+            }.getOrNull()
+        }
+
+        return if (resolved == null) event else event.copy(imageUrl = resolved)
+    }
+
+    /** Venue/address mash-up Commons can search with ("Green Point, Cape Town"). */
+    private fun commonsPlace(event: RemoteEvent): String {
+        val venue = event.venueName.trim()
+        val address = event.address.trim()
+        return listOf(address, venue).filter { it.isNotBlank() }
+            .joinToString(", ")
+            .ifBlank { "South Africa" }
+    }
+
+    /** "<category> event <city> south africa" — readable by both stock APIs. */
+    private fun stockQuery(event: RemoteEvent): String {
+        val city = event.address.split(',')
+            .map { it.trim() }
+            .lastOrNull { it.isNotBlank() && !it.equals("South Africa", ignoreCase = true) }
+            ?: "South Africa"
+        val category = event.category.trim()
+            .replace('_', ' ')
+            .replace('-', ' ')
+        return listOf(category, "event", city)
+            .filter { it.isNotBlank() }
+            .joinToString(" ")
     }
 
     internal fun extractImage(html: String, baseUrl: String? = null): String? {

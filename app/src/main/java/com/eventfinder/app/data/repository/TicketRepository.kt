@@ -10,6 +10,8 @@ interface TicketRepository {
     suspend fun issueTicket(eventId: String, userId: String): EventTicket
     suspend fun getTicketForUser(eventId: String, userId: String): EventTicket?
     fun observeTicketsForEvent(eventId: String): Flow<List<EventTicket>>
+    fun observeTicketsForUser(userId: String): Flow<List<EventTicket>>
+    suspend fun getAllTicketsForUser(userId: String): List<EventTicket>
     suspend fun verifyAndCheckIn(ticketCode: String): Result<EventTicket>
     suspend fun getAllTicketsForEvent(eventId: String): List<EventTicket>
 }
@@ -36,11 +38,14 @@ class TicketRepositoryImpl(
         return ticket
     }
 
-    override suspend fun getTicketForUser(eventId: String, userId: String): EventTicket? {
-        // For simplicity, searching by code is faster, but here we need to find the ticket linked to user/event
-        // We might need a better query in Dao, but for now we'll filter in memory or add a query.
-        return null // Placeholder: should call a new Dao method
-    }
+    override suspend fun getTicketForUser(eventId: String, userId: String): EventTicket? =
+        ticketDao.findForUser(eventId, userId)?.toDomain()
+
+    override fun observeTicketsForUser(userId: String): Flow<List<EventTicket>> =
+        ticketDao.observeForUser(userId).map { entities -> entities.map { it.toDomain() } }
+
+    override suspend fun getAllTicketsForUser(userId: String): List<EventTicket> =
+        ticketDao.getAllForUser(userId).map { it.toDomain() }
 
     override fun observeTicketsForEvent(eventId: String): Flow<List<EventTicket>> {
         return ticketDao.getTicketsForEvent(eventId).map { entities ->

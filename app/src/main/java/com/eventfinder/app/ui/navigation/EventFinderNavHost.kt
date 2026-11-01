@@ -60,6 +60,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.eventfinder.app.R
 import com.eventfinder.app.di.AppContainer
+import com.eventfinder.app.ui.components.CreatePngButton
 import kotlinx.coroutines.flow.MutableStateFlow
 import com.eventfinder.app.ui.screens.auth.LoginScreen
 import com.eventfinder.app.ui.screens.auth.RegisterScreen
@@ -323,20 +324,11 @@ private fun EventFinderBottomBar(
                     verticalArrangement = Arrangement.Center
                 ) {
                     if (isCreate) {
-                        Box(
-                            modifier = Modifier
-                                .size(48.dp)
-                                .clip(CircleShape)
-                                .background(MaterialTheme.colorScheme.primary),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = destination.selectedIcon,
-                                contentDescription = stringResource(destination.labelRes),
-                                tint = MaterialTheme.colorScheme.onPrimary,
-                                modifier = Modifier.size(27.dp)
-                            )
-                        }
+                        CreatePngButton(
+                            contentDescription = stringResource(destination.labelRes),
+                            selected = selected,
+                            onClick = { if (!selected) onNavigate(destination.route) }
+                        )
                     } else {
                         Box(
                             modifier = Modifier
@@ -371,7 +363,7 @@ private fun EventFinderBottomBar(
                     Spacer(Modifier.height(3.dp))
 
                     Text(
-                        text = stringResource(destination.labelRes),
+                        text = stringResource(if (isCreate) R.string.create_short else destination.labelRes),
                         maxLines = 1,
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = if (selected || isCreate) {
@@ -380,7 +372,7 @@ private fun EventFinderBottomBar(
                             FontWeight.Medium
                         },
                         color = when {
-                            isCreate -> MaterialTheme.colorScheme.primary
+                            isCreate -> MaterialTheme.colorScheme.onSurface
                             selected -> MaterialTheme.colorScheme.primary
                             else -> MaterialTheme.colorScheme.onSurfaceVariant
                         }

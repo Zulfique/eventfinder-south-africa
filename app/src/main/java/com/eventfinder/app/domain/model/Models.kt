@@ -84,7 +84,9 @@ data class EventReview(
     val rating: Int,
     val comment: String,
     val createdAt: Long,
-    val verifiedAttendance: Boolean = false
+    val verifiedAttendance: Boolean = false,
+    /** Optional photo URLs attached to the review. */
+    val photoUrls: List<String> = emptyList()
 )
 
 /** A coordinated group plan for attending a specific event. */

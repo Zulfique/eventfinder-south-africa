@@ -56,6 +56,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.eventfinder.app.R
 import com.eventfinder.app.di.AppContainer
 import com.eventfinder.app.ui.components.EventCard
+import com.eventfinder.app.ui.components.InteractivePngIcon
 
 /**
  * Screen 4 (Profile): account header, stats, My Events / Attending and
@@ -82,10 +83,18 @@ fun ProfileScreen(
                 title = { Text(stringResource(R.string.profile_title)) },
                 actions = {
                     IconButton(onClick = onEditProfile) {
-                        Icon(Icons.Outlined.Edit, contentDescription = stringResource(R.string.edit_profile))
+                        InteractivePngIcon(
+                            iconRes = R.drawable.usr_edit,
+                            contentDescription = stringResource(R.string.edit_profile),
+                            size = 24.dp
+                        )
                     }
                     IconButton(onClick = onSettings) {
-                        Icon(Icons.Outlined.Settings, contentDescription = stringResource(R.string.settings))
+                        InteractivePngIcon(
+                            iconRes = R.drawable.usr_settings,
+                            contentDescription = stringResource(R.string.settings),
+                            size = 24.dp
+                        )
                     }
                 }
             )

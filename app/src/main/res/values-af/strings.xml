@@ -75,6 +75,24 @@
     <string name="cat_community">Gemeenskap</string>
     <string name="cat_arts">Kuns</string>
     <string name="cat_business">Besigheid</string>
+    <string name="cat_concerts">Konserte</string>
+    <string name="cat_festivals">Festiwale</string>
+    <string name="cat_nightlife">Nagtlewe</string>
+    <string name="cat_comedy">Komedi</string>
+    <string name="cat_networking">Netwerkbou</string>
+    <string name="cat_technology">Tegnologie</string>
+    <string name="cat_education">Onderwys</string>
+    <string name="cat_family">Familie</string>
+    <string name="cat_markets">Markte</string>
+    <string name="cat_outdoors">Buitelug</string>
+    <string name="cat_travel">Reis</string>
+    <string name="cat_charity">Welsyn</string>
+    <string name="cat_theatre">Teater</string>
+    <string name="cat_movies">Flieks</string>
+    <string name="cat_fashion">Mode</string>
+    <string name="cat_cars">Motors</string>
+    <string name="cat_wellness">Welstand</string>
+    <string name="cat_religion">Godsdiens</string>
     <string name="map_view">Kaart</string>
     <string name="list_view">Lys</string>
     <string name="no_events">Geen gebeurtenisse gevind nie</string>
@@ -132,6 +150,12 @@
 
     <!-- Create event -->
     <string name="create_event_title">Skep Gebeurtenis</string>
+  <string name="create_short">Skep</string>
+  <string name="location_use_gps">Gebruik my ligging</string>
+  <string name="repair_local_data">Herstel plaaslike data</string>
+  <string name="repair_local_data_hint">Herstel ontbrekende plaaslike gebeurtenisdata</string>
+  <string name="local_data_repaired">Plaaslike data herstel</string>
+  <string name="local_data_repair_failed">Kon plaaslike data nie herstel nie</string>
     <string name="step_x_of_y">Stap %1$d van %2$d</string>
     <string name="event_title">Gebeurtenistitel</string>
     <string name="event_description">Beskrywing</string>
@@ -290,7 +314,10 @@
   <string name="default_city">Verstek stad</string>
   <string name="default_city_hint">bv. Johannesburg — gebruik wanneer ligging af is</string>
   <string name="default_radius">Soekradius</string>
-  <string name="radius_km_value">%d km</string>  <!-- Avatar / profile photo -->
+  <string name="radius_km_value">%d km</string>
+  <!-- Avatar / profile photo -->
+  <string name="avatar_content_description">Profielavatar</string>
+  <string name="edit_avatar">Wysig avatar</string>
   <string name="avatar_style_default">Verstek</string>
   <string name="avatar_style_male">Manlik</string>
   <string name="avatar_style_female">Vroulik</string>
@@ -314,4 +341,20 @@
   <string name="review_saved">Resensie gestoor</string>
   <string name="review_deleted">Resensie verwyder</string>
   <string name="review_failed">Kon die resensie nie stoor nie. Probeer weer.</string>
+  <string name="close">Maak toe</string>
+  <string name="my_ticket_title">My kaartjie</string>
+  <string name="my_tickets">My kaartjies</string>
+  <string name="ticket_ready">Kaartjie gereed</string>
+  <string name="ticket_show_at_gate">Wys hierdie QR-kode by die hek</string>
+  <string name="ticket_checked_in">Ingecheck</string>
+  <string name="ticket_qr_desc">QR-kode vir kaartjie %1$s</string>
+  <string name="recurring_event">Herhalend</string>
+  <string name="reviews_filtered_empty">Geen resensies pas hierdie filter nie</string>
+  <string name="no_tickets_yet">Nog geen kaartjies nie - RSVP by \'n kry joune</string>
+  <string name="background_sync">Agtergrond-sinchronisering</string>
+  <string name="background_sync_desc">Vernuwe gebeurtenisse outomaties wyl die toep toe is</string>
+  <string name="draft_restored">Konsep herstel - voltooi of verwerp dit</string>
+  <string name="discard_draft">Verwerp konsep</string>
+  <string name="review_verified">Geverifieerde bywoner</string>
+  <string name="review_photo">Resensiefoto</string>
 </resources>

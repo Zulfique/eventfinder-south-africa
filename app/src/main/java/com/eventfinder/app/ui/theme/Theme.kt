@@ -1,14 +1,18 @@
 package com.eventfinder.app.ui.theme
 
+import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Shapes
 import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.dynamicDarkColorScheme
+import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -152,7 +156,7 @@ private val DarkColors = darkColorScheme(
     tertiaryContainer = Color(0xFF182A86),
     onTertiaryContainer = Color(0xFFE0E5FF),
 
-    background = SurfaceInk,
+    background = Color(0xFF0B1929),
     onBackground = Color(0xFFE5E7EB),
 
     surface = SurfaceCardDark,
@@ -205,6 +209,18 @@ fun EventFinderTheme(
             surfaceVariant = Color(0xFFF0F0F0),
             onSurfaceVariant = Color.Black
         )
+
+        // Material You dynamic colour on Android 12+, keeping the brand night
+        // background (#0B1929) as specified for dark mode.
+        dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
+            val context = LocalContext.current
+            if (darkTheme) {
+                dynamicDarkColorScheme(context)
+                    .copy(background = Color(0xFF0B1929))
+            } else {
+                dynamicLightColorScheme(context)
+            }
+        }
 
         darkTheme -> DarkColors
         else -> LightColors

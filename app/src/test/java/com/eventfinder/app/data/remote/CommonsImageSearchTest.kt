@@ -37,10 +37,13 @@ class CommonsImageSearchTest {
     }
 
     @Test
-    fun `uses only the town when the title names no sport`() {
+    fun `uses a category keyword plus the town for non-sport titles`() {
         val queries = search().imageQueries("JAZZ IN THE PARK", "DURBAN")
 
-        assertEquals(listOf("DURBAN"), queries)
+        assertEquals(
+            listOf("music concert DURBAN", "DURBAN", "music concert South Africa"),
+            queries
+        )
     }
 
     @Test

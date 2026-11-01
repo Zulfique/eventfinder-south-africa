@@ -23,7 +23,12 @@ interface EventReviewRepository {
     fun observeRatingSummary(eventId: String): Flow<RatingSummary>
     fun observeAllRatingSummaries(): Flow<Map<String, RatingSummary>>
     suspend fun canReview(eventId: String): Boolean
-    suspend fun submitReview(eventId: String, rating: Int, comment: String): Result<Unit>
+    suspend fun submitReview(
+        eventId: String,
+        rating: Int,
+        comment: String,
+        photoUrls: List<String> = emptyList()
+    ): Result<Unit>
 }
 
 class EventReviewRepositoryImpl(
@@ -58,7 +63,12 @@ class EventReviewRepositoryImpl(
         return rsvpDao.statusFor(userId, eventId) == RsvpStatus.ATTENDING.storage
     }
 
-    override suspend fun submitReview(eventId: String, rating: Int, comment: String): Result<Unit> =
+    override suspend fun submitReview(
+        eventId: String,
+        rating: Int,
+        comment: String,
+        photoUrls: List<String>
+    ): Result<Unit> =
         runCatching {
             if (rating !in 1..5) throw IllegalArgumentException("rating_out_of_range")
             val userId = preferences.sessionUserId.first()
@@ -76,7 +86,12 @@ class EventReviewRepositoryImpl(
                     authorName = user?.fullName?.trim()?.ifBlank { null } ?: user?.email?.trim().orEmpty().ifBlank { "User" },
                     createdAt = existing?.createdAt
                         ?: event.startDate.coerceAtMost(System.currentTimeMillis()),
-                    verifiedAttendance = true
+                    verifiedAttendance = true,
+                    photoUrls = photoUrls
+                        .map { it.trim() }
+                        .filter { it.startsWith("http") }
+                        .take(4)
+                        .joinToString(",")
                 )
             )
         }
@@ -89,6 +104,7 @@ class EventReviewRepositoryImpl(
             rating = rating,
             comment = comment,
             createdAt = createdAt,
-            verifiedAttendance = verifiedAttendance
+            verifiedAttendance = verifiedAttendance,
+            photoUrls = photoUrls.split(',').map { it.trim() }.filter { it.startsWith("http") }
         )
 }

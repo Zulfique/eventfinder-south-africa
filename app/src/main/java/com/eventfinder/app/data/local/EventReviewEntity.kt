@@ -31,5 +31,7 @@ data class EventReviewEntity(
     val rating: Int,
     val comment: String,
     val createdAt: Long,
-    val verifiedAttendance: Boolean = false
+    val verifiedAttendance: Boolean = false,
+    /** Optional review photos: comma-separated remote URLs (see migration 21). */
+    val photoUrls: String = ""
 )

@@ -11,7 +11,23 @@ import java.util.Calendar
  * These are labelled "(Demo)" so users know they are locally seeded examples,
  * not real upcoming events.
  *
- * Placeholder images use the free, keyless Picsum service (https://picsum.photos).
+ * Images are real, freely-licensed photographs from Wikimedia Commons (no
+ * Picsum or other random placeholder services), one per event and matched to
+ * its city or subject. Attribution:
+ *   - sample-jhb-music: 1. Looking for Transport in Maboneng, Johannesburg, South Africa.jpg — Shade Schutze Photography — CC BY-SA 4.0 — https://commons.wikimedia.org/wiki/File:1._Looking_for_Transport_in_Maboneng,_Johannesburg,_South_Africa.jpg
+ *   - sample-jhb-food: Neighbourgoods Market, Cape Town (32533236132).jpg — yeowatzup from Göttingen, Germany — CC BY 2.0 — https://commons.wikimedia.org/wiki/File:Neighbourgoods_Market,_Cape_Town_(32533236132).jpg
+ *   - sample-jhb-sports: Boats on Zoo Lake, Johannesburg.jpg — Ossewa — CC BY-SA 4.0 — https://commons.wikimedia.org/wiki/File:Boats_on_Zoo_Lake,_Johannesburg.jpg
+ *   - sample-jhb-business: 61 Nachmittag in Johannesburg (36259457483).jpg — Cornelius Kibelka from Berlin, Germany — CC BY-SA 2.0 — https://commons.wikimedia.org/wiki/File:61_Nachmittag_in_Johannesburg_(36259457483).jpg
+ *   - sample-jhb-arts: Janowers Buildings, Johannesburg.jpg — Ossewa — CC BY-SA 4.0 — https://commons.wikimedia.org/wiki/File:Janowers_Buildings,_Johannesburg.jpg
+ *   - sample-cpt-music: Cape Town (ZA), Company's Garden, Cecil Rhodes statue -- 2024 -- 3471.jpg — Dietmar Rabich — CC BY-SA 4.0 — https://commons.wikimedia.org/wiki/File:Cape_Town_(ZA),_Company%27s_Garden,_Cecil_Rhodes_statue_--_2024_--_3471.jpg
+ *   - sample-cpt-food: Cape Fur Seal (Arctocephalus pusillus), Hout Bay.jpg — Martinvl — CC BY-SA 4.0 — https://commons.wikimedia.org/wiki/File:Cape_Fur_Seal_(Arctocephalus_pusillus),_Hout_Bay.jpg
+ *   - sample-cpt-sports: Cape Town (ZA), Table Mountain, Seilbahn, Gedenkplatte -- 2024 -- 2870.jpg — Dietmar Rabich — CC BY-SA 4.0 — https://commons.wikimedia.org/wiki/File:Cape_Town_(ZA),_Table_Mountain,_Seilbahn,_Gedenkplatte_--_2024_--_2870.jpg
+ *   - sample-cpt-community: Khayelitsha, Baden Powell Drive (South Africa).jpg — Olga Ernst — CC BY-SA 4.0 — https://commons.wikimedia.org/wiki/File:Khayelitsha,_Baden_Powell_Drive_(South_Africa).jpg
+ *   - sample-dbn-music: Durban, South Africa by Planet Labs, Durban Central.jpg — Planet Labs, Inc. — CC BY-SA 4.0 — https://commons.wikimedia.org/wiki/File:Durban,_South_Africa_by_Planet_Labs,_Durban_Central.jpg
+ *   - sample-dbn-food: Bunny Chow.jpg — David Berkowitz from New York, NY, USA — CC BY 2.0 — https://commons.wikimedia.org/wiki/File:Bunny_Chow.jpg
+ *   - sample-jhb-community: Alexandra Bridge2.JPG — SimonP at English Wikipedia — CC BY-SA 3.0 — https://commons.wikimedia.org/wiki/File:Alexandra_Bridge2.JPG
+ *   - sample-jhb-arts-2: Johannesburg Botanical Garden Prehistoric01.jpg — Hentie Joubert — CC BY-SA 4.0 — https://commons.wikimedia.org/wiki/File:Johannesburg_Botanical_Garden_Prehistoric01.jpg
+ *   - sample-cpt-business: 20190202 Vineyards in Stellenbosch.jpg — Matthias Bethke — CC BY-SA 4.0 — https://commons.wikimedia.org/wiki/File:20190202_Vineyards_in_Stellenbosch.jpg
  */
 object SampleEventsProvider {
 
@@ -38,7 +54,7 @@ object SampleEventsProvider {
                 address = "286 Fox Street, Maboneng, Johannesburg",
                 latitude = -26.2072,
                 longitude = 28.0561,
-                imageUrl = "https://picsum.photos/400/300",
+                imageUrl = "https://thumb.wikimedia.org/wikipedia/commons/thumb/9/92/1._Looking_for_Transport_in_Maboneng%2C_Johannesburg%2C_South_Africa.jpg/960px-1._Looking_for_Transport_in_Maboneng%2C_Johannesburg%2C_South_Africa.jpg",
                 isPublic = true,
                 organizerId = "sample-org-1",
                 organizerName = "Maboneng Events Co.",
@@ -57,7 +73,7 @@ object SampleEventsProvider {
                 address = "Bree Street, CBD, Johannesburg",
                 latitude = -26.2056,
                 longitude = 28.0406,
-                imageUrl = "https://picsum.photos/400/300",
+                imageUrl = "https://thumb.wikimedia.org/wikipedia/commons/thumb/d/d4/Neighbourgoods_Market%2C_Cape_Town_%2832533236132%29.jpg/960px-Neighbourgoods_Market%2C_Cape_Town_%2832533236132%29.jpg",
                 isPublic = true,
                 organizerId = "sample-org-2",
                 organizerName = "Bree Street Collective",
@@ -76,7 +92,7 @@ object SampleEventsProvider {
                 address = "Sunnyside Drive, Parkview, Johannesburg",
                 latitude = -26.1710,
                 longitude = 28.0320,
-                imageUrl = "https://picsum.photos/400/300",
+                imageUrl = "https://thumb.wikimedia.org/wikipedia/commons/thumb/d/db/Boats_on_Zoo_Lake%2C_Johannesburg.jpg/960px-Boats_on_Zoo_Lake%2C_Johannesburg.jpg",
                 isPublic = true,
                 organizerId = "sample-org-3",
                 organizerName = "Zoo Lake Runners",
@@ -95,7 +111,7 @@ object SampleEventsProvider {
                 address = "41 Juta Street, Braamfontein, Johannesburg",
                 latitude = -26.1918,
                 longitude = 28.0333,
-                imageUrl = "https://picsum.photos/400/300",
+                imageUrl = "https://thumb.wikimedia.org/wikipedia/commons/thumb/a/a9/61_Nachmittag_in_Johannesburg_%2836259457483%29.jpg/960px-61_Nachmittag_in_Johannesburg_%2836259457483%29.jpg",
                 isPublic = true,
                 organizerId = "sample-org-4",
                 organizerName = "Jozi Innovators",
@@ -114,7 +130,7 @@ object SampleEventsProvider {
                 address = "1 President Street, Newtown, Johannesburg",
                 latitude = -26.2045,
                 longitude = 28.0338,
-                imageUrl = "https://picsum.photos/400/300",
+                imageUrl = "https://thumb.wikimedia.org/wikipedia/commons/thumb/8/89/Janowers_Buildings%2C_Johannesburg.jpg/960px-Janowers_Buildings%2C_Johannesburg.jpg",
                 isPublic = true,
                 organizerId = "sample-org-5",
                 organizerName = "Newtown Arts Trust",
@@ -133,7 +149,7 @@ object SampleEventsProvider {
                 address = "Queen Victoria Street, Cape Town CBD",
                 latitude = -33.9288,
                 longitude = 18.4173,
-                imageUrl = "https://picsum.photos/400/300",
+                imageUrl = "https://thumb.wikimedia.org/wikipedia/commons/thumb/5/59/Cape_Town_%28ZA%29%2C_Company%27s_Garden%2C_Cecil_Rhodes_statue_--_2024_--_3471.jpg/960px-Cape_Town_%28ZA%29%2C_Company%27s_Garden%2C_Cecil_Rhodes_statue_--_2024_--_3471.jpg",
                 isPublic = true,
                 organizerId = "sample-org-6",
                 organizerName = "Cape Town Events",
@@ -152,7 +168,7 @@ object SampleEventsProvider {
                 address = "Harbour Road, Hout Bay, Cape Town",
                 latitude = -34.0422,
                 longitude = 18.3504,
-                imageUrl = "https://picsum.photos/400/300",
+                imageUrl = "https://thumb.wikimedia.org/wikipedia/commons/thumb/f/f1/Cape_Fur_Seal_%28Arctocephalus_pusillus%29%2C_Hout_Bay.jpg/960px-Cape_Fur_Seal_%28Arctocephalus_pusillus%29%2C_Hout_Bay.jpg",
                 isPublic = true,
                 organizerId = "sample-org-7",
                 organizerName = "Hout Bay Markets",
@@ -171,7 +187,7 @@ object SampleEventsProvider {
                 address = "Tafelberg Road, Cape Town",
                 latitude = -33.9599,
                 longitude = 18.4036,
-                imageUrl = "https://picsum.photos/400/300",
+                imageUrl = "https://thumb.wikimedia.org/wikipedia/commons/thumb/6/6d/Cape_Town_%28ZA%29%2C_Table_Mountain%2C_Seilbahn%2C_Gedenkplatte_--_2024_--_2870.jpg/960px-Cape_Town_%28ZA%29%2C_Table_Mountain%2C_Seilbahn%2C_Gedenkplatte_--_2024_--_2870.jpg",
                 isPublic = true,
                 organizerId = "sample-org-8",
                 organizerName = "Cape Trail Collective",
@@ -190,7 +206,7 @@ object SampleEventsProvider {
                 address = "Land by N2, Khayelitsha, Cape Town",
                 latitude = -34.0358,
                 longitude = 18.6850,
-                imageUrl = "https://picsum.photos/400/300",
+                imageUrl = "https://thumb.wikimedia.org/wikipedia/commons/thumb/9/9f/Khayelitsha%2C_Baden_Powell_Drive_%28South_Africa%29.jpg/960px-Khayelitsha%2C_Baden_Powell_Drive_%28South_Africa%29.jpg",
                 isPublic = true,
                 organizerId = "sample-org-9",
                 organizerName = "Khayelitsha Civic",
@@ -209,7 +225,7 @@ object SampleEventsProvider {
                 address = "1 Battery Beach Road, Durban",
                 latitude = -29.8277,
                 longitude = 31.0354,
-                imageUrl = "https://picsum.photos/400/300",
+                imageUrl = "https://thumb.wikimedia.org/wikipedia/commons/thumb/c/cd/Durban%2C_South_Africa_by_Planet_Labs%2C_Durban_Central.jpg/960px-Durban%2C_South_Africa_by_Planet_Labs%2C_Durban_Central.jpg",
                 isPublic = true,
                 organizerId = "sample-org-10",
                 organizerName = "Durban Live",
@@ -228,7 +244,7 @@ object SampleEventsProvider {
                 address = "Masoja Msiza Road, Stamford Hill, Durban",
                 latitude = -29.8273,
                 longitude = 31.0311,
-                imageUrl = "https://picsum.photos/400/300",
+                imageUrl = "https://thumb.wikimedia.org/wikipedia/commons/thumb/7/76/Bunny_Chow.jpg/960px-Bunny_Chow.jpg",
                 isPublic = true,
                 organizerId = "sample-org-11",
                 organizerName = "Durban Curry Club",
@@ -247,7 +263,7 @@ object SampleEventsProvider {
                 address = "London Street, Alexandra, Johannesburg",
                 latitude = -26.1030,
                 longitude = 28.0920,
-                imageUrl = "https://picsum.photos/400/300",
+                imageUrl = "https://thumb.wikimedia.org/wikipedia/commons/thumb/a/a7/Alexandra_Bridge2.JPG/960px-Alexandra_Bridge2.JPG",
                 isPublic = true,
                 organizerId = "sample-org-12",
                 organizerName = "Code Youth SA",
@@ -266,7 +282,7 @@ object SampleEventsProvider {
                 address = "Olifants Road, Emmarentia, Johannesburg",
                 latitude = -26.1642,
                 longitude = 28.0239,
-                imageUrl = "https://picsum.photos/400/300",
+                imageUrl = "https://thumb.wikimedia.org/wikipedia/commons/thumb/9/96/Johannesburg_Botanical_Garden_Prehistoric01.jpg/960px-Johannesburg_Botanical_Garden_Prehistoric01.jpg",
                 isPublic = true,
                 organizerId = "sample-org-13",
                 organizerName = "Joburg Arts Council",
@@ -285,7 +301,7 @@ object SampleEventsProvider {
                 address = "Bird Street, Stellenbosch",
                 latitude = -33.9321,
                 longitude = 18.8602,
-                imageUrl = "https://picsum.photos/400/300",
+                imageUrl = "https://thumb.wikimedia.org/wikipedia/commons/thumb/1/13/20190202_Vineyards_in_Stellenbosch.jpg/960px-20190202_Vineyards_in_Stellenbosch.jpg",
                 isPublic = true,
                 organizerId = "sample-org-14",
                 organizerName = "Western Cape AgriHub",

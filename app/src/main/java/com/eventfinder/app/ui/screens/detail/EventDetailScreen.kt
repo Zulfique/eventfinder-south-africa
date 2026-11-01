@@ -70,6 +70,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -85,14 +86,25 @@ import com.eventfinder.app.data.repository.describeWeatherCode
 import com.eventfinder.app.di.AppContainer
 import com.eventfinder.app.domain.model.RsvpStatus
 import com.eventfinder.app.ui.components.categoryLabel
+import com.eventfinder.app.ui.components.FavoritePngIcon
+import com.eventfinder.app.ui.components.InteractivePngIcon
 import com.eventfinder.app.ui.components.resolve
 import com.eventfinder.app.ui.components.LoadingView
 import com.eventfinder.app.utils.DateTimeUtils
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.material3.FilterChip
+import androidx.compose.material.icons.outlined.ConfirmationNumber
+import androidx.compose.material.icons.outlined.Repeat
+import androidx.compose.material.icons.outlined.Verified
+import com.eventfinder.app.ui.components.QrImage
 
 /**
  * Screen 6 (Event Detail): hero image, metadata, RSVP, favourite, share,
  * directions and the Open-Meteo weather card.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun EventDetailScreen(
     container: AppContainer,
@@ -111,6 +123,7 @@ fun EventDetailScreen(
 
     var showOwnerMenu by remember { mutableStateOf(false) }
     var showDeleteDialog by remember { mutableStateOf(false) }
+    var showTicketDialog by remember { mutableStateOf(false) }
 
     BackHandler { onBack() }
 
@@ -148,8 +161,16 @@ fun EventDetailScreen(
                     Column(
                         Modifier.fillMaxSize().verticalScroll(rememberScrollState())
                     ) {
-                        // Hero image with back + favourite controls
-                        Box(Modifier.fillMaxWidth().height(300.dp)) {
+                        // Hero image with back + favourite controls.
+                        // widthIn + centring keeps phone layouts untouched while
+                        // capping stretched content on tablets/foldables.
+                        Box(
+                            Modifier
+                                .fillMaxWidth()
+                                .widthIn(max = 840.dp)
+                                .align(Alignment.CenterHorizontally)
+                                .height(300.dp)
+                        ) {
                             AsyncImage(
                                 model = event.imageUrl,
                                 contentDescription = stringResource(R.string.event_image),
@@ -173,21 +194,20 @@ fun EventDetailScreen(
                                     .padding(8.dp),
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                IconButton(
-                                    onClick = { viewModel.toggleFavorite() },
+                                Box(
                                     modifier = Modifier
                                         .clip(RoundedCornerShape(50))
                                         .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.9f))
+                                        .padding(11.dp)
                                 ) {
-                                    Icon(
-                                        if (view.isFavorite) Icons.Outlined.Favorite
-                                        else Icons.Outlined.FavoriteBorder,
+                                    FavoritePngIcon(
+                                        isFavorite = view.isFavorite,
+                                        onToggle = { viewModel.toggleFavorite() },
+                                        size = 26.dp,
                                         contentDescription = stringResource(
                                             if (view.isFavorite) R.string.favorite_remove
                                             else R.string.favorite_add
-                                        ),
-                                        tint = if (view.isFavorite) MaterialTheme.colorScheme.error
-                                        else MaterialTheme.colorScheme.onSurface
+                                        )
                                     )
                                 }
                                 if (event.isCreatedByUser) {
@@ -246,9 +266,52 @@ fun EventDetailScreen(
                             )
                         }
 
+                        if (showTicketDialog && state.myTicket != null) {
+                            val ticket = state.myTicket!!
+                            AlertDialog(
+                                onDismissRequest = { showTicketDialog = false },
+                                title = { Text(stringResource(R.string.my_ticket_title)) },
+                                text = {
+                                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                        QrImage(
+                                            value = ticket.ticketCode,
+                                            contentDescription = stringResource(
+                                                R.string.ticket_qr_desc, ticket.ticketCode
+                                            ),
+                                            modifier = Modifier
+                                                .size(220.dp)
+                                                .clip(RoundedCornerShape(12.dp))
+                                        )
+                                        Spacer(Modifier.height(10.dp))
+                                        Text(
+                                            ticket.ticketCode,
+                                            style = MaterialTheme.typography.titleMedium,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                        Spacer(Modifier.height(4.dp))
+                                        Text(
+                                            stringResource(
+                                                if (ticket.checkedInAt != null) R.string.ticket_checked_in
+                                                else R.string.ticket_show_at_gate
+                                            ),
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                },
+                                confirmButton = {
+                                    TextButton(onClick = { showTicketDialog = false }) {
+                                        Text(stringResource(R.string.close))
+                                    }
+                                }
+                            )
+                        }
+
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
+                                .widthIn(max = 840.dp)
+                                .align(Alignment.CenterHorizontally)
                                 .clip(
                                     RoundedCornerShape(
                                         topStart = 28.dp,
@@ -277,10 +340,36 @@ fun EventDetailScreen(
                                     )
                                     .padding(horizontal = 8.dp, vertical = 3.dp)
                             )
+                            if (event.isRecurring) {
+                                Spacer(Modifier.height(6.dp))
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier
+                                        .background(
+                                            MaterialTheme.colorScheme.tertiaryContainer,
+                                            RoundedCornerShape(6.dp)
+                                        )
+                                        .padding(horizontal = 8.dp, vertical = 3.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Outlined.Repeat,
+                                        contentDescription = stringResource(R.string.recurring_event),
+                                        modifier = Modifier.size(14.dp),
+                                        tint = MaterialTheme.colorScheme.onTertiaryContainer
+                                    )
+                                    Spacer(Modifier.size(4.dp))
+                                    Text(
+                                        stringResource(R.string.recurring_event) +
+                                            (event.recurrenceRule?.let { " · $it" } ?: ""),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onTertiaryContainer
+                                    )
+                                }
+                            }
                             Spacer(Modifier.height(8.dp))
 
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Outlined.CalendarMonth, contentDescription = "Date", modifier = Modifier.size(20.dp))
+                                Image(painter = painterResource(R.drawable.evt_calendar), contentDescription = "Date", modifier = Modifier.size(20.dp))
                                 Spacer(Modifier.size(6.dp))
                                 Text(
                                     DateTimeUtils.formatFullDateTime(event.startDate),
@@ -289,7 +378,7 @@ fun EventDetailScreen(
                                 if (view.distanceKm != null) {
                                     Spacer(Modifier.size(8.dp))
                                     Text(
-                                        "ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â· ${com.eventfinder.app.utils.DistanceCalculator.displayDistanceKm(view.distanceKm)} km " +
+                                        "· ${com.eventfinder.app.utils.DistanceCalculator.displayDistanceKm(view.distanceKm)} km " +
                                             stringResource(R.string.distance_away),
                                         color = MaterialTheme.colorScheme.primary,
                                         style = MaterialTheme.typography.bodyMedium
@@ -310,7 +399,7 @@ fun EventDetailScreen(
                             Spacer(Modifier.height(6.dp))
 
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Outlined.LocationOn, contentDescription = "Location", modifier = Modifier.size(20.dp))
+                                Image(painter = painterResource(R.drawable.evt_venue), contentDescription = "Location", modifier = Modifier.size(20.dp))
                                 Spacer(Modifier.size(6.dp))
                                 Text(event.venueName, style = MaterialTheme.typography.bodyMedium)
                             }
@@ -322,14 +411,14 @@ fun EventDetailScreen(
                             Spacer(Modifier.height(8.dp))
 
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Outlined.Person, contentDescription = "Organizer", modifier = Modifier.size(20.dp))
+                                Image(painter = painterResource(R.drawable.usr_account), contentDescription = "Organizer", modifier = Modifier.size(20.dp))
                                 Spacer(Modifier.size(6.dp))
                                 Text(stringResource(R.string.organizer), style = MaterialTheme.typography.labelMedium)
                                 Spacer(Modifier.size(4.dp))
                                 Text(event.organizerName, style = MaterialTheme.typography.bodyMedium)
                             }
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Outlined.Group, contentDescription = "Attendees", modifier = Modifier.size(20.dp))
+                                Image(painter = painterResource(R.drawable.evt_attendees), contentDescription = "Attendees", modifier = Modifier.size(20.dp))
                                 Spacer(Modifier.size(6.dp))
                                 Text(
                                     "${event.attendeeCount} ${stringResource(R.string.attendees)}",
@@ -350,11 +439,12 @@ fun EventDetailScreen(
                                 if (average != null && state.reviewCount > 0) {
                                     Row {
                                         repeat(5) { index ->
-                                            Icon(
-                                                imageVector = if (index < average.toInt()) Icons.Outlined.Star else Icons.Outlined.StarOutline,
+                                            Image(
+                                                painter = painterResource(R.drawable.evt_rating),
                                                 contentDescription = null,
-                                                modifier = Modifier.size(16.dp),
-                                                tint = if (index < average.toInt()) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                                                modifier = Modifier
+                                                    .size(16.dp)
+                                                    .graphicsLayer(alpha = if (index < average.toInt()) 1f else 0.28f)
                                             )
                                         }
                                     }
@@ -362,6 +452,18 @@ fun EventDetailScreen(
                                     Text("%.1f (%d)".format(average, state.reviewCount), style = MaterialTheme.typography.bodyMedium)
                                 } else {
                                     Text(stringResource(R.string.no_reviews_yet), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                            }
+                            if (state.reviews.isNotEmpty()) {
+                                Spacer(Modifier.height(10.dp))
+                                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    ReviewFilter.entries.forEach { filter ->
+                                        FilterChip(
+                                            selected = state.reviewFilter == filter,
+                                            onClick = { viewModel.setReviewFilter(filter) },
+                                            label = { Text(filter.label) }
+                                        )
+                                    }
                                 }
                             }
                             Spacer(Modifier.height(8.dp))
@@ -376,10 +478,11 @@ fun EventDetailScreen(
                                     repeat(5) { index ->
                                         val star = index + 1
                                         IconButton(onClick = { viewModel.setReviewRating(star) }) {
-                                            Icon(
-                                                imageVector = if (state.reviewDraftRating >= star) Icons.Outlined.Star else Icons.Outlined.StarOutline,
-                                                contentDescription = null,
-                                                tint = if (state.reviewDraftRating >= star) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                                            InteractivePngIcon(
+                                                iconRes = R.drawable.evt_rating,
+                                                contentDescription = "$star star rating",
+                                                active = state.reviewDraftRating >= star,
+                                                size = 30.dp
                                             )
                                         }
                                     }
@@ -391,6 +494,38 @@ fun EventDetailScreen(
                                     modifier = Modifier.fillMaxWidth().height(100.dp),
                                     maxLines = 5
                                 )
+                                Spacer(Modifier.height(8.dp))
+                                val photoLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+                                    androidx.activity.result.contract.ActivityResultContracts.GetContent()
+                                ) { uri -> uri?.let { viewModel.addReviewPhoto(it.toString()) } }
+                                if (state.reviewDraftPhotos.isNotEmpty()) {
+                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        state.reviewDraftPhotos.forEach { uri ->
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(64.dp)
+                                                    .clip(RoundedCornerShape(10.dp))
+                                                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                                                    .clickable { viewModel.removeReviewPhoto(uri) }
+                                            ) {
+                                                AsyncImage(
+                                                    model = uri,
+                                                    contentDescription = stringResource(R.string.remove_photo),
+                                                    contentScale = ContentScale.Crop,
+                                                    modifier = Modifier.fillMaxSize()
+                                                )
+                                            }
+                                        }
+                                    }
+                                    Spacer(Modifier.height(8.dp))
+                                }
+                                OutlinedButton(
+                                    onClick = { photoLauncher.launch("image/*") },
+                                    enabled = state.reviewDraftPhotos.size < 4,
+                                    modifier = Modifier.fillMaxWidth().height(40.dp)
+                                ) {
+                                    Text(stringResource(R.string.add_photo))
+                                }
                                 Spacer(Modifier.height(8.dp))
                                 Button(
                                     onClick = { viewModel.submitReview() },
@@ -410,19 +545,59 @@ fun EventDetailScreen(
                                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                                     Row {
                                                         repeat(5) { index ->
-                                                            Icon(
-                                                                imageVector = if (index < review.rating) Icons.Outlined.Star else Icons.Outlined.StarOutline,
+                                                            Image(
+                                                                painter = painterResource(R.drawable.evt_rating),
                                                                 contentDescription = null,
-                                                                modifier = Modifier.size(14.dp),
-                                                                tint = if (index < review.rating) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                                                                modifier = Modifier
+                                                                    .size(14.dp)
+                                                                    .graphicsLayer(alpha = if (index < review.rating) 1f else 0.28f)
                                                             )
                                                         }
                                                     }
                                                     Spacer(Modifier.width(8.dp))
                                                     Text(review.authorName, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                                                    if (review.verifiedAttendance) {
+                                                        Spacer(Modifier.width(6.dp))
+                                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                                            Icon(
+                                                                Icons.Outlined.Verified,
+                                                                contentDescription = stringResource(R.string.review_verified),
+                                                                modifier = Modifier.size(14.dp),
+                                                                tint = MaterialTheme.colorScheme.primary
+                                                            )
+                                                            Spacer(Modifier.size(3.dp))
+                                                            Text(
+                                                                stringResource(R.string.review_verified),
+                                                                style = MaterialTheme.typography.labelSmall,
+                                                                color = MaterialTheme.colorScheme.primary
+                                                            )
+                                                        }
+                                                    }
+                                                    Spacer(Modifier.weight(1f))
+                                                    Text(
+                                                        DateTimeUtils.formatShortDate(review.createdAt),
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                    )
                                                 }
                                                 Spacer(Modifier.height(4.dp))
                                                 Text(review.comment, style = MaterialTheme.typography.bodyMedium)
+                                                if (review.photoUrls.isNotEmpty()) {
+                                                    Spacer(Modifier.height(6.dp))
+                                                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                                        review.photoUrls.take(4).forEach { url ->
+                                                            AsyncImage(
+                                                                model = url,
+                                                                contentDescription = stringResource(R.string.review_photo),
+                                                                contentScale = ContentScale.Crop,
+                                                                modifier = Modifier
+                                                                    .size(72.dp)
+                                                                    .clip(RoundedCornerShape(10.dp))
+                                                                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                                                            )
+                                                        }
+                                                    }
+                                                }
                                             }
                                         }
                                     }
@@ -519,7 +694,11 @@ fun EventDetailScreen(
                                     },
                                     modifier = Modifier.weight(1f).height(44.dp)
                                 ) {
-                                    Icon(Icons.Outlined.Navigation, contentDescription = "Directions")
+                                    Image(
+                                        painter = painterResource(R.drawable.evt_directions),
+                                        contentDescription = "Directions",
+                                        modifier = Modifier.size(20.dp)
+                                    )
                                     Spacer(Modifier.size(6.dp))
                                     Text(stringResource(R.string.directions))
                                 }
@@ -528,11 +707,33 @@ fun EventDetailScreen(
                                  onClick = { onPlanWithFriends(event.id) },
                                  modifier = Modifier.fillMaxWidth().height(44.dp)
                              ) {
-                                 Icon(Icons.Outlined.Group, contentDescription = "Plan with friends")
+                                 Image(
+                                     painter = painterResource(R.drawable.evt_attendees),
+                                     contentDescription = "Plan with friends",
+                                     modifier = Modifier.size(20.dp)
+                                 )
                                  Spacer(Modifier.size(6.dp))
                                  Text("Plan with Friends")
                              }
                              Spacer(Modifier.height(8.dp))
+                             if (view.rsvpStatus == RsvpStatus.ATTENDING || state.myTicket != null) {
+                                 OutlinedButton(
+                                     onClick = {
+                                         viewModel.issueMyTicket()
+                                         showTicketDialog = true
+                                     },
+                                     modifier = Modifier.fillMaxWidth().height(44.dp)
+                                 ) {
+                                     Icon(
+                                         Icons.Outlined.ConfirmationNumber,
+                                         contentDescription = null,
+                                         modifier = Modifier.size(20.dp)
+                                     )
+                                     Spacer(Modifier.size(6.dp))
+                                     Text(stringResource(R.string.my_ticket_title))
+                                 }
+                                 Spacer(Modifier.height(8.dp))
+                             }
                              if (event.isCreatedByUser) {
                                  Button(
                                      onClick = { onOpenScanner(event.id) },
@@ -558,7 +759,11 @@ fun EventDetailScreen(
                                  },
                                  modifier = Modifier.fillMaxWidth().height(44.dp)
                              ) {
-                                 Icon(Icons.Outlined.Share, contentDescription = "Share")
+                                 Image(
+                                     painter = painterResource(R.drawable.evt_share),
+                                     contentDescription = "Share",
+                                     modifier = Modifier.size(20.dp)
+                                 )
                                  Spacer(Modifier.size(6.dp))
                                  Text(stringResource(R.string.share))
                              }
@@ -613,7 +818,11 @@ private fun WeatherCard(state: EventDetailUiState) {
             modifier = Modifier.fillMaxWidth().padding(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(Icons.Outlined.WbSunny, contentDescription = "Weather", tint = MaterialTheme.colorScheme.onPrimaryContainer)
+            Image(
+                painter = painterResource(R.drawable.evt_weather),
+                contentDescription = "Weather",
+                modifier = Modifier.size(30.dp)
+            )
             Spacer(Modifier.size(10.dp))
             Column {
                 Text(

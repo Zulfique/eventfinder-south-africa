@@ -75,6 +75,24 @@
     <string name="cat_community">Community</string>
     <string name="cat_arts">Arts</string>
     <string name="cat_business">Business</string>
+    <string name="cat_concerts">Concerts</string>
+    <string name="cat_festivals">Festivals</string>
+    <string name="cat_nightlife">Nightlife</string>
+    <string name="cat_comedy">Comedy</string>
+    <string name="cat_networking">Networking</string>
+    <string name="cat_technology">Technology</string>
+    <string name="cat_education">Education</string>
+    <string name="cat_family">Family</string>
+    <string name="cat_markets">Markets</string>
+    <string name="cat_outdoors">Outdoors</string>
+    <string name="cat_travel">Travel</string>
+    <string name="cat_charity">Charity</string>
+    <string name="cat_theatre">Theatre</string>
+    <string name="cat_movies">Movies</string>
+    <string name="cat_fashion">Fashion</string>
+    <string name="cat_cars">Cars</string>
+    <string name="cat_wellness">Wellness</string>
+    <string name="cat_religion">Religion</string>
     <string name="map_view">Map</string>
     <string name="list_view">List</string>
     <string name="no_events">No events found</string>
@@ -133,6 +151,12 @@
 
     <!-- Create event -->
     <string name="create_event_title">Create Event</string>
+  <string name="create_short">Create</string>
+  <string name="location_use_gps">Use my location</string>
+  <string name="repair_local_data">Repair local data</string>
+  <string name="repair_local_data_hint">Restore missing local event data</string>
+  <string name="local_data_repaired">Local data repaired</string>
+  <string name="local_data_repair_failed">Could not repair local data</string>
     <string name="step_x_of_y">Step %1$d of %2$d</string>
     <string name="event_title">Event title</string>
     <string name="event_description">Description</string>
@@ -304,4 +328,42 @@
   <string name="capacity" translatable="false">Capacity</string>
   <string name="avatar_content_description">Profile avatar</string>
   <string name="edit_avatar">Edit avatar</string>
+  <!-- Avatar styles -->
+  <string name="avatar_style_default">Default</string>
+  <string name="avatar_style_male">Male</string>
+  <string name="avatar_style_female">Female</string>
+  <string name="photo_import_failed">Couldn\'t read that photo. Please choose another.</string>
+  <string name="email_verification_token">Email verification token</string>
+  <string name="verify_email_change">Verify change</string>
+  <string name="avatar_desc_photo">Profile photo</string>
+  <string name="avatar_desc_male">Profile avatar, male style</string>
+  <string name="avatar_desc_female">Profile avatar, female style</string>
+  <string name="avatar_desc_initials">Profile initials</string>
+  <!-- Ratings &amp; reviews -->
+  <string name="reviews_title">Ratings &amp; reviews</string>
+  <string name="no_reviews">No reviews yet — be the first.</string>
+  <string name="reviews_count">%1$d reviews</string>
+  <string name="verified_attendee">Verified attendee</string>
+  <string name="delete_review">Delete review</string>
+  <string name="review_comment_hint">What did you think? (optional)</string>
+  <string name="rate_stars">Rate %1$d stars</string>
+  <string name="review_saved">Review saved</string>
+  <string name="review_deleted">Review deleted</string>
+  <string name="review_failed">Couldn\'t save the review. Try again.</string>
+  <string name="close">Close</string>
+  <string name="my_ticket_title">My ticket</string>
+  <string name="my_tickets">My tickets</string>
+  <string name="ticket_ready">Ticket ready</string>
+  <string name="ticket_show_at_gate">Show this QR code at the gate</string>
+  <string name="ticket_checked_in">Checked in</string>
+  <string name="ticket_qr_desc">QR code for ticket %1$s</string>
+  <string name="recurring_event">Recurring</string>
+  <string name="reviews_filtered_empty">No reviews match this filter</string>
+  <string name="no_tickets_yet">No tickets yet - RSVP to an event to get yours</string>
+  <string name="background_sync">Background sync</string>
+  <string name="background_sync_desc">Refresh events automatically while the app is closed</string>
+  <string name="draft_restored">Draft restored - finish or discard it</string>
+  <string name="discard_draft">Discard draft</string>
+  <string name="review_verified">Verified attendee</string>
+  <string name="review_photo">Review photo</string>
 </resources>

@@ -1,0 +1,38 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="140dp"
+    android:height="140dp"
+    android:viewportWidth="140"
+    android:viewportHeight="140">
+
+    <!-- Soft brand-green backdrop -->
+    <path
+        android:fillColor="#1A007749"
+        android:pathData="M70,10a60,60 0 1,0 0.001,0z" />
+
+    <!-- Calendar body -->
+    <path
+        android:fillColor="#007749"
+        android:pathData="M34,40h72a8,8 0 0 1 8,8v50a8,8 0 0 1 -8,8h-72a8,8 0 0 1 -8,-8v-50a8,8 0 0 1 8,-8z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M34,58h72v40h-72z" />
+    <path
+        android:fillColor="#FFB81C"
+        android:pathData="M34,40h72v10h-72z" />
+    <path
+        android:fillColor="#005638"
+        android:pathData="M48,32h8v14h-8zM84,32h8v14h-8z" />
+
+    <!-- Magnifier lens -->
+    <path
+        android:fillColor="#E03C31"
+        android:pathData="M62,72m-15,0a15,15 0 1,0 30,0a15,15 0 1,0 -30,0" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M62,72m-9,0a9,9 0 1,0 18,0a9,9 0 1,0 -18,0" />
+    <path
+        android:strokeColor="#E03C31"
+        android:strokeWidth="7"
+        android:strokeLineCap="round"
+        android:pathData="M73,83l16,16" />
+</vector>

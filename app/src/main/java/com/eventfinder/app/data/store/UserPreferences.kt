@@ -52,9 +52,11 @@ class UserPreferences(private val context: Context) : SessionProvider {
         val BIOMETRIC_USER_ID = stringPreferencesKey("biometric_user_id")
         val LANGUAGE = stringPreferencesKey("language")
         val THEME_MODE = stringPreferencesKey("theme_mode")
+        val SELECTED_CITY = stringPreferencesKey("selected_city")
         val PENDING_NAVIGATION_ROUTE = stringPreferencesKey("pending_navigation_route")
         val AUTH_TOKEN = stringPreferencesKey("auth_token")
         val FIREBASE_UID = stringPreferencesKey("firebase_uid")
+        val DYNAMIC_COLOR = booleanPreferencesKey("dynamic_color")
     }
 
     // ---- Helpers for user-scoped keys ----
@@ -156,6 +158,20 @@ class UserPreferences(private val context: Context) : SessionProvider {
     suspend fun setThemeMode(mode: String) {
         val safeMode = mode.lowercase().takeIf { it in setOf("system", "light", "dark") } ?: "system"
         context.eventFinderDataStore.edit { it[Keys.THEME_MODE] = safeMode }
+    }
+
+    // ---- Header location selector (global device preference) ----
+
+    /** City explicitly chosen from the header location selector, or null when following the GPS fix. */
+    val selectedCity: Flow<String?> = context.eventFinderDataStore.data
+        .map { it[Keys.SELECTED_CITY] }
+
+    suspend fun setSelectedCity(city: String?) {
+        context.eventFinderDataStore.edit { prefs ->
+            if (city == null) prefs.remove(Keys.SELECTED_CITY)
+            else prefs[Keys.SELECTED_CITY] = city
+        }
+        AppLogger.i("UserPreferences", "Selected city saved: ${city ?: "gps"}")
     }
 
     // ---- Biometric auth (global device-level, needed before login for biometric prompt) ----
@@ -284,6 +300,36 @@ class UserPreferences(private val context: Context) : SessionProvider {
         }
     }
 
+    /** Warn about loud music / noise-heavy events before attending. */
+    val loudNoiseNeeded: Flow<Boolean> = sessionUserId.flatMapLatest { userId ->
+        if (userId.isNullOrBlank()) flowOf(false)
+        else context.eventFinderDataStore.data.map { prefs ->
+            prefs[userBoolKey("a11y_loud_noise", userId)] ?: false
+        }
+    }
+
+    suspend fun setLoudNoiseNeeded(enabled: Boolean) {
+        val userId = sessionUserId.first() ?: return
+        context.eventFinderDataStore.edit {
+            it[userBoolKey("a11y_loud_noise", userId)] = enabled
+        }
+    }
+
+    /** Prefer music-free events (sensory / religious accessibility need). */
+    val noMusicNeeded: Flow<Boolean> = sessionUserId.flatMapLatest { userId ->
+        if (userId.isNullOrBlank()) flowOf(false)
+        else context.eventFinderDataStore.data.map { prefs ->
+            prefs[userBoolKey("a11y_no_music", userId)] ?: false
+        }
+    }
+
+    suspend fun setNoMusicNeeded(enabled: Boolean) {
+        val userId = sessionUserId.first() ?: return
+        context.eventFinderDataStore.edit {
+            it[userBoolKey("a11y_no_music", userId)] = enabled
+        }
+    }
+
     // ---- Reduced motion toggle ----
 
     val reducedMotion: Flow<Boolean> = sessionUserId.flatMapLatest { userId ->
@@ -313,6 +359,37 @@ class UserPreferences(private val context: Context) : SessionProvider {
         val userId = sessionUserId.first() ?: return
         context.eventFinderDataStore.edit {
             it[userBoolKey("high_contrast", userId)] = enabled
+        }
+    }
+
+    // ---- Material You dynamic colour (global device preference) ----
+
+    /**
+     * Material You wallpaper colours. Off by default so light mode keeps the
+     * brand-green palette and dark mode keeps the #0B1929 night background;
+     * opting in swaps in the wallpaper-derived scheme on Android 12+.
+     */
+    val dynamicColorEnabled: Flow<Boolean> = context.eventFinderDataStore.data
+        .map { it[Keys.DYNAMIC_COLOR] ?: false }
+
+    suspend fun setDynamicColorEnabled(enabled: Boolean) {
+        context.eventFinderDataStore.edit { it[Keys.DYNAMIC_COLOR] = enabled }
+    }
+
+    // ---- Notification consent (GDPR/POPIA) ----
+
+    /** Consent for reminders + new-event alerts. Defaults to granted. */
+    val notificationConsent: Flow<Boolean> = sessionUserId.flatMapLatest { userId ->
+        if (userId.isNullOrBlank()) flowOf(true)
+        else context.eventFinderDataStore.data.map { prefs ->
+            prefs[userBoolKey("consent_notifications", userId)] ?: true
+        }
+    }
+
+    suspend fun setNotificationConsent(enabled: Boolean) {
+        val userId = sessionUserId.first() ?: return
+        context.eventFinderDataStore.edit {
+            it[userBoolKey("consent_notifications", userId)] = enabled
         }
     }
 

@@ -70,12 +70,18 @@ class MainActivity : FragmentActivity() {
 
         setContent {
             val themeMode by container.preferences.themeMode.collectAsState(initial = "system")
+            // Material You is opt-in (Settings): without it the app always uses
+            // the brand-green light scheme and the #0B1929 night scheme.
+            val dynamicColor by container.preferences.dynamicColorEnabled.collectAsState(initial = false)
             val darkTheme = when (themeMode) {
                 "light" -> false
                 "dark" -> true
                 else -> isSystemInDarkTheme()
             }
-            EventFinderTheme(darkTheme = darkTheme) {
+            EventFinderTheme(
+                darkTheme = darkTheme,
+                dynamicColor = dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+            ) {
                 EventFinderNavHost(
                     container = container,
                     deepLinkEventId = deepLinkEventId

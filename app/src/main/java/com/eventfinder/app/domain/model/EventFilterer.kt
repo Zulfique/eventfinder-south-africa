@@ -52,6 +52,8 @@ object EventFilterer {
                 when (need) {
                     "wheelchair" -> event.wheelchairAccessible
                     "lowSensory" -> event.sensoryFriendly && !event.loudMusic && !event.strobeLights
+                    "noMusic" -> !event.loudMusic
+                    "loudNoise" -> !event.loudMusic && !event.strobeLights
                     "hearing" -> true // no specific field; pass through
                     else -> true
                 }

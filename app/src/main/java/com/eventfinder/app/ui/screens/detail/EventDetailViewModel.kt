@@ -25,6 +25,25 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
+/** Review list filter chips (see the reviews section of EventDetailScreen). */
+enum class ReviewFilter(val label: String) {
+    ALL("All"),
+    RATING_5("5★"),
+    RATING_4("4★"),
+    RATING_3("3★"),
+    RATING_2("2★"),
+    VERIFIED("Verified ✓");
+
+    fun matches(review: com.eventfinder.app.domain.model.EventReview): Boolean = when (this) {
+        ALL -> true
+        RATING_5 -> review.rating == 5
+        RATING_4 -> review.rating == 4
+        RATING_3 -> review.rating == 3
+        RATING_2 -> review.rating <= 2
+        VERIFIED -> review.verifiedAttendance
+    }
+}
+
 /** UI state for the event detail screen (Screen 6). */
 data class EventDetailUiState(
     val loading: Boolean = true,
@@ -33,13 +52,21 @@ data class EventDetailUiState(
     val weather: WeatherSummary? = null,
     val weatherUnavailable: Boolean = false,
     val reviews: List<EventReview> = emptyList(),
+    val reviewFilter: ReviewFilter = ReviewFilter.ALL,
     val averageRating: Double? = null,
     val reviewCount: Int = 0,
     val canReview: Boolean = false,
     val reviewDraftRating: Int = 0,
     val reviewDraftComment: String = "",
-    val isSubmittingReview: Boolean = false
-)
+    /** Local URIs staged for the review being written (max 4). */
+    val reviewDraftPhotos: List<String> = emptyList(),
+    val isSubmittingReview: Boolean = false,
+    /** The signed-in attendee's own ticket for this event (QR shows this). */
+    val myTicket: com.eventfinder.app.domain.model.EventTicket? = null
+) { 
+    val visibleReviews: List<EventReview>
+        get() = reviews.filter(reviewFilter::matches)
+}
 
 /**
  * Event detail (Screen 6): loads the event, streams live favourite + RSVP
@@ -60,6 +87,7 @@ class EventDetailViewModel(
 
     private val eventRepository = container.eventRepository
     private val reviewRepository = container.eventReviewRepository
+    private val ticketRepository = container.ticketRepository
 
     private val eventFlow = MutableStateFlow<Event?>(null)
     private var currentUserId: String? = null
@@ -74,6 +102,7 @@ class EventDetailViewModel(
     init {
         viewModelScope.launch {
             currentUserId = container.preferences.sessionUserId.first()
+            loadMyTicket()
         }
         viewModelScope.launch {
             kotlinx.coroutines.flow.combine(
@@ -122,6 +151,7 @@ class EventDetailViewModel(
                 return@launch
             }
             eventFlow.value = event
+            loadMyTicket()
             val latitude = event.latitude
             val longitude = event.longitude
             if (latitude != null && longitude != null) {
@@ -166,6 +196,27 @@ class EventDetailViewModel(
             }
     }
 
+    /** Loads (never creates) the attendee's own ticket for this event. */
+    private suspend fun loadMyTicket() {
+        val userId = currentUserId
+        if (userId.isNullOrBlank()) {
+            _uiState.update { it.copy(myTicket = null) }
+            return
+        }
+        _uiState.update { it.copy(myTicket = ticketRepository.getTicketForUser(eventId, userId)) }
+    }
+
+    /** Issues (or reloads) the attendee's own ticket on demand. */
+    fun issueMyTicket() {
+        viewModelScope.launch {
+            val userId = currentUserId
+            if (userId.isNullOrBlank()) return@launch
+            val ticket = ticketRepository.getTicketForUser(eventId, userId)
+                ?: ticketRepository.issueTicket(eventId, userId)
+            _uiState.update { it.copy(myTicket = ticket) }
+        }
+    }
+
     fun toggleFavorite() {
         viewModelScope.launch {
             val added = eventRepository.toggleFavorite(eventId)
@@ -182,8 +233,15 @@ class EventDetailViewModel(
             when (status) {
                 RsvpStatus.ATTENDING -> {
                     val event = eventRepository.getEvent(eventId)
-                    val remindersEnabled = container.preferences.remindersEnabled.first()
                     val userId = container.preferences.sessionUserId.first()
+                    // Check in tools need a ticket: issuing one on RSVP keeps the
+                    // attendee QR flow working even for events created offline.
+                    if (!userId.isNullOrBlank()) {
+                        val existing = ticketRepository.getTicketForUser(eventId, userId)
+                        val ticket = existing ?: ticketRepository.issueTicket(eventId, userId)
+                        _uiState.update { it.copy(myTicket = ticket) }
+                    }
+                    val remindersEnabled = container.preferences.remindersEnabled.first()
                     if (event != null && remindersEnabled && !userId.isNullOrBlank()) {
                         val scheduled = NotificationHelper.scheduleEventReminders(appContext, event, userId)
                         _messages.emit(
@@ -224,17 +282,40 @@ class EventDetailViewModel(
         _uiState.update { it.copy(reviewDraftComment = text.take(500)) }
     }
 
+    fun setReviewFilter(filter: ReviewFilter) {
+        _uiState.update { it.copy(reviewFilter = filter) }
+    }
+
+    fun addReviewPhoto(uri: String) {
+        _uiState.update { state ->
+            if (uri.isBlank() || state.reviewDraftPhotos.contains(uri)) state
+            else state.copy(reviewDraftPhotos = (state.reviewDraftPhotos + uri).take(4))
+        }
+    }
+
+    fun removeReviewPhoto(uri: String) {
+        _uiState.update { it.copy(reviewDraftPhotos = it.reviewDraftPhotos - uri) }
+    }
+
     fun submitReview() {
         viewModelScope.launch {
             val rating = _uiState.value.reviewDraftRating
             val comment = _uiState.value.reviewDraftComment
+            val photos = _uiState.value.reviewDraftPhotos
             _uiState.update { it.copy(isSubmittingReview = true) }
-            val result = reviewRepository.submitReview(eventId, rating, comment)
+            // Best effort: only URLs that upload successfully are attached; a
+            // failed upload never blocks the review itself (offline-safe).
+            val uploaded = photos.mapNotNull { uri ->
+                runCatching { container.imageUploader.uploadEventImage(uri, eventId) }
+                    .getOrNull()
+            }
+            val result = reviewRepository.submitReview(eventId, rating, comment, uploaded)
             _uiState.update {
                 it.copy(
                     isSubmittingReview = false,
                     reviewDraftRating = if (result.isSuccess) 0 else it.reviewDraftRating,
-                    reviewDraftComment = if (result.isSuccess) "" else it.reviewDraftComment
+                    reviewDraftComment = if (result.isSuccess) "" else it.reviewDraftComment,
+                    reviewDraftPhotos = if (result.isSuccess) emptyList() else it.reviewDraftPhotos
                 )
             }
             _messages.emit(

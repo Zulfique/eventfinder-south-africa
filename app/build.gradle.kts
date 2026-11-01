@@ -54,6 +54,21 @@ android {
         // is safe as the in-repo default: leaving it blank silently hid the
         // "Continue with Google" button, because GoogleSignInHelper.isConfigured
         // is false whenever it is empty. Override via local.properties.
+        // Event-image pipeline tiers 4-5 (priority: organiser cover → og:image
+        // → Wikimedia Commons → Unsplash → Pixabay). Both are public client
+        // keys (the APIs are designed for per-key rate limiting, not secrecy)
+        // and live in the gitignored local.properties so a fresh clone simply
+        // skips those tiers.
+        buildConfigField(
+            "String",
+            "UNSPLASH_ACCESS_KEY",
+            "\"${project.findProperty("UNSPLASH_ACCESS_KEY") ?: ""}\""
+        )
+        buildConfigField(
+            "String",
+            "PIXABAY_API_KEY",
+            "\"${project.findProperty("PIXABAY_API_KEY") ?: ""}\""
+        )
         buildConfigField(
             "String",
             "GOOGLE_SERVER_CLIENT_ID",
@@ -188,6 +203,12 @@ dependencies {
 
     // ---- Image loading ----
     implementation("io.coil-kt:coil-compose:2.6.0")
+
+    // ---- QR ticket rendering (attendee-side, generated fully offline) ----
+    implementation("com.google.zxing:core:3.5.3")
+
+    // ---- WorkManager: periodic background event sync (offline freshness) ----
+    implementation("androidx.work:work-runtime-ktx:2.9.0")
 
     // ---- Firebase (free Spark plan): Firestore NoSQL, FCM push ----
     // The API key inside google-services.json is a public app identifier issued

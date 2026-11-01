@@ -53,6 +53,7 @@ class EventFinderApp : Application(), ImageLoaderFactory {
         container = AppContainer(this)
         startNetworkMonitoring()
         startReconnectSync()
+        schedulePeriodicSync()
         subscribeToPushTopics()
         initialiseMapSdk()
     }
@@ -76,6 +77,15 @@ class EventFinderApp : Application(), ImageLoaderFactory {
     private fun startReconnectSync() {
         container.syncCoordinator.start()
         AppLogger.d("EventFinderApp", "Reconnect sync coordinator started")
+    }
+
+    /**
+     * Periodic WorkManager refresh so discovery feeds update on a cadence even
+     * when the app stays closed (FR-10: background synchronisation).
+     */
+    private fun schedulePeriodicSync() {
+        com.eventfinder.app.data.sync.EventFeedSyncWorker.schedule(this)
+        AppLogger.d("EventFinderApp", "Periodic background sync scheduled")
     }
 
     /** Subscribes this install to the shared FCM topic for real-time pushes. */

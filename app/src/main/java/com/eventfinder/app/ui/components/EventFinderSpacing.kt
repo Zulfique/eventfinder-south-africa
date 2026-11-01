@@ -1,7 +1,6 @@
 ﻿package com.eventfinder.app.ui.components
 
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.runtime.Composable
@@ -26,7 +25,7 @@ fun ResponsiveContent(
     maxContentWidth: Dp = 760.dp,
     content: @Composable androidx.compose.foundation.layout.BoxScope.() -> Unit
 ) {
-    BoxWithConstraints(
+    Box(
         modifier = modifier.fillMaxWidth()
     ) {
         Box(

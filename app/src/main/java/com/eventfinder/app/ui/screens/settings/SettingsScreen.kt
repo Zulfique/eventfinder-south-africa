@@ -13,7 +13,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.size
+import androidx.compose.ui.res.painterResource
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Delete
@@ -163,15 +165,22 @@ fun SettingsScreen(
                     ListItem(
                         headlineContent = { Text(stringResource(R.string.change_password)) },
                         supportingContent = { Text(stringResource(R.string.change_password_hint)) },
-                        leadingContent = { Icon(Icons.Outlined.Lock, contentDescription = null) },
+                        leadingContent = { Image(painterResource(R.drawable.usr_lock), contentDescription = null, modifier = Modifier.size(22.dp)) },
                         modifier = Modifier.clickable { showChangePassword = true }
                     )
                     HorizontalDivider()
                     ListItem(
                         headlineContent = { Text(stringResource(R.string.clear_cache)) },
                         supportingContent = { Text(stringResource(R.string.clear_cache_hint)) },
-                        leadingContent = { Icon(Icons.Outlined.DeleteSweep, contentDescription = null) },
+                        leadingContent = { Image(painterResource(R.drawable.usr_eraser), contentDescription = null, modifier = Modifier.size(22.dp)) },
                         modifier = Modifier.clickable { viewModel.clearCache() }
+                    )
+                    HorizontalDivider()
+                    ListItem(
+                        headlineContent = { Text(stringResource(R.string.repair_local_data)) },
+                        supportingContent = { Text(stringResource(R.string.repair_local_data_hint)) },
+                        leadingContent = { Image(painterResource(R.drawable.usr_check), contentDescription = null, modifier = Modifier.size(22.dp)) },
+                        modifier = Modifier.clickable { viewModel.repairLocalData() }
                     )
                     HorizontalDivider()
                     ListItem(
@@ -240,6 +249,28 @@ fun SettingsScreen(
                     )
                     HorizontalDivider()
                     ListItem(
+                        headlineContent = { Text("Warn me about loud music") },
+                        supportingContent = { Text("Flags noise-heavy events before you go") },
+                        trailingContent = {
+                            Switch(
+                                checked = state.loudNoiseNeeded,
+                                onCheckedChange = viewModel::setLoudNoiseNeeded
+                            )
+                        }
+                    )
+                    HorizontalDivider()
+                    ListItem(
+                        headlineContent = { Text("Prefer music-free events") },
+                        supportingContent = { Text("Sensory and religious accessibility") },
+                        trailingContent = {
+                            Switch(
+                                checked = state.noMusicNeeded,
+                                onCheckedChange = viewModel::setNoMusicNeeded
+                            )
+                        }
+                    )
+                    HorizontalDivider()
+                    ListItem(
                         headlineContent = { Text("Reduced motion") },
                         trailingContent = {
                             Switch(
@@ -255,6 +286,17 @@ fun SettingsScreen(
                             Switch(
                                 checked = state.highContrast,
                                 onCheckedChange = viewModel::setHighContrast
+                            )
+                        }
+                    )
+                    HorizontalDivider()
+                    ListItem(
+                        headlineContent = { Text("Event notifications") },
+                        supportingContent = { Text("Consent for reminders and new-event alerts") },
+                        trailingContent = {
+                            Switch(
+                                checked = state.notificationConsent,
+                                onCheckedChange = viewModel::setNotificationConsent
                             )
                         }
                     )
@@ -290,6 +332,17 @@ fun SettingsScreen(
                         }
                     )
                     HorizontalDivider()
+                    ListItem(
+                        headlineContent = { Text("Material You colors") },
+                        supportingContent = { Text("Palette from your wallpaper (Android 12+); off keeps the brand green") },
+                        trailingContent = {
+                            Switch(
+                                checked = state.dynamicColor,
+                                onCheckedChange = viewModel::setDynamicColor
+                            )
+                        }
+                    )
+                    HorizontalDivider()
                     LanguageSelector(state.language, viewModel::setLanguage)
                     HorizontalDivider()
                     ListItem(
@@ -300,7 +353,7 @@ fun SettingsScreen(
                                 else stringResource(R.string.biometric_unavailable)
                             )
                         },
-                        leadingContent = { Icon(Icons.Outlined.Fingerprint, contentDescription = null) },
+                        leadingContent = { Image(painterResource(R.drawable.usr_fingerprint), contentDescription = null, modifier = Modifier.size(22.dp)) },
                         trailingContent = {
                             Switch(
                                 checked = state.biometricEnabled,
@@ -313,7 +366,7 @@ fun SettingsScreen(
                     ListItem(
                         headlineContent = { Text(stringResource(R.string.event_reminders)) },
                         supportingContent = { Text(stringResource(R.string.event_reminders_hint)) },
-                        leadingContent = { Icon(Icons.Outlined.NotificationsActive, contentDescription = null) },
+                        leadingContent = { Image(painterResource(R.drawable.usr_bell), contentDescription = null, modifier = Modifier.size(22.dp)) },
                         trailingContent = {
                             Switch(
                                 checked = state.remindersEnabled,
@@ -324,7 +377,7 @@ fun SettingsScreen(
                     HorizontalDivider()
                     ListItem(
                         headlineContent = { Text(stringResource(R.string.new_events_alerts)) },
-                        leadingContent = { Icon(Icons.Outlined.Notifications, contentDescription = null) },
+                        leadingContent = { Image(painterResource(R.drawable.usr_bell), contentDescription = null, modifier = Modifier.size(22.dp)) },
                         trailingContent = {
                             Switch(
                                 checked = state.newEventsAlerts,
@@ -347,7 +400,7 @@ fun SettingsScreen(
                         label = { Text(stringResource(R.string.default_city)) },
                         placeholder = { Text(stringResource(R.string.default_city_hint)) },
                         singleLine = true,
-                        leadingIcon = { Icon(Icons.Outlined.Place, contentDescription = null) },
+                        leadingIcon = { Image(painterResource(R.drawable.hdr_map_pin), contentDescription = null, modifier = Modifier.size(22.dp)) },
                         modifier = Modifier.fillMaxWidth()
                     )
                     Text(
@@ -448,8 +501,7 @@ private fun LanguageSelector(
                 .clickable { expanded = true }
                 .padding(horizontal = 16.dp, vertical = 8.dp),
             verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
-        ) {
-            Icon(Icons.Outlined.Language, contentDescription = null)
+        ) {             Image(painterResource(R.drawable.usr_language), contentDescription = null, modifier = Modifier.size(22.dp))
             Spacer(Modifier.size(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(stringResource(R.string.language), style = MaterialTheme.typography.bodyLarge)
