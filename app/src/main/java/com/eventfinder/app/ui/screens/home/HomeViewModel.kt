@@ -14,6 +14,8 @@ import com.eventfinder.app.domain.model.EventFilterer
 import com.eventfinder.app.domain.model.EventSort
 import com.eventfinder.app.domain.model.EventView
 import com.eventfinder.app.domain.model.RsvpStatus
+import com.eventfinder.app.domain.model.TimeWindow
+import com.eventfinder.app.data.repository.RatingSummary
 import com.eventfinder.app.domain.model.EventAlertDetector.Alerts
 import com.eventfinder.app.domain.model.EventAlertDetector.detect
 import com.eventfinder.app.notifications.NotificationHelper
@@ -54,7 +56,12 @@ data class HomeUiState(
     /** Header location pill: "<City>, ZA" — defaults to the national centre (Cape Town). */
     val cityLabel: String = "${SouthAfricanPlaces.nationalDefault.name}, ZA",
     /** Smart Discovery "Trending This Weekend" card is active. */
-    val weekendOnly: Boolean = false
+    val weekendOnly: Boolean = false,
+    /** Filter Events modal state (showcase). */
+    val timeWindow: TimeWindow = TimeWindow.ANYTIME,
+    val minRating: Int = 0,
+    val verifiedOnly: Boolean = false,
+    val accessibleOnly: Boolean = false
 )
 
 /**
@@ -86,7 +93,12 @@ class HomeViewModel(
     private val radiusFlow = MutableStateFlow(50)
     private val radiusEnabledFlow = MutableStateFlow(false)
     private val locationFlow = MutableStateFlow<Pair<Double, Double>?>(null)
-    private val weekendFlow = MutableStateFlow(false)
+    private val timeWindowFlow = MutableStateFlow(TimeWindow.ANYTIME)
+    private val minRatingFlow = MutableStateFlow(0)
+    private val verifiedOnlyFlow = MutableStateFlow(false)
+    private val accessibleOnlyFlow = MutableStateFlow(false)
+
+    private val reviewRepository = container.eventReviewRepository
 
     /** True while an explicit city from the header selector overrides the GPS fix. */
     private var manualCityActive = false
@@ -94,7 +106,8 @@ class HomeViewModel(
     private data class Combined(
         val events: List<Event>,
         val rsvps: Map<String, RsvpStatus>,
-        val favoriteIds: Set<String>
+        val favoriteIds: Set<String>,
+        val ratings: Map<String, RatingSummary>
     )
 
     private data class Controls(
@@ -104,7 +117,10 @@ class HomeViewModel(
         val radiusKm: Int,
         val radiusEnabled: Boolean,
         val location: Pair<Double, Double>?,
-        val weekendOnly: Boolean
+        val timeWindow: TimeWindow,
+        val minRating: Int,
+        val verifiedOnly: Boolean,
+        val accessibleOnly: Boolean
     )
 
     init {
@@ -137,9 +153,10 @@ class HomeViewModel(
         val combinedFlow = combine(
             eventRepository.observeAllEvents(),
             eventRepository.observeRsvpStatuses(),
-            eventRepository.observeFavoriteIds()
-        ) { events, rsvps, favoriteIds ->
-            Combined(events, rsvps, favoriteIds)
+            eventRepository.observeFavoriteIds(),
+            reviewRepository.observeAllRatingSummaries()
+        ) { events, rsvps, favoriteIds, ratings ->
+            Combined(events, rsvps, favoriteIds, ratings)
         }
 
         val textControlsFlow = combine(queryFlow, categoryFlow, sortFlow) { query, category, sort ->
@@ -148,8 +165,17 @@ class HomeViewModel(
         val rangeControlsFlow = combine(radiusFlow, radiusEnabledFlow, locationFlow) { radius, enabled, location ->
             Triple(radius, enabled, location)
         }
-        val controlsFlow = combine(textControlsFlow, rangeControlsFlow, weekendFlow) { text, range, weekend ->
-            Controls(text.first, text.second, text.third, range.first, range.second, range.third, weekend)
+        val filtersFlow = combine(
+            timeWindowFlow, minRatingFlow, verifiedOnlyFlow, accessibleOnlyFlow
+        ) { window, rating, verified, accessible ->
+            FilterDraft(window, rating, verified, accessible)
+        }
+        val controlsFlow = combine(textControlsFlow, rangeControlsFlow, filtersFlow) { text, range, filters ->
+            Controls(
+                text.first, text.second, text.third,
+                range.first, range.second, range.third,
+                filters.window, filters.minRating, filters.verified, filters.accessible
+            )
         }
 
         viewModelScope.launch {
@@ -195,6 +221,13 @@ class HomeViewModel(
         }
     }
 
+    private data class FilterDraft(
+        val window: TimeWindow,
+        val minRating: Int,
+        val verified: Boolean,
+        val accessible: Boolean
+    )
+
     private fun applyControls(combined: Combined, c: Controls): List<EventView> {
         val userLat = c.location?.first
         val userLng = c.location?.second
@@ -206,15 +239,24 @@ class HomeViewModel(
                 event.endDate > now
             }
 
-        // Smart Discovery: "Trending This Weekend" narrows to the upcoming
-        // Saturday-Sunday window (inclusive of today when it is a weekend day).
-        val inScope = if (c.weekendOnly) {
-            val weekend = upcomingWeekendWindow(now)
-            upcomingEvents.filter { it.startDate in weekend }
-        } else upcomingEvents
+        // Showcase "When?" window (Smart Discovery's Trending card reuses WEEKEND).
+        val inScope = when (c.timeWindow) {
+            TimeWindow.ANYTIME -> upcomingEvents
+            TimeWindow.TODAY -> upcomingEvents.filter { it.startDate <= endOfTodayMillis(now) }
+            TimeWindow.WEEKEND -> {
+                val weekend = upcomingWeekendWindow(now)
+                upcomingEvents.filter { it.startDate in weekend }
+            }
+            TimeWindow.NEXT_WEEK -> upcomingEvents.filter { it.startDate <= now + 7 * 86_400_000L }
+        }
+
+        val scoped = inScope.filter { event ->
+            (!c.verifiedOnly || event.organizerIsVerified) &&
+                (!c.accessibleOnly || event.wheelchairAccessible || event.sensoryFriendly)
+        }
 
         val filtered = EventFilterer.filter(
-            events = inScope,
+            events = scoped,
             query = c.query.ifBlank { null },
             category = c.category,
             userLat = userLat,
@@ -222,9 +264,28 @@ class HomeViewModel(
             radiusKm = if (c.radiusEnabled) c.radiusKm else 0
         )
         val sorted = EventFilterer.sort(filtered, c.sort, userLat, userLng)
-        return EventFilterer.attachDistances(sorted, userLat, userLng, combined.favoriteIds)
-            .map { it.copy(rsvpStatus = combined.rsvps[it.event.id]) }
+        val views = EventFilterer.attachDistances(sorted, userLat, userLng, combined.favoriteIds)
+            .map { view ->
+                val rating = combined.ratings[view.event.id]
+                view.copy(
+                    rsvpStatus = combined.rsvps[view.event.id],
+                    averageRating = rating?.average,
+                    reviewCount = rating?.count ?: 0
+                )
+            }
+        // Showcase "Rating" filter runs on the enriched views.
+        return if (c.minRating > 0) {
+            views.filter { (it.averageRating ?: 0.0) >= c.minRating }
+        } else views
     }
+
+    /** Last millisecond of the calendar day containing [now]. */
+    private fun endOfTodayMillis(now: Long): Long =
+        Instant.ofEpochMilli(now).atZone(ZoneId.systemDefault()).toLocalDate()
+            .plusDays(1)
+            .atStartOfDay(ZoneId.systemDefault())
+            .toInstant()
+            .toEpochMilli() - 1
 
     fun onQueryChange(value: String) {
         queryFlow.value = value
@@ -275,11 +336,54 @@ class HomeViewModel(
 
     /** Smart Discovery "Trending This Weekend": toggle the weekend window. */
     fun onTrendingWeekend() {
-        val enabled = !weekendFlow.value
-        weekendFlow.value = enabled
-        _uiState.update { it.copy(weekendOnly = enabled) }
+        val enabled = timeWindowFlow.value != TimeWindow.WEEKEND
+        timeWindowFlow.value = if (enabled) TimeWindow.WEEKEND else TimeWindow.ANYTIME
+        _uiState.update {
+            it.copy(timeWindow = timeWindowFlow.value, weekendOnly = enabled)
+        }
         if (enabled) onSortSelect(EventSort.TRENDING)
         AppLogger.i("HomeViewModel", "Smart Discovery -> Trending This Weekend: $enabled")
+    }
+
+    /**
+     * Filter Events modal: stage-free apply of the showcase filters —
+     * When?, minimum rating, verified organiser, accessible events and the
+     * Near Me radius toggle.
+     */
+    fun applyFilters(
+        window: TimeWindow,
+        minRating: Int,
+        verifiedOrganizerOnly: Boolean,
+        accessibleOnly: Boolean,
+        nearMeEnabled: Boolean,
+        radiusKm: Int
+    ) {
+        val radius = radiusKm.coerceIn(5, 200)
+        timeWindowFlow.value = window
+        minRatingFlow.value = minRating.coerceIn(0, 5)
+        verifiedOnlyFlow.value = verifiedOrganizerOnly
+        accessibleOnlyFlow.value = accessibleOnly
+        radiusEnabledFlow.value = nearMeEnabled
+        radiusFlow.value = radius
+        _uiState.update {
+            it.copy(
+                timeWindow = window,
+                weekendOnly = window == TimeWindow.WEEKEND,
+                minRating = minRating.coerceIn(0, 5),
+                verifiedOnly = verifiedOrganizerOnly,
+                accessibleOnly = accessibleOnly,
+                radiusFilterEnabled = nearMeEnabled,
+                radiusKm = radius
+            )
+        }
+        if (nearMeEnabled) {
+            viewModelScope.launch { preferences.setDefaultRadiusKm(radius) }
+        }
+        AppLogger.i(
+            "HomeViewModel",
+            "Filters applied: window=$window rating=$minRating verified=$verifiedOrganizerOnly " +
+                "accessible=$accessibleOnly nearMe=$nearMeEnabled radius=${radius}km"
+        )
     }
 
     /** The upcoming Saturday-Sunday window (this weekend when today is Sat/Sun). */

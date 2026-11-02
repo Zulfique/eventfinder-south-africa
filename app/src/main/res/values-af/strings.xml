@@ -70,6 +70,7 @@
     <string name="search_placeholder">Soek gebeurtenisse…</string>
     <string name="all_categories">Alles</string>
     <string name="cat_other">Ander</string>
+    <string name="get_tickets">Kry Kaartjies</string>
     <string name="cat_music">Musiek</string>
     <string name="cat_sports">Sport</string>
     <string name="cat_food">Kos</string>
@@ -359,4 +360,18 @@
   <string name="review_verified">Geverifieerde bywoner</string>
   <string name="review_photo">Resensiefoto</string>
   <string name="ticket_ready_for">Jou kaartjie vir %1$s is gereed</string>
+
+  <!-- Organizer profile -->
+  <string name="organizer_profile_title">Organisateursprofiel</string>
+  <string name="verified_organizer">Geverifieerde organiseerder</string>
+  <string name="upcoming_events">Kommende geleenthede</string>
+  <string name="report_organizer">Rapporteer organiseerder</string>
+  <string name="report_submitted">Rapport ingedien</string>
+  <string name="host_line">Gastheer van %1$d geleenthede regoor Suid-Afrika.</string>
+  <string name="contact">Kontak</string>
+  <string name="organizer_events_label">Geleenthede</string>
+  <string name="organizer_rating_label">Gradering</string>
+  <string name="view_profile">Beskou profiel</string>
+  <string name="share_with_friends">Deel met vriende!</string>
+  <string name="link_copied">Skakel gekopieer</string>
 </resources>

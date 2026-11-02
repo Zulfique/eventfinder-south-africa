@@ -69,6 +69,7 @@ import com.eventfinder.app.ui.screens.detail.EventDetailScreen
 import com.eventfinder.app.ui.screens.editprofile.EditProfileScreen
 import com.eventfinder.app.ui.screens.favorites.FavoritesScreen
 import com.eventfinder.app.ui.screens.groups.GroupPlanningScreen
+import com.eventfinder.app.ui.screens.organizer.OrganizerProfileScreen
 import com.eventfinder.app.ui.screens.home.HomeScreen
 import com.eventfinder.app.ui.screens.tickets.TicketScannerScreen
 import com.eventfinder.app.ui.screens.profile.ProfileScreen
@@ -88,11 +89,13 @@ object AppDestinations {
     const val EDIT_EVENT = "editEvent/{eventId}"
     const val GROUP_PLANNING = "groupPlanning/{eventId}"
     const val TICKET_SCANNER = "ticketScanner/{eventId}"
+    const val ORGANIZER_PROFILE = "organizerProfile/{organizerId}"
 
     fun eventDetail(eventId: String) = "event/$eventId"
     fun editEvent(eventId: String) = "editEvent/$eventId"
     fun groupPlanning(eventId: String) = "groupPlanning/$eventId"
     fun ticketScanner(eventId: String) = "ticketScanner/$eventId"
+    fun organizerProfile(organizerId: String) = "organizerProfile/$organizerId"
 }
 
 /**
@@ -193,7 +196,20 @@ fun EventFinderNavHost(
                                 onBack = { navController.popBackStack() },
                                 onEditEvent = { navController.navigate(AppDestinations.editEvent(it)) },
                                 onPlanWithFriends = { navController.navigate(AppDestinations.groupPlanning(it)) },
-                                onOpenScanner = { navController.navigate(AppDestinations.ticketScanner(it)) }
+                                onOpenScanner = { navController.navigate(AppDestinations.ticketScanner(it)) },
+                                onOrganizerClick = { navController.navigate(AppDestinations.organizerProfile(it)) }
+                            )
+                        }
+
+                        composable(
+                            route = AppDestinations.ORGANIZER_PROFILE,
+                            arguments = listOf(navArgument("organizerId") { type = NavType.StringType })
+                        ) { entry ->
+                            OrganizerProfileScreen(
+                                container = container,
+                                organizerId = entry.arguments?.getString("organizerId").orEmpty(),
+                                onBack = { navController.popBackStack() },
+                                onEventClick = { navController.navigate(AppDestinations.eventDetail(it)) }
                             )
                         }
 

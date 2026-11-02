@@ -33,6 +33,8 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.EventBusy
+import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.Remove
 import androidx.compose.material.icons.outlined.FilterList
 import androidx.compose.material.icons.automirrored.outlined.List
 import androidx.compose.material.icons.outlined.Map
@@ -40,6 +42,7 @@ import androidx.compose.material.icons.outlined.MyLocation
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.TrendingUp
 import androidx.compose.material.icons.automirrored.outlined.TrendingUp
+import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.FilterChip
@@ -75,6 +78,7 @@ import androidx.compose.runtime.setValue
 import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -87,6 +91,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.eventfinder.app.R
 import com.eventfinder.app.di.AppContainer
 import com.eventfinder.app.domain.model.EventSort
+import com.eventfinder.app.domain.model.TimeWindow
 import androidx.compose.foundation.Image
 import androidx.compose.ui.res.painterResource
 import com.eventfinder.app.ui.components.CategoryChips
@@ -96,6 +101,9 @@ import com.eventfinder.app.ui.components.FavoritePngIcon
 import com.eventfinder.app.ui.components.InteractivePngIcon
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.outlined.FavoriteBorder
@@ -165,6 +173,8 @@ fun HomeScreen(
 
     var userLocation by rememberSaveable { mutableStateOf<Location?>(null) }
     var mapViewRef by remember { mutableStateOf<MapView?>(null) }
+    // Showcase map: pin taps select an event; the floating card opens it.
+    var selectedEventId by remember { mutableStateOf<String?>(null) }
     var locationPermissionGranted by remember { mutableStateOf(hasLocationPermission(context)) }
     val scope = rememberCoroutineScope()
 
@@ -283,6 +293,24 @@ fun HomeScreen(
                         )
                     }                },
                 actions = {
+                    // Showcase map screen: quick Map/List switch and the
+                    // Filter Events modal, both as full-colour header PNGs.
+                    IconButton(onClick = viewModel::onToggleMapView) {
+                        Image(
+                            painter = painterResource(
+                                if (state.isMapView) R.drawable.hdr_list else R.drawable.hdr_map
+                            ),
+                            contentDescription = if (state.isMapView) "List view" else "Map view",
+                            modifier = Modifier.size(26.dp)
+                        )
+                    }
+                    IconButton(onClick = { viewModel.onShowFilterSheet(true) }) {
+                        Image(
+                            painter = painterResource(R.drawable.hdr_filters),
+                            contentDescription = "Filter events",
+                            modifier = Modifier.size(26.dp)
+                        )
+                    }
                     ThemeModeToggle(
                         themeMode = themeMode,
                         onSelect = { mode ->
@@ -367,10 +395,52 @@ fun HomeScreen(
                             center = (state.userLat ?: defaultCenter.first) to
                                 (state.userLng ?: defaultCenter.second),
                             userLocation = userLocation,
-                            onEventClick = onEventClick,
+                            onEventSelect = { id -> selectedEventId = id },
                             onMapViewCreated = { mapViewRef = it },
                             modifier = Modifier.fillMaxSize()
                         )
+
+                        val selectedView = state.events
+                            .firstOrNull { it.event.id == selectedEventId }
+                            ?: state.events.firstOrNull()
+
+                        // Showcase zoom controls on the right edge.
+                        Column(
+                            modifier = Modifier
+                                .align(Alignment.CenterEnd)
+                                .padding(end = 16.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            MapCircleButton(
+                                icon = Icons.Outlined.Add,
+                                contentDescription = "Zoom in",
+                                onClick = { mapViewRef?.controller?.zoomIn() }
+                            )
+                            MapCircleButton(
+                                icon = Icons.Outlined.Remove,
+                                contentDescription = "Zoom out",
+                                onClick = { mapViewRef?.controller?.zoomOut() }
+                            )
+                        }
+
+                        // Floating showcase card + View Details, kept clear of
+                        // the locate-me FAB in the bottom-right corner.
+                        selectedView?.let { selected ->
+                            MapEventCard(
+                                view = selected,
+                                onOpen = {
+                                    onEventClick(selected.event.id)
+                                },
+                                onFavoriteToggle = {
+                                    viewModel.toggleFavorite(selected.event.id)
+                                },
+                                modifier = Modifier
+                                    .align(Alignment.BottomCenter)
+                                    .fillMaxWidth()
+                                    .padding(start = 16.dp, end = 84.dp, bottom = 16.dp)
+                            )
+                        }
 
                         // Locate Me button
                         FloatingActionButton(
@@ -443,8 +513,7 @@ fun HomeScreen(
             state = state,
             onDismiss = { viewModel.onShowFilterSheet(false) },
             onSortSelect = viewModel::onSortSelect,
-            onRadiusChange = viewModel::onRadiusSliderChange,
-            onToggleRadius = viewModel::onToggleRadiusFilter
+            onApply = viewModel::applyFilters
         )
     }
 }
@@ -661,6 +730,142 @@ private fun ColumnScope.EventList(
                     }
                 )
             }
+        }
+    }
+}
+
+/**
+ * Showcase floating map card: event photo, title, date • distance, rating and
+ * the favourite heart, with the green *View Details* button beneath it.
+ */
+@Composable
+private fun MapEventCard(
+    view: EventView,
+    onOpen: () -> Unit,
+    onFavoriteToggle: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val event = view.event
+    Column(modifier) {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onOpen),
+            shape = RoundedCornerShape(14.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surface
+            ),
+            elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+        ) {
+            Row(
+                modifier = Modifier.padding(12.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(56.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                ) {
+                    AsyncImage(
+                        model = event.imageUrl,
+                        contentDescription = "${stringResource(R.string.event_image)}: ${event.title}",
+                        placeholder = painterResource(R.drawable.ic_image_placeholder),
+                        error = painterResource(R.drawable.ic_image_placeholder),
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = event.title,
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Spacer(Modifier.height(3.dp))
+                    Text(
+                        text = buildString {
+                            append(DateTimeUtils.formatShortDate(event.startDate))
+                            view.distanceKm?.let { d ->
+                                append(" • ")
+                                append("%.1f km".format(d))
+                            }
+                        },
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    view.averageRating?.let { avg ->
+                        Spacer(Modifier.height(3.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Image(
+                                painter = painterResource(R.drawable.evt_rating),
+                                contentDescription = null,
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Spacer(Modifier.width(4.dp))
+                            Text(
+                                text = if (view.reviewCount > 0) {
+                                    "${"%.1f".format(avg)} (${formatReviewCount(view.reviewCount)})"
+                                } else {
+                                    "%.1f".format(avg)
+                                },
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                    }
+                }
+                FavoritePngIcon(
+                    isFavorite = view.isFavorite,
+                    onToggle = onFavoriteToggle,
+                    size = 26.dp
+                )
+            }
+        }
+        Spacer(Modifier.height(8.dp))
+        Button(
+            onClick = onOpen,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(44.dp),
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Text("View Details  \u2192", fontWeight = FontWeight.Bold)
+        }
+    }
+}
+
+/** "4.8 (2.5k)"-style review counts for the floating card. */
+private fun formatReviewCount(count: Int): String =
+    if (count >= 1000) "%.1fk".format(count / 1000.0) else count.toString()
+
+/** Circular zoom button for the map's right edge (showcase +/− controls). */
+@Composable
+private fun MapCircleButton(
+    icon: ImageVector,
+    contentDescription: String,
+    onClick: () -> Unit
+) {
+    Surface(
+        shape = CircleShape,
+        color = MaterialTheme.colorScheme.surface,
+        shadowElevation = 4.dp
+    ) {
+        Box(
+            modifier = Modifier
+                .size(48.dp)
+                .clickable(onClick = onClick),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = contentDescription,
+                tint = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.size(22.dp)
+            )
         }
     }
 }
@@ -994,20 +1199,165 @@ private fun FeaturedEventCard(
     }
 }
 
-/** Sort / distance filter sheet. */
+/**
+ * Showcase "Filter Events" modal: When? windows, minimum rating, sort chips,
+ * Verified Organiser / Accessible Events / Near Me Now toggles and the
+ * Apply Filters + Clear All actions. Sort chips apply live; the rest are
+ * staged until Apply so "Apply Filters" means what it says.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun FilterSheet(
     state: HomeUiState,
     onDismiss: () -> Unit,
     onSortSelect: (EventSort) -> Unit,
-    onRadiusChange: (Int) -> Unit,
-    onToggleRadius: (Boolean) -> Unit
+    onApply: (TimeWindow, Int, Boolean, Boolean, Boolean, Int) -> Unit
 ) {
+    var window by remember { mutableStateOf(state.timeWindow) }
+    var minRating by remember { mutableStateOf(state.minRating) }
+    var verifiedOnly by remember { mutableStateOf(state.verifiedOnly) }
+    var accessibleOnly by remember { mutableStateOf(state.accessibleOnly) }
+    var nearMe by remember { mutableStateOf(state.radiusFilterEnabled) }
+    var radius by remember { mutableStateOf(state.radiusKm) }
+    var ratingMenuExpanded by remember { mutableStateOf(false) }
+
     ModalBottomSheet(onDismissRequest = onDismiss) {
-        Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp).padding(bottom = 32.dp)) {
-            Text(stringResource(R.string.sort_by), style = MaterialTheme.typography.titleMedium)
-            Spacer(Modifier.height(12.dp))
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp)
+                .padding(bottom = 32.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = "Filter Events",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.ExtraBold,
+                    modifier = Modifier.weight(1f)
+                )
+                Box(
+                    modifier = Modifier
+                        .size(48.dp)
+                        .clickable(onClick = onDismiss),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Image(
+                        painter = painterResource(R.drawable.usr_close),
+                        contentDescription = "Close filters",
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = "When?",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(Modifier.height(8.dp))
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                FilterChip(
+                    selected = window == TimeWindow.ANYTIME,
+                    onClick = { window = TimeWindow.ANYTIME },
+                    label = { Text("Anytime") }
+                )
+                FilterChip(
+                    selected = window == TimeWindow.TODAY,
+                    onClick = { window = TimeWindow.TODAY },
+                    label = { Text("Today") }
+                )
+                FilterChip(
+                    selected = window == TimeWindow.WEEKEND,
+                    onClick = { window = TimeWindow.WEEKEND },
+                    label = { Text("This Weekend") }
+                )
+                FilterChip(
+                    selected = window == TimeWindow.NEXT_WEEK,
+                    onClick = { window = TimeWindow.NEXT_WEEK },
+                    label = { Text("Next Week") }
+                )
+            }
+
+            Spacer(Modifier.height(16.dp))
+            Text(
+                text = "Rating",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(Modifier.height(8.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                repeat(5) { index ->
+                    Image(
+                        painter = painterResource(R.drawable.evt_rating),
+                        contentDescription = null,
+                        modifier = Modifier
+                            .size(18.dp)
+                            .alpha(if (index < minRating) 1f else 0.25f)
+                    )
+                    if (index < 4) Spacer(Modifier.width(3.dp))
+                }
+                Spacer(Modifier.width(12.dp))
+                Box {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(50))
+                            .clickable { ratingMenuExpanded = true }
+                            .padding(horizontal = 8.dp, vertical = 6.dp)
+                    ) {
+                        Text(
+                            text = if (minRating == 0) "Any rating" else "$minRating+ stars",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(Modifier.width(4.dp))
+                        Image(
+                            painter = painterResource(R.drawable.hdr_chevron_down),
+                            contentDescription = null,
+                            modifier = Modifier.size(14.dp)
+                        )
+                    }
+                    DropdownMenu(
+                        expanded = ratingMenuExpanded,
+                        onDismissRequest = { ratingMenuExpanded = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("Any rating") },
+                            onClick = {
+                                minRating = 0
+                                ratingMenuExpanded = false
+                            }
+                        )
+                        for (rating in 2..5) {
+                            DropdownMenuItem(
+                                text = { Text("$rating stars or more") },
+                                onClick = {
+                                    minRating = rating
+                                    ratingMenuExpanded = false
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(16.dp))
+            Text(
+                text = stringResource(R.string.sort_by),
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(Modifier.height(8.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 FilterChip(
                     selected = state.sort == EventSort.DATE,
@@ -1026,27 +1376,72 @@ private fun FilterSheet(
                 )
             }
 
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(16.dp))
+            HorizontalDivider()
+            Spacer(Modifier.height(12.dp))
 
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(stringResource(R.string.events_nearby), style = MaterialTheme.typography.titleMedium)
-                Spacer(Modifier.weight(1f))
-                Switch(
-                    checked = state.radiusFilterEnabled,
-                    onCheckedChange = onToggleRadius
+                Text(
+                    text = "Verified Organiser",
+                    style = MaterialTheme.typography.bodyLarge,
+                    modifier = Modifier.weight(1f)
+                )
+                Switch(checked = verifiedOnly, onCheckedChange = { verifiedOnly = it })
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = "Accessible Events",
+                    style = MaterialTheme.typography.bodyLarge,
+                    modifier = Modifier.weight(1f)
+                )
+                Switch(checked = accessibleOnly, onCheckedChange = { accessibleOnly = it })
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = "Near Me Now",
+                    style = MaterialTheme.typography.bodyLarge,
+                    modifier = Modifier.weight(1f)
+                )
+                Switch(checked = nearMe, onCheckedChange = { nearMe = it })
+            }
+            if (nearMe) {
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    text = stringResource(R.string.radius_value, radius),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.align(Alignment.End)
+                )
+                Slider(
+                    value = radius.toFloat(),
+                    onValueChange = { radius = it.toInt().coerceIn(5, 200) },
+                    valueRange = 5f..200f,
+                    enabled = nearMe
                 )
             }
-            Text(
-                stringResource(R.string.radius_value, state.radiusKm),
-                style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.align(Alignment.End)
-            )
-            Slider(
-                value = state.radiusKm.toFloat(),
-                onValueChange = { onRadiusChange(it.toInt()) },
-                valueRange = 5f..200f,
-                enabled = state.radiusFilterEnabled
-            )
+
+            Spacer(Modifier.height(20.dp))
+            Button(
+                onClick = {
+                    onApply(window, minRating, verifiedOnly, accessibleOnly, nearMe, radius)
+                    onDismiss()
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(50.dp),
+                shape = RoundedCornerShape(14.dp)
+            ) {
+                Text("Apply Filters", fontWeight = FontWeight.Bold)
+            }
+            TextButton(
+                onClick = {
+                    onApply(TimeWindow.ANYTIME, 0, false, false, false, state.radiusKm)
+                    onDismiss()
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Clear All")
+            }
         }
     }
 }

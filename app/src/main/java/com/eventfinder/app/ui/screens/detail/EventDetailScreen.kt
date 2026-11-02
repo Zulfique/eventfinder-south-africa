@@ -1,7 +1,10 @@
 ﻿package com.eventfinder.app.ui.screens.detail
 
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Intent
 import android.net.Uri
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -15,8 +18,13 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -36,6 +44,9 @@ import androidx.compose.material.icons.outlined.QrCodeScanner
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.Star
 import androidx.compose.material.icons.outlined.StarOutline
+import androidx.compose.material.icons.filled.Chat
+import androidx.compose.material.icons.filled.Email
+import androidx.compose.material.icons.filled.Sms
 
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material.icons.outlined.OpenInNew
@@ -53,6 +64,9 @@ import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
@@ -106,7 +120,7 @@ import com.eventfinder.app.ui.components.QrImage
  * Screen 6 (Event Detail): hero image, metadata, RSVP, favourite, share,
  * directions and the Open-Meteo weather card.
  */
-@OptIn(ExperimentalLayoutApi::class)
+@OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun EventDetailScreen(
     container: AppContainer,
@@ -114,7 +128,8 @@ fun EventDetailScreen(
     onBack: () -> Unit,
     onEditEvent: (String) -> Unit = {},
     onPlanWithFriends: (String) -> Unit = {},
-    onOpenScanner: (String) -> Unit = {}
+    onOpenScanner: (String) -> Unit = {},
+    onOrganizerClick: (String) -> Unit = {}
 ) {
     val context = LocalContext.current
     val viewModel: EventDetailViewModel = viewModel(
@@ -126,6 +141,7 @@ fun EventDetailScreen(
     var showOwnerMenu by remember { mutableStateOf(false) }
     var showDeleteDialog by remember { mutableStateOf(false) }
     var showTicketDialog by remember { mutableStateOf(false) }
+    var showShareSheet by remember { mutableStateOf(false) }
 
     BackHandler { onBack() }
 
@@ -420,12 +436,24 @@ fun EventDetailScreen(
                             )
                             Spacer(Modifier.height(8.dp))
 
-                            Row(verticalAlignment = Alignment.CenterVertically) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { onOrganizerClick(event.organizerId) }
+                                    .padding(vertical = 4.dp)
+                            ) {
                                 Image(painter = painterResource(R.drawable.usr_account), contentDescription = "Organizer", modifier = Modifier.size(20.dp))
                                 Spacer(Modifier.size(6.dp))
                                 Text(stringResource(R.string.organizer), style = MaterialTheme.typography.labelMedium)
                                 Spacer(Modifier.size(4.dp))
-                                Text(event.organizerName, style = MaterialTheme.typography.bodyMedium)
+                                Text(event.organizerName, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                                Spacer(Modifier.size(4.dp))
+                                Text(
+                                    stringResource(R.string.view_profile),
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
                             }
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Image(painter = painterResource(R.drawable.evt_attendees), contentDescription = "Attendees", modifier = Modifier.size(20.dp))
@@ -635,14 +663,31 @@ fun EventDetailScreen(
                                 Spacer(Modifier.height(12.dp))
                             }
 
+                            // Showcase primary action: Get Tickets issues the
+                            // QR ticket, RSVPs attending and opens the code.
                             Button(
-                                onClick = { viewModel.setRsvp(RsvpStatus.ATTENDING) },
-                                enabled = view.rsvpStatus != RsvpStatus.ATTENDING,
-                                modifier = Modifier.fillMaxWidth().height(48.dp)
+                                onClick = {
+                                    if (view.rsvpStatus != RsvpStatus.ATTENDING) {
+                                        viewModel.setRsvp(RsvpStatus.ATTENDING)
+                                    }
+                                    viewModel.issueMyTicket()
+                                    showTicketDialog = true
+                                },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(50.dp),
+                                shape = RoundedCornerShape(14.dp)
                             ) {
+                                Icon(
+                                    Icons.Outlined.ConfirmationNumber,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Spacer(Modifier.size(8.dp))
                                 Text(
-                                    if (view.rsvpStatus == RsvpStatus.ATTENDING) stringResource(R.string.attending)
-                                    else stringResource(R.string.attend)
+                                    if (state.myTicket != null) "View My Ticket"
+                                    else stringResource(R.string.get_tickets),
+                                    fontWeight = FontWeight.Bold
                                 )
                             }
                             Spacer(Modifier.height(8.dp))
@@ -733,37 +778,16 @@ fun EventDetailScreen(
                                     Text(stringResource(R.string.directions))
                                 }
                             }
-                             FilledTonalButton(
-                                 onClick = { onPlanWithFriends(event.id) },
-                                 modifier = Modifier.fillMaxWidth().height(44.dp)
-                             ) {
-                                 Image(
-                                     painter = painterResource(R.drawable.evt_attendees),
-                                     contentDescription = "Plan with friends",
-                                     modifier = Modifier.size(20.dp)
-                                 )
-                                 Spacer(Modifier.size(6.dp))
-                                 Text("Plan with Friends")
-                             }
+                             // Showcase Group Planning card: avatar stack,
+                             // going count and the green Invite Friends pill.
+                             val groupPlans by container.groupPlanningRepository
+                                 .observePlansForEvent(event.id)
+                                 .collectAsState(initial = emptyList())
+                             GroupPlanningCard(
+                                 members = groupPlans.firstOrNull()?.members.orEmpty(),
+                                 onInvite = { onPlanWithFriends(event.id) }
+                             )
                              Spacer(Modifier.height(8.dp))
-                             if (view.rsvpStatus == RsvpStatus.ATTENDING || state.myTicket != null) {
-                                 OutlinedButton(
-                                     onClick = {
-                                         viewModel.issueMyTicket()
-                                         showTicketDialog = true
-                                     },
-                                     modifier = Modifier.fillMaxWidth().height(44.dp)
-                                 ) {
-                                     Icon(
-                                         Icons.Outlined.ConfirmationNumber,
-                                         contentDescription = null,
-                                         modifier = Modifier.size(20.dp)
-                                     )
-                                     Spacer(Modifier.size(6.dp))
-                                     Text(stringResource(R.string.my_ticket_title))
-                                 }
-                                 Spacer(Modifier.height(8.dp))
-                             }
                              if (event.isCreatedByUser) {
                                  Button(
                                      onClick = { onOpenScanner(event.id) },
@@ -775,18 +799,8 @@ fun EventDetailScreen(
                                  }
                                  Spacer(Modifier.height(8.dp))
                              }
-                             FilledTonalButton(
-                                 onClick = {
-                                     val send = Intent(Intent.ACTION_SEND).apply {
-                                         type = "text/plain"
-                                         putExtra(
-                                             Intent.EXTRA_TEXT,
-                                             "${event.title}\n${DateTimeUtils.formatFullDateTime(event.startDate)}\n" +
-                                                 "${event.venueName}, ${event.address}\n\nDiscover via EventFinder"
-                                         )
-                                     }
-                                     context.startActivity(Intent.createChooser(send, context.getString(R.string.share)))
-                                 },
+                            FilledTonalButton(
+                                onClick = { showShareSheet = true },
                                  modifier = Modifier.fillMaxWidth().height(44.dp)
                              ) {
                                  Image(
@@ -835,6 +849,213 @@ fun EventDetailScreen(
             }
         }
     }
+
+    // Branded share sheet (showcase3): WhatsApp / Messages / Email /
+    // Copy Link / Nearby shortcuts plus the social row.
+    if (showShareSheet) {
+        val shareEvent = state.eventView?.event
+        if (shareEvent != null) {
+            ShareSheet(
+                shareText = "${shareEvent.title}\n" +
+                    "${DateTimeUtils.formatFullDateTime(shareEvent.startDate)}\n" +
+                    "${shareEvent.venueName}, ${shareEvent.address}\n" +
+                    (shareEvent.sourceUrl?.let { "$it\n" } ?: "") +
+                    "\nDiscover via EventFinder",
+                link = shareEvent.sourceUrl,
+                onDismiss = { showShareSheet = false }
+            )
+        } else {
+            showShareSheet = false
+        }
+    }
+}
+
+/**
+ * Branded share bottom sheet (showcase3): five solid-colour target circles
+ * over a grayscale social-shortcut row. Targets open the matching app when
+ * installed and fall back to the system share chooser otherwise.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ShareSheet(
+    shareText: String,
+    link: String?,
+    onDismiss: () -> Unit
+) {
+    val context = LocalContext.current
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    fun sendTo(packageName: String?, type: String = "text/plain") {
+        val build = Intent(Intent.ACTION_SEND).apply {
+            this.type = type
+            putExtra(Intent.EXTRA_TEXT, shareText)
+            if (packageName != null) setPackage(packageName)
+        }
+        val target = if (packageName == null ||
+            build.resolveActivity(context.packageManager) != null
+        ) {
+            build
+        } else {
+            Intent(Intent.ACTION_SEND).apply {
+                this.type = "text/plain"
+                putExtra(Intent.EXTRA_TEXT, shareText)
+            }
+        }
+        context.startActivity(Intent.createChooser(target, null))
+    }
+
+    fun copyLink() {
+        val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE)
+            as ClipboardManager
+        clipboard.setPrimaryClip(
+            ClipData.newPlainText("link", link ?: shareText)
+        )
+        Toast.makeText(context, context.getString(R.string.link_copied), Toast.LENGTH_SHORT)
+            .show()
+    }
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        containerColor = MaterialTheme.colorScheme.surface
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 32.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                text = stringResource(R.string.share_with_friends),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(Modifier.height(20.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceEvenly
+            ) {
+                ShareTarget(
+                    label = "WhatsApp",
+                    color = Color(0xFF25D366),
+                    icon = Icons.Filled.Chat
+                ) { sendTo("com.whatsapp") }
+                ShareTarget(
+                    label = "Messages",
+                    color = Color(0xFF3DDC84),
+                    icon = Icons.Filled.Sms
+                ) { sendTo("com.google.android.apps.messaging") }
+                ShareTarget(
+                    label = "Email",
+                    color = Color(0xFF1A73E8),
+                    icon = Icons.Filled.Email
+                ) { sendTo(null, type = "message/rfc822") }
+                ShareTarget(
+                    label = "Copy Link",
+                    color = Color(0xFF7C4DFF),
+                    icon = Icons.Outlined.ContentCopy
+                ) { copyLink() }
+                ShareTarget(
+                    label = "Nearby",
+                    color = Color(0xFF4285F4),
+                    icon = Icons.Outlined.Share
+                ) { sendTo(null) }
+            }
+
+            Spacer(Modifier.height(20.dp))
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .height(1.dp)
+                    .background(MaterialTheme.colorScheme.outlineVariant)
+            )
+            Spacer(Modifier.height(16.dp))
+
+            // Grayscale social shortcuts row (showcase3).
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceEvenly
+            ) {
+                SocialShortcut("f") { sendTo("com.facebook.katana") }
+                SocialShortcut("X") { sendTo("com.twitter.android") }
+                SocialShortcut("in") { sendTo("com.linkedin.android") }
+                SocialShortcut("P") { sendTo("com.pinterest") }
+                SocialShortcut("IG") { sendTo("com.instagram.android") }
+                SocialShortcut("TT") { sendTo("com.zhiliaoapp.musically") }
+            }
+        }
+    }
+}
+
+/** One solid-colour share target circle with its label. */
+@Composable
+private fun ShareTarget(
+    label: String,
+    color: Color,
+    icon: ImageVector,
+    onClick: () -> Unit
+) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier
+            .clickable(onClick = onClick)
+            .padding(4.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(56.dp)
+                .background(color, CircleShape),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = label,
+                tint = Color.White,
+                modifier = Modifier.size(26.dp)
+            )
+        }
+        Spacer(Modifier.height(6.dp))
+        Text(
+            text = label,
+            fontSize = 11.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+/** One grayscale social shortcut circle (monogram) with its label. */
+@Composable
+private fun SocialShortcut(
+    monogram: String,
+    onClick: () -> Unit
+) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier
+            .clickable(onClick = onClick)
+            .padding(4.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(44.dp)
+                .background(MaterialTheme.colorScheme.surfaceVariant, CircleShape),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = monogram,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        Spacer(Modifier.height(4.dp))
+        Text(
+            text = monogram,
+            fontSize = 10.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
 }
 
 /** Weather card populated from the free Open-Meteo API. */
@@ -878,6 +1099,116 @@ private fun WeatherCard(state: EventDetailUiState) {
                         color = MaterialTheme.colorScheme.onPrimaryContainer
                     )
                 }
+            }
+        }
+    }
+}
+
+/**
+ * Showcase "Going together?" card: overlapping attendee avatars (or a
+ * friendly ghost avatar before anyone joins), the going count, and the green
+ * Invite Friends pill that opens the full Group Planning screen.
+ */
+@Composable
+private fun GroupPlanningCard(
+    members: Set<String>,
+    onInvite: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(14.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant
+        )
+    ) {
+        Row(
+            modifier = Modifier.padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(modifier = Modifier.width(96.dp)) {
+                val shown = members.take(3)
+                if (shown.isEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .size(34.dp)
+                            .clip(CircleShape)
+                            .background(Color(0xFFF1F3F5)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Image(
+                            painter = painterResource(R.drawable.usr_account),
+                            contentDescription = null,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
+                shown.forEachIndexed { index, _ ->
+                    Box(
+                        modifier = Modifier
+                            .offset(x = (index * 22).dp)
+                            .size(34.dp)
+                            .clip(CircleShape)
+                            .background(Color(0xFFF1F3F5))
+                            .border(2.dp, MaterialTheme.colorScheme.surfaceVariant, CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Image(
+                            painter = painterResource(R.drawable.usr_account),
+                            contentDescription = null,
+                            modifier = Modifier.size(19.dp)
+                        )
+                    }
+                }
+                if (members.size > 3) {
+                    Box(
+                        modifier = Modifier
+                            .offset(x = (3 * 22).dp)
+                            .size(34.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.primary),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "+${members.size - 3}",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onPrimary
+                        )
+                    }
+                }
+            }
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "Going together?",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    text = if (members.isEmpty()) "Bring your crew along"
+                    else "${members.size} going",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Button(
+                onClick = onInvite,
+                modifier = Modifier.height(38.dp),
+                contentPadding = PaddingValues(horizontal = 14.dp),
+                shape = RoundedCornerShape(50)
+            ) {
+                Image(
+                    painter = painterResource(R.drawable.evt_attendees),
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp)
+                )
+                Spacer(Modifier.size(6.dp))
+                Text(
+                    text = "Invite Friends",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold
+                )
             }
         }
     }

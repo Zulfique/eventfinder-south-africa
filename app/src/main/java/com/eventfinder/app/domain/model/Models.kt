@@ -15,6 +15,9 @@ enum class RsvpStatus(val storage: String) {
 /** Sorting options exposed on the Home filter sheet. */
 enum class EventSort { DATE, DISTANCE, NAME, ACCESSIBILITY, TRENDING }
 
+/** Time-window choices in the Filter Events modal (showcase "When?"). */
+enum class TimeWindow { ANYTIME, TODAY, WEEKEND, NEXT_WEEK }
+
 /**
  * Domain model for an event. All events in the local Room catalogue share
  * this model — seed/demo events, user-created events, and externally-
