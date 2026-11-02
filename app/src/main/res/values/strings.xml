@@ -69,6 +69,7 @@
     <string name="discover_events">Discover Events</string>
     <string name="search_placeholder">Search events…</string>
     <string name="all_categories">All</string>
+    <string name="cat_other">Other</string>
     <string name="cat_music">Music</string>
     <string name="cat_sports">Sports</string>
     <string name="cat_food">Food</string>
@@ -366,4 +367,5 @@
   <string name="discard_draft">Discard draft</string>
   <string name="review_verified">Verified attendee</string>
   <string name="review_photo">Review photo</string>
+  <string name="ticket_ready_for">Your ticket for %1$s is ready</string>
 </resources>

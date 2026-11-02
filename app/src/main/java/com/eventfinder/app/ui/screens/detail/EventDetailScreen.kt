@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -86,6 +87,7 @@ import com.eventfinder.app.data.repository.describeWeatherCode
 import com.eventfinder.app.di.AppContainer
 import com.eventfinder.app.domain.model.RsvpStatus
 import com.eventfinder.app.ui.components.categoryLabel
+import com.eventfinder.app.domain.model.EventCategory
 import com.eventfinder.app.ui.components.FavoritePngIcon
 import com.eventfinder.app.ui.components.InteractivePngIcon
 import com.eventfinder.app.ui.components.resolve
@@ -290,6 +292,11 @@ fun EventDetailScreen(
                                         )
                                         Spacer(Modifier.height(4.dp))
                                         Text(
+                                            stringResource(R.string.ticket_ready_for, event.title),
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                        Text(
                                             stringResource(
                                                 if (ticket.checkedInAt != null) R.string.ticket_checked_in
                                                 else R.string.ticket_show_at_gate
@@ -330,7 +337,10 @@ fun EventDetailScreen(
                             )
                             Spacer(Modifier.height(6.dp))
                             Text(
-                                stringResource(categoryLabel(event.category)),
+                                stringResource(
+                                    if (event.category == EventCategory.OTHER) R.string.cat_other
+                                    else categoryLabel(event.category)
+                                ),
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSecondaryContainer,
                                 modifier = Modifier
@@ -543,6 +553,26 @@ fun EventDetailScreen(
                                         Card(modifier = Modifier.fillMaxWidth()) {
                                             Column(Modifier.padding(12.dp)) {
                                                 Row(verticalAlignment = Alignment.CenterVertically) {
+                                                    Box(
+                                                        modifier = Modifier
+                                                            .size(30.dp)
+                                                            .clip(CircleShape)
+                                                            .background(MaterialTheme.colorScheme.secondaryContainer),
+                                                        contentAlignment = Alignment.Center
+                                                    ) {
+                                                        Text(
+                                                            text = review.authorName
+                                                                .trim()
+                                                                .split(' ')
+                                                                .mapNotNull { it.firstOrNull()?.uppercaseChar() }
+                                                                .take(2)
+                                                                .joinToString(""),
+                                                            style = MaterialTheme.typography.labelMedium,
+                                                            fontWeight = FontWeight.Bold,
+                                                            color = MaterialTheme.colorScheme.onSecondaryContainer
+                                                        )
+                                                    }
+                                                    Spacer(Modifier.width(8.dp))
                                                     Row {
                                                         repeat(5) { index ->
                                                             Image(

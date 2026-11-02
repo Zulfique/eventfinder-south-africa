@@ -118,10 +118,12 @@ class IcsEventSource(
             }
 
             val uid = props["UID"]?.trim() ?: continue
-            val summary = props["SUMMARY"]?.trim() ?: continue
-            val description = props["DESCRIPTION"]?.trim()?.take(2000) ?: ""
-            val location = props["LOCATION"]?.trim() ?: ""
-            val categories = props["CATEGORIES"]?.trim() ?: ""
+            // RFC 5545 text escaping: feeds write "CERES\, WC" and "FESTIVAL\; MUSIC"
+            // literally, and un-unescaped text leaks backslashes into the UI.
+            val summary = unescapeIcsText(props["SUMMARY"]?.trim()) ?: continue
+            val description = unescapeIcsText(props["DESCRIPTION"]?.trim())?.take(2000) ?: ""
+            val location = unescapeIcsText(props["LOCATION"]?.trim()) ?: ""
+            val categories = unescapeIcsText(props["CATEGORIES"]?.trim()) ?: ""
             val urlProp = props["URL"]?.trim()
 
             val dtStartRaw = props["DTSTART"]?.trim() ?: continue
@@ -147,6 +149,7 @@ class IcsEventSource(
 
             val venueName = location.ifBlank { summary }
             val address = location
+
             val duration = if (endDate != null && endDate > startDate) endDate - startDate else 3 * 60 * 60 * 1000L
 
             if (rrule != null) {
@@ -345,6 +348,20 @@ class IcsEventSource(
             }
         }
         return params
+    }
+
+    /**
+     * Decodes RFC 5545 TEXT escapes (`\n`, `\N`, `\,`, `\;`, `\\`) so stored
+     * titles, venues and addresses never surface raw backslashes in the UI
+     * ("CERES\, WC" must display as "CERES, WC").
+     */
+    private fun unescapeIcsText(raw: String?): String? = raw?.replace(
+        Regex("""\\([\\,;nN])""")
+    ) { match ->
+        when (val ch = match.groupValues[1]) {
+            "n", "N" -> "\n"
+            else -> ch
+        }
     }
 
     private fun parseIcsDateFlexible(raw: String, params: Map<String, String> = emptyMap()): Long? {

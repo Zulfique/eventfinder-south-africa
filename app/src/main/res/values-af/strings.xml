@@ -69,6 +69,7 @@
     <string name="discover_events">Ontdek Gebeurtenisse</string>
     <string name="search_placeholder">Soek gebeurtenisse…</string>
     <string name="all_categories">Alles</string>
+    <string name="cat_other">Ander</string>
     <string name="cat_music">Musiek</string>
     <string name="cat_sports">Sport</string>
     <string name="cat_food">Kos</string>
@@ -357,4 +358,5 @@
   <string name="discard_draft">Verwerp konsep</string>
   <string name="review_verified">Geverifieerde bywoner</string>
   <string name="review_photo">Resensiefoto</string>
+  <string name="ticket_ready_for">Jou kaartjie vir %1$s is gereed</string>
 </resources>

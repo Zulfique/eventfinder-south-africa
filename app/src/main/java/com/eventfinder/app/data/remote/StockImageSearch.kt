@@ -38,28 +38,39 @@ class StockImageSearch(
     private val cache = ConcurrentHashMap<String, StockImage>()
     private val misses = ConcurrentHashMap.newKeySet<String>()
 
-    /** Returns a stock image matching [query], or null when both tiers fail. */
-    suspend fun findImage(query: String): StockImage? {
+    /**
+     * Returns a stock image matching [query], or null when both tiers fail.
+     *
+     * [topics] are the event's subject keywords ("motorcycle", "race", ...):
+     * a hit whose description/tags mention none of them is off-topic — a Mars
+     * rover photo for a motorcycle event, a hotel bedroom for a car
+     * championship — so it is skipped in favour of the next hit, and finally
+     * of the app's branded category artwork. An empty [topics] (unrecognised
+     * category) accepts the first usable hit.
+     */
+    suspend fun findImage(query: String, topics: Collection<String> = emptyList()): StockImage? {
         if (httpClient == null) return null
-        val key = query.trim().lowercase()
-        if (key.isBlank()) return null
+        val trimmed = query.trim().lowercase()
+        if (trimmed.isBlank()) return null
+        val key = if (topics.isEmpty()) trimmed
+        else "$trimmed|${topics.map { it.lowercase() }.sorted().joinToString(",")}" 
 
         cache[key]?.let { return it }
         if (misses.contains(key)) return null
 
         val found = try {
             withContext(Dispatchers.IO) {
-                searchUnsplash(key) ?: searchPixabay(key)
+                searchUnsplash(trimmed, topics) ?: searchPixabay(trimmed, topics)
             }
         } catch (t: Exception) {
             // Never let artwork lookup break the event sync around it.
-            AppLogger.w(TAG, "Stock image search failed for '$key': ${t.message}")
+            AppLogger.w(TAG, "Stock image search failed for '$trimmed': ${t.message}")
             null
         }
 
         if (found != null) {
             cache[key] = found
-            AppLogger.i(TAG, "Stock image for '$key' -> ${found.credit}")
+            AppLogger.i(TAG, "Stock image for '$trimmed' -> ${found.credit}")
             return found
         }
         misses.add(key)
@@ -68,7 +79,7 @@ class StockImageSearch(
 
     // ---- Tier 4: Unsplash -------------------------------------------------
 
-    private fun searchUnsplash(query: String): StockImage? {
+    private fun searchUnsplash(query: String, topics: Collection<String>): StockImage? {
         val key = unsplashAccessKey?.trim().orEmpty()
         if (key.isBlank()) return null
 
@@ -76,7 +87,9 @@ class StockImageSearch(
             .addQueryParameter("query", query)
             .addQueryParameter("orientation", "landscape")
             .addQueryParameter("content_filter", "high")
-            .addQueryParameter("count", "1")
+            // Several candidates per request so one off-topic photo does not
+            // waste the whole lookup (requests, not photos, hit the quota).
+            .addQueryParameter("count", "4")
             .build()
             .toString()
 
@@ -93,39 +106,74 @@ class StockImageSearch(
                 return null
             }
             val body = response.body?.string() ?: return null
-            return parseUnsplash(body)
+            return parseUnsplash(body, topics)
         }
     }
 
-    /** Parses an Unsplash `/photos/random` response. */
-    internal fun parseUnsplash(json: String): StockImage? {
+    /** Parses an Unsplash `/photos/random` response, skipping off-topic hits. */
+    internal fun parseUnsplash(json: String, topics: Collection<String> = emptyList()): StockImage? {
         return try {
-            val root = JsonParser.parseString(json).asJsonObject
-            val photo = when {
-                root.has("results") && root.get("results").isJsonArray ->
-                    root.getAsJsonArray("results").firstOrNull()?.asJsonObject
-                else -> root
-            } ?: return null
+            // /photos/random answers a JSON *array* (that shape broke the old
+            // object-only parser and silently dropped every valid photo), while
+            // /search/photos answers {results:[...]}.
+            val element = JsonParser.parseString(json)
+            val photos = when {
+                element.isJsonArray ->
+                    element.asJsonArray.mapNotNull { runCatching { it.asJsonObject }.getOrNull() }
+                element.isJsonObject -> {
+                    val obj = element.asJsonObject
+                    if (obj.has("results") && obj.get("results").isJsonArray) {
+                        obj.getAsJsonArray("results")
+                            .mapNotNull { runCatching { it.asJsonObject }.getOrNull() }
+                    } else listOf(obj)
+                }
+                else -> emptyList()
+            }
 
-            val url = photo.getAsJsonObject("urls")?.get("regular")?.asString
-                ?: photo.getAsJsonObject("urls")?.get("raw")?.asString
-                ?: return null
-            val author = photo.getAsJsonObject("user")?.get("name")?.asString.orEmpty()
-            val page = photo.getAsJsonObject("links")?.get("html")?.asString.orEmpty()
-
-            StockImage(
-                url = url.substringBefore('?') + "?w=1200&q=80&fm=jpg",
-                credit = buildCredit(author, "Unsplash", page)
-            )
+            photos.firstNotNullOfOrNull { photo -> unsplashImage(photo, topics) }
         } catch (t: Exception) {
             AppLogger.d(TAG, "Could not parse Unsplash response: ${t.message}")
             null
         }
     }
 
+    /** Builds an image from one Unsplash photo, or null when off-topic. */
+    private fun unsplashImage(
+        photo: com.google.gson.JsonObject,
+        topics: Collection<String>
+    ): StockImage? {
+        val url = photo.getAsJsonObject("urls")?.get("regular")?.asString
+            ?: photo.getAsJsonObject("urls")?.get("raw")?.asString
+            ?: return null
+        if (!isRelevant(unsplashText(photo), topics)) return null
+        val author = photo.getAsJsonObject("user")?.get("name")?.asString.orEmpty()
+        val page = photo.getAsJsonObject("links")?.get("html")?.asString.orEmpty()
+
+        return StockImage(
+            url = url.substringBefore('?') + "?w=1200&q=80&fm=jpg",
+            credit = buildCredit(author, "Unsplash", page)
+        )
+    }
+
+    /** The searchable prose Unsplash publishes about a photo. */
+    private fun unsplashText(photo: com.google.gson.JsonObject): String = buildString {
+        for (field in listOf("description", "alt_description")) {
+            photo.get(field)
+                ?.takeIf { it.isJsonPrimitive }
+                ?.asString
+                ?.takeIf { it.isNotBlank() }
+                ?.let { append(it).append(' ') }
+        }
+        photo.getAsJsonArray("tags")?.forEach { tag ->
+            val title = (tag as? com.google.gson.JsonObject)?.get("title")
+                ?.takeIf { it.isJsonPrimitive }?.asString
+            if (!title.isNullOrBlank()) append(title).append(' ')
+        }
+    }
+
     // ---- Tier 5: Pixabay --------------------------------------------------
 
-    private fun searchPixabay(query: String): StockImage? {
+    private fun searchPixabay(query: String, topics: Collection<String>): StockImage? {
         val key = pixabayKey?.trim().orEmpty()
         if (key.isBlank()) return null
 
@@ -152,18 +200,23 @@ class StockImageSearch(
                 return null
             }
             val body = response.body?.string() ?: return null
-            return parsePixabay(body)
+            return parsePixabay(body, topics)
         }
     }
 
-    /** Parses a Pixabay `/api/` response, preferring landscape hits >=1280px. */
-    internal fun parsePixabay(json: String): StockImage? {
+    /**
+     * Parses a Pixabay `/api/` response: only hits whose comma-separated
+     * `tags` match the event's [topics] qualify, and among those landscape
+     * hits >=1280px are preferred.
+     */
+    internal fun parsePixabay(json: String, topics: Collection<String> = emptyList()): StockImage? {
         return try {
             val root = JsonParser.parseString(json).asJsonObject
             val hits = root.getAsJsonArray("hits") ?: return null
-            val hit = hits.mapNotNull { runCatching { it.asJsonObject }.getOrNull() }
-                .firstOrNull { (it.get("imageWidth")?.asInt ?: 0) >= 1280 }
-                ?: hits.firstOrNull()?.asJsonObject
+            val candidates = hits.mapNotNull { runCatching { it.asJsonObject }.getOrNull() }
+                .filter { isRelevant(it.get("tags")?.asString, topics) }
+            val hit = candidates.firstOrNull { (it.get("imageWidth")?.asInt ?: 0) >= 1280 }
+                ?: candidates.firstOrNull()
                 ?: return null
 
             val url = hit.get("largeImageURL")?.asString
@@ -176,6 +229,23 @@ class StockImageSearch(
         } catch (t: Exception) {
             AppLogger.d(TAG, "Could not parse Pixabay response: ${t.message}")
             null
+        }
+    }
+
+    /**
+     * Topical relevance gate: does any of [topics] appear in [text] as a
+     * word-start ("motorcycle" matches "Motorcycles racing", "car" does not
+     * match "scarecrow")? Empty topics — an unrecognised category where no
+     * judgement is possible — accept everything; blank text has nothing to
+     * disprove either, so only a *mismatching* description rejects a hit.
+     */
+    internal fun isRelevant(text: String?, topics: Collection<String>): Boolean {
+        if (topics.isEmpty()) return true
+        val hay = text?.lowercase().orEmpty()
+        if (hay.isBlank()) return true
+        return topics.any { topic ->
+            val t = topic.trim().lowercase()
+            t.isNotEmpty() && Regex("""\b${Regex.escape(t)}""").containsMatchIn(hay)
         }
     }
 

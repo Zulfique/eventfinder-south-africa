@@ -19,7 +19,9 @@ import com.eventfinder.app.domain.model.EventAlertDetector.detect
 import com.eventfinder.app.notifications.NotificationHelper
 import com.eventfinder.app.ui.components.UiMessage
 import com.eventfinder.app.utils.AppLogger
+import com.eventfinder.app.utils.DistanceCalculator
 import com.eventfinder.app.utils.LocationUtils
+import com.eventfinder.app.utils.SouthAfricanPlaces
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -29,6 +31,9 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.time.DayOfWeek
+import java.time.Instant
+import java.time.ZoneId
 
 @Suppress("unused")
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -46,7 +51,10 @@ data class HomeUiState(
     val userLng: Double? = null,
     val isMapView: Boolean = false,
     val showFilterSheet: Boolean = false,
-    val cityLabel: String = "South Africa"
+    /** Header location pill: "<City>, ZA" — defaults to the national centre (Cape Town). */
+    val cityLabel: String = "${SouthAfricanPlaces.nationalDefault.name}, ZA",
+    /** Smart Discovery "Trending This Weekend" card is active. */
+    val weekendOnly: Boolean = false
 )
 
 /**
@@ -78,6 +86,7 @@ class HomeViewModel(
     private val radiusFlow = MutableStateFlow(50)
     private val radiusEnabledFlow = MutableStateFlow(false)
     private val locationFlow = MutableStateFlow<Pair<Double, Double>?>(null)
+    private val weekendFlow = MutableStateFlow(false)
 
     /** True while an explicit city from the header selector overrides the GPS fix. */
     private var manualCityActive = false
@@ -94,7 +103,8 @@ class HomeViewModel(
         val sort: EventSort,
         val radiusKm: Int,
         val radiusEnabled: Boolean,
-        val location: Pair<Double, Double>?
+        val location: Pair<Double, Double>?,
+        val weekendOnly: Boolean
     )
 
     init {
@@ -138,8 +148,8 @@ class HomeViewModel(
         val rangeControlsFlow = combine(radiusFlow, radiusEnabledFlow, locationFlow) { radius, enabled, location ->
             Triple(radius, enabled, location)
         }
-        val controlsFlow = combine(textControlsFlow, rangeControlsFlow) { text, range ->
-            Controls(text.first, text.second, text.third, range.first, range.second, range.third)
+        val controlsFlow = combine(textControlsFlow, rangeControlsFlow, weekendFlow) { text, range, weekend ->
+            Controls(text.first, text.second, text.third, range.first, range.second, range.third, weekend)
         }
 
         viewModelScope.launch {
@@ -196,8 +206,15 @@ class HomeViewModel(
                 event.endDate > now
             }
 
+        // Smart Discovery: "Trending This Weekend" narrows to the upcoming
+        // Saturday-Sunday window (inclusive of today when it is a weekend day).
+        val inScope = if (c.weekendOnly) {
+            val weekend = upcomingWeekendWindow(now)
+            upcomingEvents.filter { it.startDate in weekend }
+        } else upcomingEvents
+
         val filtered = EventFilterer.filter(
-            events = upcomingEvents,
+            events = inScope,
             query = c.query.ifBlank { null },
             category = c.category,
             userLat = userLat,
@@ -245,6 +262,50 @@ class HomeViewModel(
         AppLogger.d("HomeViewModel", "Map view toggled -> ${_uiState.value.isMapView}")
     }
 
+    /**
+     * Smart Discovery "Near Me Now": nearest events first with the radius
+     * filter on, using the best available fix (saved city or device GPS).
+     */
+    fun onNearMeNow() {
+        manualLocation()
+        onSortSelect(EventSort.DISTANCE)
+        onToggleRadiusFilter(true)
+        AppLogger.i("HomeViewModel", "Smart Discovery -> Near Me Now")
+    }
+
+    /** Smart Discovery "Trending This Weekend": toggle the weekend window. */
+    fun onTrendingWeekend() {
+        val enabled = !weekendFlow.value
+        weekendFlow.value = enabled
+        _uiState.update { it.copy(weekendOnly = enabled) }
+        if (enabled) onSortSelect(EventSort.TRENDING)
+        AppLogger.i("HomeViewModel", "Smart Discovery -> Trending This Weekend: $enabled")
+    }
+
+    /** The upcoming Saturday-Sunday window (this weekend when today is Sat/Sun). */
+    internal fun upcomingWeekendWindow(now: Long): LongRange {
+        val tz = ZoneId.systemDefault()
+        val today = Instant.ofEpochMilli(now).atZone(tz).toLocalDate()
+        val saturdayOffset: Long = when (today.dayOfWeek) {
+            DayOfWeek.SATURDAY -> 0L
+            DayOfWeek.SUNDAY -> -1L // still this weekend
+            else -> (DayOfWeek.SATURDAY.value - today.dayOfWeek.value).toLong()
+        }
+        val saturday = today.plusDays(saturdayOffset)
+        val sunday = saturday.plusDays(1)
+        val start = saturday.atStartOfDay(tz).toInstant().toEpochMilli()
+        val end = sunday.atTime(23, 59, 59).atZone(tz).toInstant().toEpochMilli()
+        return start..end
+    }
+
+    /** Nearest known SA city for a fix — keeps the header pill in "<City>, ZA" form. */
+    private fun nearestCityLabel(lat: Double, lng: Double): String {
+        val nearest = SouthAfricanPlaces.all.minByOrNull {
+            DistanceCalculator.between(lat, lng, it.latitude, it.longitude)
+        } ?: return "South Africa"
+        return "${nearest.name}, ZA"
+    }
+
     fun onShowFilterSheet(show: Boolean) {
         _uiState.value = _uiState.value.copy(showFilterSheet = show)
     }
@@ -254,7 +315,8 @@ class HomeViewModel(
         locationFlow.value = lat to lng
         _uiState.value = _uiState.value.copy(
             userLat = lat,
-            userLng = lng
+            userLng = lng,
+            cityLabel = nearestCityLabel(lat, lng)
         )
         AppLogger.i("HomeViewModel", "User location set ($lat, $lng)")
     }
@@ -288,10 +350,16 @@ class HomeViewModel(
         viewModelScope.launch {
             preferences.setSelectedCity(null)
             manualCityActive = false
-            _uiState.update { it.copy(cityLabel = "South Africa") }
-            LocationUtils.lastKnown(appContext)?.let { (lat, lng) ->
+            val fix = LocationUtils.lastKnown(appContext)
+            _uiState.update {
+                it.copy(
+                    cityLabel = fix?.let { (lat, lng) -> nearestCityLabel(lat, lng) }
+                        ?: "${SouthAfricanPlaces.nationalDefault.name}, ZA"
+                )
+            }
+            fix?.let { (lat, lng) ->
                 locationFlow.value = lat to lng
-                _uiState.update { it.copy(userLat = lat, userLng = lng) }
+                _uiState.update { state -> state.copy(userLat = lat, userLng = lng) }
             }
         }
     }

@@ -2,6 +2,8 @@ package com.eventfinder.app.data.remote
 
 import android.net.Uri
 import com.eventfinder.app.data.remote.model.RemoteEvent
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
 
@@ -26,7 +28,15 @@ class EventImageResolver(
     private val stock: StockImageSearch? = null
 ) {
 
-    suspend fun resolve(event: RemoteEvent): RemoteEvent {
+    /**
+     * Runs the whole chain on [Dispatchers.IO]: callers include
+     * HomeViewModel's main-dispatcher scope and tier 2 is a synchronous OkHttp
+     * fetch, so without this the scrape blocks the UI thread.
+     */
+    suspend fun resolve(event: RemoteEvent): RemoteEvent =
+        withContext(Dispatchers.IO) { resolveInternal(event) }
+
+    private suspend fun resolveInternal(event: RemoteEvent): RemoteEvent {
         // 1. The organiser's own cover wins outright.
         if (!event.imageUrl.isNullOrBlank()) return event
 
@@ -54,10 +64,11 @@ class EventImageResolver(
             }.getOrNull()
         }
 
-        // 4-5. Unsplash, then Pixabay stock photography.
+        // 4-5. Unsplash, then Pixabay stock photography — always constrained to
+        // the event's subject so a "cars" event never gets a hotel bedroom.
         if (resolved == null) {
             resolved = runCatching {
-                stock?.findImage(stockQuery(event))?.url
+                stock?.findImage(stockQuery(event), stockTopics(event.category))?.url
             }.getOrNull()
         }
 
@@ -73,18 +84,101 @@ class EventImageResolver(
             .ifBlank { "South Africa" }
     }
 
-    /** "<category> event <city> south africa" — readable by both stock APIs. */
-    private fun stockQuery(event: RemoteEvent): String {
-        val city = event.address.split(',')
-            .map { it.trim() }
-            .lastOrNull { it.isNotBlank() && !it.equals("South Africa", ignoreCase = true) }
-            ?: "South Africa"
-        val category = event.category.trim()
-            .replace('_', ' ')
-            .replace('-', ' ')
+    /** "<category> event <city>" — readable by both stock APIs. */
+    internal fun stockQuery(event: RemoteEvent): String {
+        // Feeds sometimes pack several interests into one category field
+        // ("cars,karting,motorcycles"); stock engines read the leading subject
+        // best, so keep only the first token.
+        val category = event.category.split(',')
+            .map { it.trim().replace('_', ' ').replace('-', ' ') }
+            .firstOrNull { it.isNotBlank() }
+            .orEmpty()
+        val city = stockCity(event)
         return listOf(category, "event", city)
             .filter { it.isNotBlank() }
             .joinToString(" ")
+    }
+
+    /**
+     * The town the query should be scoped to. Feed addresses often carry only
+     * a venue ("Thaba Echo Hotel, South Africa") or venue club names ("Rover
+     * Motorcycle Club"); stock engines read those as subjects and return
+     * hotel bedrooms or Mars rovers, so such segments are dropped along with
+     * province codes, "TBA" placeholders and the country itself.
+     */
+    private fun stockCity(event: RemoteEvent): String {
+        return event.address.split(',')
+            .map { it.trim().trimEnd('\\', '\'').trim('.', '-', '…', ' ').trim() }
+            .filter {
+                val lower = it.lowercase()
+                val upper = it.uppercase()
+                it.isNotBlank() &&
+                    !it.equals("South Africa", ignoreCase = true) &&
+                    upper !in PROVINCE_CODES &&
+                    !lower.startsWith("tba") &&
+                    !lower.startsWith("tbc") &&
+                    lower.split(' ').none { word -> word in VENUE_WORDS }
+            }
+            .lastOrNull()
+            ?: "South Africa"
+    }
+
+    /**
+     * Subject keywords the stock tiers must see in a hit's description/tags
+     * before it may become the event's cover. Categories with no recognised
+     * subject yield an empty set — relevance then cannot be judged, so the
+     * first usable hit stands.
+     */
+    internal fun stockTopics(category: String): Set<String> {
+        val c = category.lowercase()
+        return when {
+            listOf("motorcycl", "biker").any { c.contains(it) } -> setOf(
+                "motorcycle", "motorbike", "motocross", "moto", "rider", "helmet", "enduro", "bike"
+            )
+            listOf("kart", "rally", "race", "racing", "enduro", "motorsport", "drift", "car", "offroad", "off-road").any { c.contains(it) } -> setOf(
+                "car", "race", "racing", "rally", "circuit", "track", "kart", "motorsport", "vehicle", "auto", "drift"
+            )
+            listOf("music", "concert", "jazz", "band", " dj", "gig", "choir", "orchestra").any { c.contains(it) } -> setOf(
+                "music", "concert", "band", "stage", "musician", "singer", "crowd", "performance", "guitar", "microphone", "dj", "choir"
+            )
+            listOf("food", "wine", "braai", "culinary", "beer", "dining", "taste", "restaurant").any { c.contains(it) } -> setOf(
+                "food", "wine", "dining", "restaurant", "culinary", "cuisine", "dish", "meal", "cooking", "beer", "kitchen", "paella"
+            )
+            listOf("marathon", "rugby", "football", "cricket", "sport", "athletic", "cycling", "cycle").any { c.contains(it) } -> setOf(
+                "sport", "runner", "runners", "marathon", "football", "rugby", "cricket", "athlete", "cycling", "cyclist", "match", "stadium"
+            )
+            listOf("conference", "business", "network", "expo", "tech", "hackathon", "seminar").any { c.contains(it) } -> setOf(
+                "conference", "business", "speaker", "audience", "presentation", "office", "meeting", "expo", "technology"
+            )
+            listOf("theatre", "theater", "comedy", "stand-up", "opera", "ballet", "play ").any { c.contains(it) } -> setOf(
+                "theatre", "theater", "stage", "performance", "actor", "curtain", "comedy", "opera", "ballet"
+            )
+            listOf("market", "craft", "flea", "stall").any { c.contains(it) } -> setOf(
+                "market", "stall", "craft", "vendor", "bazaar", "marketplace"
+            )
+            listOf("art", "gallery", "exhibition", "museum", "painting").any { c.contains(it) } -> setOf(
+                "art", "gallery", "exhibition", "painting", "artist", "museum", "canvas", "sculpture"
+            )
+            listOf("festival").any { c.contains(it) } -> setOf(
+                "festival", "crowd", "stage", "celebration", "outdoor", "concert", "food"
+            )
+            else -> emptySet()
+        }
+    }
+
+    private companion object {
+        /** Province names/codes feeds append to addresses; never useful as a city. */
+        private val PROVINCE_CODES = setOf(
+            "GP", "GAUTENG", "WC", "WESTERN CAPE", "KZN", "KWAZULU-NATAL",
+            "EC", "EASTERN CAPE", "FS", "FREE STATE", "MP", "MPUMALANGA",
+            "NW", "NORTH WEST", "LP", "LIMPOPO", "NC", "NORTHERN CAPE"
+        )
+
+        /** Venue words: such segments are buildings/clubs, not towns. */
+        private val VENUE_WORDS = setOf(
+            "hotel", "lodge", "resort", "guest", "club", "centre", "center",
+            "venue", "casino", "hall", "church", "school", "university", "stadium"
+        )
     }
 
     internal fun extractImage(html: String, baseUrl: String? = null): String? {

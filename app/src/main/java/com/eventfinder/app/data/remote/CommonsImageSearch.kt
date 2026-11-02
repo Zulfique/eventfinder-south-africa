@@ -68,8 +68,10 @@ class CommonsImageSearch(private val httpClient: OkHttpClient?) {
 
     /**
      * Ordered queries for an event: sport + town first (most specific), then
-     * the town on its own, and finally the sport scoped to South Africa. The
-     * country tier covers placeholder venues ("TBA, KZN") and tracks Commons
+     * the town on its own, then the town scoped to the country — which
+     * disambiguates place-name collisions ("Ceres" the Western Cape town vs
+     * the dwarf planet) — and finally the sport scoped to South Africa. The
+     * country tiers cover placeholder venues ("TBA, KZN") and tracks Commons
      * does not know by the name the feed uses. Blank places yield only the
      * country tier; titles with no recognisable sport yield nothing.
      */
@@ -80,6 +82,7 @@ class CommonsImageSearch(private val httpClient: OkHttpClient?) {
         if (town.isNotEmpty()) {
             if (keyword != null) queries += "$keyword $town"
             queries += town
+            queries += "$town South Africa"
         }
         if (keyword != null) queries += "$keyword South Africa"
         return queries.distinct().take(MAX_QUERIES)
@@ -136,7 +139,9 @@ class CommonsImageSearch(private val httpClient: OkHttpClient?) {
         val cleaned = place.replace("\\,", ",")
             .replace("\\", "")
             .split(',')
-            .map { it.trim() }
+            // Feeds emit "TBA-" and "BLOEMFONTEIN…." — strip the trailing
+            // punctuation first so the placeholder/place checks see the word.
+            .map { it.trim().trim('.', '-', '\u2026', '"', '\'').trim() }
             .filter { it.isNotBlank() }
             .lastOrNull { seg ->
                 val key = seg.lowercase()
@@ -160,9 +165,14 @@ class CommonsImageSearch(private val httpClient: OkHttpClient?) {
         .addQueryParameter("gsrsearch", "$query filetype:bitmap")
         .addQueryParameter("gsrnamespace", "6")
         .addQueryParameter("gsrlimit", "8")
-        .addQueryParameter("prop", "imageinfo")
+        // Categories ride along in the same response so astronomy subjects
+        // ("Ceres" the dwarf planet, Moon, NASA imagery) can be rejected
+        // without a second request.
+        .addQueryParameter("prop", "imageinfo|categories")
         .addQueryParameter("iiprop", "url|mime|size|extmetadata")
         .addQueryParameter("iiurlwidth", "900")
+        .addQueryParameter("clshow", "!hidden")
+        .addQueryParameter("cllimit", "max")
         .build()
         .toString()
 
@@ -186,7 +196,7 @@ class CommonsImageSearch(private val httpClient: OkHttpClient?) {
         }
     }
 
-    /** Picks the first acceptable image out of a MediaWiki search response. */
+    /** Picks the best acceptable image out of a MediaWiki search response. */
     internal fun parseResults(json: String): CommonsImage? {
         return try {
         val root = JsonParser.parseString(json).asJsonObject
@@ -194,44 +204,58 @@ class CommonsImageSearch(private val httpClient: OkHttpClient?) {
 
         // `index` is the search engine's relevance rank, so honour it instead
         // of relying on JSON object iteration order.
-        pages.entrySet()
+        val candidates = pages.entrySet()
             .map { (_, value) -> value.asJsonObject }
             .sortedBy { page -> page.get("index")?.asInt ?: Int.MAX_VALUE }
-            .firstNotNullOfOrNull { page ->
-                val title = page.get("title")?.asString.orEmpty()
-                if (REJECTED_TITLE_WORDS.any { title.contains(it, ignoreCase = true) }) {
-                    return@firstNotNullOfOrNull null
-                }
+            .mapNotNull { page -> acceptedCandidate(page) }
 
-                val info = page.getAsJsonArray("imageinfo")?.firstOrNull()?.asJsonObject
-                    ?: return@firstNotNullOfOrNull null
-
-                val mime = info.get("mime")?.asString.orEmpty()
-                if (mime != "image/jpeg" && mime != "image/png") return@firstNotNullOfOrNull null
-
-                val width = info.get("width")?.asInt ?: 0
-                if (width < MIN_WIDTH) return@firstNotNullOfOrNull null
-
-                val meta = info.getAsJsonObject("extmetadata")
-                val licence = meta?.getAsJsonObject("LicenseShortName")
-                    ?.get("value")?.asString.orEmpty()
-                if (ALLOWED_LICENCES.none { licence.startsWith(it, ignoreCase = true) }) {
-                    return@firstNotNullOfOrNull null
-                }
-
-                val thumb = info.get("thumburl")?.asString
-                    ?: info.get("url")?.asString
-                    ?: return@firstNotNullOfOrNull null
-
-                CommonsImage(
-                    url = thumb,
-                    credit = "${stripHtml(meta?.getAsJsonObject("Artist")?.get("value")?.asString)} ($licence)"
-                )
-            }
+        // Photographs beat schematics: on Commons a PNG is very often a
+        // circuit diagram or map ("Prince George Circuit.png") while a JPEG
+        // is almost always an actual photo — so a qualifying JPEG wins even
+        // when a PNG ranked higher. PNG remains the fallback when no photo
+        // passed the filters.
+        candidates.firstOrNull { it.second == "image/jpeg" }?.first
+            ?: candidates.firstOrNull()?.first
     } catch (t: Exception) {
         AppLogger.d(TAG, "Could not parse Commons response: ${t.message}")
         null
     }
+    }
+
+    /** Validates one ranked result page; returns its image + mime or null. */
+    private fun acceptedCandidate(page: com.google.gson.JsonObject): Pair<CommonsImage, String>? {
+        val title = page.get("title")?.asString.orEmpty()
+        if (REJECTED_TITLE_WORDS.any { title.contains(it, ignoreCase = true) }) return null
+        if (REJECTED_TITLE_REGEX.containsMatchIn(title)) return null
+        // Place-name collisions hide behind innocent titles ("Ceres 01.jpg"
+        // is the dwarf planet), but their Commons categories give them away.
+        // Files with no visible categories keep the benefit of the doubt.
+        val categories = page.getAsJsonArray("categories")
+            ?.mapNotNull { it.asJsonObject.get("title")?.asString }
+            .orEmpty()
+        if (categories.any { REJECTED_CATEGORY_REGEX.containsMatchIn(it) }) return null
+
+        val info = page.getAsJsonArray("imageinfo")?.firstOrNull()?.asJsonObject ?: return null
+
+        val mime = info.get("mime")?.asString.orEmpty()
+        if (mime != "image/jpeg" && mime != "image/png") return null
+
+        val width = info.get("width")?.asInt ?: 0
+        if (width < MIN_WIDTH) return null
+
+        val meta = info.getAsJsonObject("extmetadata")
+        val licence = meta?.getAsJsonObject("LicenseShortName")
+            ?.get("value")?.asString.orEmpty()
+        if (ALLOWED_LICENCES.none { licence.startsWith(it, ignoreCase = true) }) return null
+
+        val thumb = info.get("thumburl")?.asString
+            ?: info.get("url")?.asString
+            ?: return null
+
+        return CommonsImage(
+            url = thumb,
+            credit = "${stripHtml(meta?.getAsJsonObject("Artist")?.get("value")?.asString)} ($licence)"
+        ) to mime
     }
 
     private fun stripHtml(raw: String?): String {
@@ -242,7 +266,7 @@ class CommonsImageSearch(private val httpClient: OkHttpClient?) {
     companion object {
         private const val TAG = "CommonsImageSearch"
         private const val ENDPOINT = "https://commons.wikimedia.org/w/api.php"
-        private const val MAX_QUERIES = 3
+        private const val MAX_QUERIES = 4
         private const val MIN_WIDTH = 600
         private const val USER_AGENT =
             "EventFinder/1.0 (https://eventfinder.app; open-source event discovery app)"
@@ -255,7 +279,34 @@ class CommonsImageSearch(private val httpClient: OkHttpClient?) {
         /** Town searches mostly return these; they make poor cover art. */
         private val REJECTED_TITLE_WORDS = listOf(
             "map", "flag", "coat of arms", "logo", "locator", "seal of",
-            ".svg", ".pdf", ".djvu", ".tif"
+            "diagram", ".svg", ".pdf", ".djvu", ".tif"
+        )
+
+        /**
+         * Whole-word astronomy rejects: place names collide with space subjects
+         * (Ceres is a Western Cape town *and* a dwarf planet; Mars is a Limpopo
+         * town *and* a planet), and Commons otherwise serves NASA/Hubble imagery
+         * as event cover art. "Rover" is deliberately absent — Land Rover club
+         * runs are legitimate SA motorsport events.
+         */
+        private val REJECTED_TITLE_REGEX = Regex(
+            """\b(moon|asteroid\w*|crater\w*|hubble|nebula\w*|galax(y|ies)|""" +
+                """telescope\w*|spacecraft|comet\w*|meteor\w*|constellation\w*|nasa|dwarf ?planet)\b""",
+            RegexOption.IGNORE_CASE
+        )
+
+        /**
+         * Space-science category rejects. Commons classifies planetary/NASA
+         * imagery under these even when the file title looks innocent, so a
+         * town like Ceres can only surface its own photographs once the dwarf
+         * planet's files fall away.
+         */
+        private val REJECTED_CATEGORY_REGEX = Regex(
+            """\b(dwarf ?planet|asteroid\w*|astronom\w*|planetary|planets?|""" +
+                """solar system|nasa|spacecraft|satellite\w*|meteorit\w*|""" +
+                """comet\w*|nebula\w*|galax(y|ies)|telescope\w*|lunar|crater\w*|""" +
+                """space|sky objects|moons)\b""",
+            RegexOption.IGNORE_CASE
         )
 
         private val PROVINCE_CODES = setOf(

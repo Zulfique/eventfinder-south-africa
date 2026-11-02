@@ -85,6 +85,11 @@ object EventFilterer {
                 .thenBy { it.loudMusic }
                 .thenBy { it.strobeLights }
         )
+        // "Trending": most popular first (attendance), soonest first on ties.
+        EventSort.TRENDING -> events.sortedWith(
+            compareByDescending<Event> { it.attendeeCount }
+                .thenBy { it.startDate }
+        )
     }
 
     /**

@@ -26,6 +26,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.items
@@ -76,6 +77,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -150,7 +152,8 @@ private fun hasLocationPermission(context: Context): Boolean {
 @Composable
 fun HomeScreen(
     container: AppContainer,
-    onEventClick: (String) -> Unit
+    onEventClick: (String) -> Unit,
+    onSeeAll: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val viewModel: HomeViewModel = viewModel(
@@ -425,7 +428,10 @@ fun HomeScreen(
                         state = state,
                         onEventClick = onEventClick,
                         onFavoriteToggle = viewModel::toggleFavorite,
-                        onRetry = viewModel::refresh
+                        onRetry = viewModel::refresh,
+                        onSeeAll = onSeeAll,
+                        onNearMe = viewModel::onNearMeNow,
+                        onTrendingWeekend = viewModel::onTrendingWeekend
                     )
                 }
             }
@@ -449,7 +455,10 @@ private fun ColumnScope.EventList(
     state: HomeUiState,
     onEventClick: (String) -> Unit,
     onFavoriteToggle: (String) -> Unit,
-    onRetry: () -> Unit = {}
+    onRetry: () -> Unit = {},
+    onSeeAll: () -> Unit = {},
+    onNearMe: () -> Unit = {},
+    onTrendingWeekend: () -> Unit = {}
 ) {
     if (state.events.isEmpty()) {
         Column(
@@ -525,6 +534,71 @@ private fun ColumnScope.EventList(
                 )
             }
 
+            // Smart Discovery — showcase section between featured and upcoming.
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Smart Discovery",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.ExtraBold
+                    )
+                    Text(
+                        text = "See All  \u2192",
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(50))
+                            .clickable(onClick = onSeeAll)
+                            .padding(horizontal = 12.dp, vertical = 14.dp)
+                    )
+                }
+            }
+
+            item {
+                val imageForNearMe = state.events
+                    .mapNotNull { view -> view.event.imageUrl?.let { it to view } }
+                    .minByOrNull { it.second.distanceKm ?: Double.MAX_VALUE }
+                    ?.first
+                // Prefer a *different* event for the trending card so the two
+                // thumbnails do not repeat when every attendee count ties.
+                val trendingEvent = state.events
+                    .filter { it.event.imageUrl != null && it.event.imageUrl != imageForNearMe }
+                    .maxByOrNull { it.event.attendeeCount }
+                    ?: state.events.firstOrNull { it.event.imageUrl != null }
+
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    item {
+                        DiscoveryCard(
+                            title = "Near Me Now",
+                            subtitle = "Events nearby",
+                            imageUrl = imageForNearMe
+                                ?: state.events.firstOrNull()?.event?.imageUrl,
+                            imageDescription = "Nearest upcoming event",
+                            icon = Icons.Outlined.LocationOn,
+                            active = state.sort == EventSort.DISTANCE && state.radiusFilterEnabled,
+                            onClick = onNearMe
+                        )
+                    }
+                    item {
+                        DiscoveryCard(
+                            title = "Trending This Weekend",
+                            subtitle = "Top picks",
+                            imageUrl = trendingEvent?.event?.imageUrl,
+                            imageDescription = trendingEvent?.event?.let { "Trending event: ${it.title}" }
+                                ?: "Trending event",
+                            icon = Icons.AutoMirrored.Outlined.TrendingUp,
+                            active = state.weekendOnly,
+                            onClick = onTrendingWeekend
+                        )
+                    }
+                }
+            }
+
             item {
                 Row(
                     modifier = Modifier
@@ -585,6 +659,82 @@ private fun ColumnScope.EventList(
                     onFavoriteToggle = {
                         onFavoriteToggle(eventView.event.id)
                     }
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Smart Discovery thumbnail (showcase design): event photo or icon, title and
+ * subtitle. Tapping applies the card's discovery mode — Near Me sorts by
+ * distance with the radius filter on, Trending toggles the weekend window —
+ * and [active] paints the card in its enabled state.
+ */
+@Composable
+private fun DiscoveryCard(
+    title: String,
+    subtitle: String,
+    imageUrl: String?,
+    imageDescription: String,
+    icon: ImageVector,
+    active: Boolean,
+    onClick: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .width(168.dp)
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = if (active) MaterialTheme.colorScheme.primaryContainer
+            else MaterialTheme.colorScheme.surface
+        )
+    ) {
+        Column {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(84.dp)
+                    .background(
+                        if (active) MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)
+                        else MaterialTheme.colorScheme.surfaceVariant
+                    )
+            ) {
+                if (imageUrl != null) {
+                    AsyncImage(
+                        model = imageUrl,
+                        contentDescription = imageDescription,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                } else {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier
+                            .align(Alignment.Center)
+                            .size(30.dp)
+                    )
+                }
+            }
+            Column(Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = if (active) MaterialTheme.colorScheme.onPrimaryContainer
+                    else MaterialTheme.colorScheme.onSurface,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
         }
@@ -738,15 +888,16 @@ private fun FeaturedEventCard(
                     )
             )
 
+            // Red FEATURED pill, matching the reference showcase design.
             Surface(
                 modifier = Modifier
                     .align(Alignment.TopStart)
                     .padding(14.dp),
                 shape = RoundedCornerShape(50),
-                color = MaterialTheme.colorScheme.primary
+                color = MaterialTheme.colorScheme.error
             ) {
                 Text(
-                    text = stringResource(categoryLabel(event.category)),
+                    text = "FEATURED",
                     modifier = Modifier.padding(
                         horizontal = 12.dp,
                         vertical = 7.dp
@@ -813,13 +964,31 @@ private fun FeaturedEventCard(
                     )
                 }
 
-                Spacer(Modifier.height(4.dp))
+                Spacer(Modifier.height(8.dp))
 
-                Text(
-                    text = DateTimeUtils.formatShortDate(event.startDate),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = Color.White.copy(alpha = 0.9f)
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = DateTimeUtils.formatShortDate(event.startDate),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = Color.White.copy(alpha = 0.9f)
+                    )
+
+                    Text(
+                        text = "View Details  \u2192",
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(50))
+                            .background(MaterialTheme.colorScheme.primary)
+                            .clickable(onClick = onClick)
+                            .padding(horizontal = 14.dp, vertical = 7.dp),
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onPrimary
+                    )
+                }
             }
         }
     }

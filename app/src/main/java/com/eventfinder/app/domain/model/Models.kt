@@ -13,7 +13,7 @@ enum class RsvpStatus(val storage: String) {
 }
 
 /** Sorting options exposed on the Home filter sheet. */
-enum class EventSort { DATE, DISTANCE, NAME, ACCESSIBILITY }
+enum class EventSort { DATE, DISTANCE, NAME, ACCESSIBILITY, TRENDING }
 
 /**
  * Domain model for an event. All events in the local Room catalogue share

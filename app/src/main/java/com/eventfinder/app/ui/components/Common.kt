@@ -278,7 +278,7 @@ fun EventCard(
         ) {
             AsyncImage(
                 model = event.imageUrl,
-                contentDescription = stringResource(R.string.event_image),
+                contentDescription = "${stringResource(R.string.event_image)}: ${event.title}",
                 contentScale = ContentScale.Crop,
                 placeholder = painterResource(R.drawable.ic_image_placeholder),
                 error = painterResource(R.drawable.ic_image_placeholder),

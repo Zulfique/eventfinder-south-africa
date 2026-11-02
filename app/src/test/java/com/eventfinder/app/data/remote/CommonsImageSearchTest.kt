@@ -24,7 +24,7 @@ class CommonsImageSearchTest {
         val queries = search().imageQueries("TRACN4 NATIONAL RALLY", "DULLSTROOM")
 
         assertEquals(
-            listOf("rally DULLSTROOM", "DULLSTROOM", "rally South Africa"),
+            listOf("rally DULLSTROOM", "DULLSTROOM", "DULLSTROOM South Africa", "rally South Africa"),
             queries
         )
     }
@@ -37,11 +37,26 @@ class CommonsImageSearchTest {
     }
 
     @Test
+    fun `astronomy imagery loses to a usable second hit for place collisions`() {
+        val json = """
+            {"query":{"pages":{
+              "1":{"index":1,"title":"Ceres - dwarf planet - Hubble.png","imageinfo":[{"mime":"image/png","width":1200,"url":"https://upload.wikimedia.org/a.jpg","thumburl":"https://upload.wikimedia.org/a.jpg","extmetadata":{"LicenseShortName":{"value":"CC BY 4.0"},"Artist":{"value":"NASA"}}}]},
+              "2":{"index":2,"title":"Enduro riders near Ceres.jpg","imageinfo":[{"mime":"image/jpeg","width":1200,"url":"https://upload.wikimedia.org/b.jpg","thumburl":"https://upload.wikimedia.org/b.jpg","extmetadata":{"LicenseShortName":{"value":"CC0"},"Artist":{"value":"Sipho"}}}]}
+            }}}
+        """.trimIndent()
+
+        val image = search().parseResults(json)
+
+        assertNotNull(image)
+        assertEquals("https://upload.wikimedia.org/b.jpg", image!!.url)
+    }
+
+    @Test
     fun `uses a category keyword plus the town for non-sport titles`() {
         val queries = search().imageQueries("JAZZ IN THE PARK", "DURBAN")
 
         assertEquals(
-            listOf("music concert DURBAN", "DURBAN", "music concert South Africa"),
+            listOf("music concert DURBAN", "DURBAN", "DURBAN South Africa", "music concert South Africa"),
             queries
         )
     }
@@ -51,7 +66,7 @@ class CommonsImageSearchTest {
         val queries = search().imageQueries("CLUB CHAMPIONSHIP", "KILLARNEY OVAL TRACK\\, WC")
 
         assertEquals(
-            listOf("motorsport KILLARNEY OVAL TRACK", "KILLARNEY OVAL TRACK", "motorsport South Africa"),
+            listOf("motorsport KILLARNEY OVAL TRACK", "KILLARNEY OVAL TRACK", "KILLARNEY OVAL TRACK South Africa", "motorsport South Africa"),
             queries
         )
     }
@@ -60,6 +75,22 @@ class CommonsImageSearchTest {
     fun `ignores placeholder locations`() {
         assertEquals(emptyList<String>(), search().imageQueries("ROUND 5", "TBA\\, KZN"))
         assertEquals(emptyList<String>(), search().imageQueries("ROUND 5", ""))
+    }
+
+    @Test
+    fun `strips placeholder punctuation before matching`() {
+        // Feeds emit "TBA-" with a trailing dash; untrimmed it slipped past
+        // the placeholder list and Commons was searched for the town "TBA-".
+        val queries = search().imageQueries("SA RALLY CHAMPIONSHIP", "TBA-, South Africa")
+        assertTrue(queries.none { it.contains("TBA", ignoreCase = true) })
+        assertEquals(listOf("rally South Africa"), queries)
+    }
+
+    @Test
+    fun `trims trailing ellipses from town names`() {
+        val queries = search().imageQueries("SA RALLY CHAMPIONSHIP", "BLOEMFONTEIN\u2026., South Africa")
+        assertTrue(queries.any { it.contains("BLOEMFONTEIN") })
+        assertTrue(queries.none { it.contains("\u2026") })
     }
 
     @Test
@@ -107,7 +138,8 @@ class CommonsImageSearchTest {
         mime: String = "image/jpeg",
         width: Int = 1600,
         licence: String = "CC BY-SA 4.0",
-        thumb: String = "https://upload.wikimedia.org/x.jpg"
+        thumb: String = "https://upload.wikimedia.org/x.jpg",
+        categories: List<String> = emptyList()
     ): JsonObject = JsonObject().apply {
         addProperty("pageid", index)
         addProperty("index", index)
@@ -124,6 +156,48 @@ class CommonsImageSearchTest {
                 })
             })
         })
+        if (categories.isNotEmpty()) {
+            add("categories", JsonArray().apply {
+                categories.forEach { c ->
+                    add(JsonObject().apply { addProperty("title", c) })
+                }
+            })
+        }
+    }
+
+    @Test
+    fun `photographs beat higher-ranked png diagrams but png still works alone`() {
+        // Motorsport searches surface circuit-layout PNGs above real photos.
+        val json = doc(
+            page(1, "File:Prince George Circuit.png", mime = "image/png", thumb = "https://upload.wikimedia.org/diagram.png"),
+            page(2, "File:Grand Prix JAR.jpg", thumb = "https://upload.wikimedia.org/photo.jpg")
+        )
+        assertEquals("https://upload.wikimedia.org/photo.jpg", search().parseResults(json)?.url)
+
+        // When only a PNG qualifies it is still used — no image beats none.
+        val pngOnly = doc(page(1, "File:Ceres town.png", mime = "image/png", thumb = "https://upload.wikimedia.org/town.png"))
+        assertEquals("https://upload.wikimedia.org/town.png", search().parseResults(pngOnly)?.url)
+    }
+
+    @Test
+    fun `rejects space-science subjects even with innocent titles`() {
+        // "Ceres 01.jpg" is the dwarf planet, not the Western Cape town.
+        assertNull(
+            search().parseResults(
+                doc(page(1, "File:Ceres 01.jpg", categories = listOf("Category:CC-BY-4.0", "Category:Ceres (dwarf planet)")))
+            )
+        )
+        assertNull(
+            search().parseResults(
+                doc(page(1, "File:Sky view.jpg", categories = listOf("Category:Astronomy", "Category:PD NASA")))
+            )
+        )
+        // A genuine town photograph keeps its place.
+        assertNotNull(
+            search().parseResults(
+                doc(page(1, "File:Ceres, Western Cape.jpg", categories = listOf("Category:Ceres, Western Cape", "Category:Western Cape")))
+            )
+        )
     }
 
     /** Wraps page objects the way MediaWiki returns them. */

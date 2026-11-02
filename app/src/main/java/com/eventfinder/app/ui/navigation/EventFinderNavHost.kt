@@ -400,7 +400,8 @@ private fun MainScreen(container: AppContainer, navController: NavHostController
             when (selectedTab) {
                 EventFinderDestination.HOME.route -> HomeScreen(
                     container = container,
-                    onEventClick = { navController.navigate(AppDestinations.eventDetail(it)) }
+                    onEventClick = { navController.navigate(AppDestinations.eventDetail(it)) },
+                    onSeeAll = { selectedTab = EventFinderDestination.SEARCH.route }
                 )
                 EventFinderDestination.SEARCH.route -> SearchScreen(
                     container = container,
