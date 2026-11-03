@@ -126,6 +126,7 @@
     <string name="attending">Woon by</string>
     <string name="share">Deel</string>
     <string name="directions">Kry Rigtings</string>
+    <string name="directions_unavailable">Geen toepassing gevind om rigtings te open nie</string>
     <string name="weather_at_venue">Weer by lokaal</string>
     <string name="weather_unavailable">Weervoorspelling nie beskikbaar nie</string>
     <string name="distance_away">weg</string>

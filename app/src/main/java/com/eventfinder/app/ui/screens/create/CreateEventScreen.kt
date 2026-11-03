@@ -258,7 +258,7 @@ fun CreateEventScreen(
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        text = "Step ${'$'}{state.step} of ${'$'}CREATE_STEPS",
+                        text = "Step ${state.step} of $CREATE_STEPS",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

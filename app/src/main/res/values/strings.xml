@@ -127,6 +127,7 @@
     <string name="attending">Attending</string>
     <string name="share">Share</string>
     <string name="directions">Get Directions</string>
+    <string name="directions_unavailable">No app found to open directions</string>
     <string name="weather_at_venue">Weather at venue</string>
     <string name="weather_unavailable">Weather forecast unavailable</string>
     <string name="distance_away">away</string>

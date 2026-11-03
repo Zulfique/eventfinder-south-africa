@@ -10,6 +10,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -705,67 +706,7 @@ fun EventDetailScreen(
                                 }
                                 OutlinedButton(
                                     onClick = {
-                                        val latitude = event.latitude
-                                        val longitude = event.longitude
-                                        if (latitude == null || longitude == null) {
-                                            // No coordinates: fall back to a text-based maps search.
-                                            val query = Uri.encode(
-                                                listOf(event.venueName, event.address)
-                                                    .filter { it.isNotBlank() }
-                                                    .joinToString(", ")
-                                            )
-
-
-                                            val searchUri = Uri.parse(
-                                                "https://www.google.com/maps/search/?api=1&query=$query"
-                                            )
-
-
-                                            val searchIntent = Intent(
-                                                Intent.ACTION_VIEW,
-                                                searchUri
-                                            )
-
-
-                                            if (searchIntent.resolveActivity(context.packageManager) != null) {
-                                                context.startActivity(searchIntent)
-                                                return@OutlinedButton
-                                            }
-                                        }
-
-
-                                        val geoUri = Uri.parse(
-                                            "geo:$latitude,$longitude" +
-                                                "?q=$latitude,$longitude(${Uri.encode(event.venueName)})"
-                                        )
-
-
-                                        val intent = Intent(Intent.ACTION_VIEW, geoUri)
-
-
-                                        if (intent.resolveActivity(context.packageManager) != null) {
-                                            context.startActivity(intent)
-                                        } else {
-                                            // geo: intent had no handler; fall back to web search.
-                                            val query = Uri.encode(
-                                                listOf(event.venueName, event.address)
-                                                    .filter { it.isNotBlank() }
-                                                    .joinToString(", ")
-                                            )
-
-
-                                            val fallback = Intent(
-                                                Intent.ACTION_VIEW,
-                                                Uri.parse(
-                                                    "https://www.google.com/maps/search/?api=1&query=$query"
-                                                )
-                                            )
-
-
-                                            if (fallback.resolveActivity(context.packageManager) != null) {
-                                                context.startActivity(fallback)
-                                            }
-                                        }
+                                        openDirections(context, event)
                                     },
                                     modifier = Modifier.weight(1f).height(44.dp)
                                 ) {
@@ -868,6 +809,80 @@ fun EventDetailScreen(
             showShareSheet = false
         }
     }
+}
+
+/**
+ * Opens Get Directions for [event].
+ *
+ * Tries the native `geo:` deep link first (Google Maps / any installed map
+ * app), then the Google Maps web directions URL, then a plain web search for
+ * the venue. Each step is attempted with try/catch rather than a pre-flight
+ * resolveActivity() check: package visibility on Android 11+ can make
+ * resolveActivity() report "no handler" even when one exists, which is what
+ * made this button silently do nothing before. A chooser is the last resort
+ * so the button always produces visible feedback.
+ */
+private fun openDirections(context: android.content.Context, event: com.eventfinder.app.domain.model.Event) {
+    val label = Uri.encode(event.venueName.ifBlank { event.address })
+    val query = Uri.encode(
+        listOf(event.venueName, event.address)
+            .filter { it.isNotBlank() }
+            .joinToString(", ")
+    )
+    val latitude = event.latitude
+    val longitude = event.longitude
+
+    val candidates = buildList {
+        if (latitude != null && longitude != null) {
+            add(
+                Intent(
+                    Intent.ACTION_VIEW,
+                    Uri.parse("geo:$latitude,$longitude?q=$latitude,$longitude($label)")
+                )
+            )
+            add(
+                Intent(
+                    Intent.ACTION_VIEW,
+                    Uri.parse(
+                        "https://www.google.com/maps/dir/?api=1&destination=$latitude,$longitude"
+                    )
+                )
+            )
+        }
+        if (query.isNotEmpty()) {
+            add(
+                Intent(
+                    Intent.ACTION_VIEW,
+                    Uri.parse("https://www.google.com/maps/search/?api=1&query=$query")
+                )
+            )
+        }
+    }
+
+    for (intent in candidates) {
+        try {
+            context.startActivity(intent)
+            return
+        } catch (_: android.content.ActivityNotFoundException) {
+            // try the next candidate
+        }
+    }
+
+    // Nothing resolved directly: let the user pick any browser/maps app.
+    candidates.lastOrNull()?.let { last ->
+        try {
+            context.startActivity(Intent.createChooser(last, null))
+            return
+        } catch (_: android.content.ActivityNotFoundException) {
+            // fall through to the toast below
+        }
+    }
+
+    Toast.makeText(
+        context,
+        context.getString(R.string.directions_unavailable),
+        Toast.LENGTH_SHORT
+    ).show()
 }
 
 /**
@@ -1123,15 +1138,20 @@ private fun GroupPlanningCard(
         )
     ) {
         Row(
-            modifier = Modifier.padding(14.dp),
-            verticalAlignment = Alignment.CenterVertically
+            modifier = Modifier.padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            // Clear gaps so the avatar stack, the copy and the Invite
+            // Friends pill never crowd or overlap each other.
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Box(modifier = Modifier.width(96.dp)) {
+            // Compact stack: 32dp avatars overlapping on an 18dp grid keeps the
+            // copy column wide enough for "Going together?" without ellipsis.
+            Box(modifier = Modifier.width(82.dp)) {
                 val shown = members.take(3)
                 if (shown.isEmpty()) {
                     Box(
                         modifier = Modifier
-                            .size(34.dp)
+                            .size(32.dp)
                             .clip(CircleShape)
                             .background(Color(0xFFF1F3F5)),
                         contentAlignment = Alignment.Center
@@ -1146,8 +1166,8 @@ private fun GroupPlanningCard(
                 shown.forEachIndexed { index, _ ->
                     Box(
                         modifier = Modifier
-                            .offset(x = (index * 22).dp)
-                            .size(34.dp)
+                            .offset(x = (index * 18).dp)
+                            .size(32.dp)
                             .clip(CircleShape)
                             .background(Color(0xFFF1F3F5))
                             .border(2.dp, MaterialTheme.colorScheme.surfaceVariant, CircleShape),
@@ -1163,8 +1183,8 @@ private fun GroupPlanningCard(
                 if (members.size > 3) {
                     Box(
                         modifier = Modifier
-                            .offset(x = (3 * 22).dp)
-                            .size(34.dp)
+                            .offset(x = (3 * 18).dp)
+                            .size(32.dp)
                             .clip(CircleShape)
                             .background(MaterialTheme.colorScheme.primary),
                         contentAlignment = Alignment.Center
@@ -1182,20 +1202,24 @@ private fun GroupPlanningCard(
                 Text(
                     text = "Going together?",
                     style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
                 Spacer(Modifier.height(2.dp))
                 Text(
                     text = if (members.isEmpty()) "Bring your crew along"
                     else "${members.size} going",
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
             Button(
                 onClick = onInvite,
                 modifier = Modifier.height(38.dp),
-                contentPadding = PaddingValues(horizontal = 14.dp),
+                contentPadding = PaddingValues(horizontal = 12.dp),
                 shape = RoundedCornerShape(50)
             ) {
                 Image(

@@ -141,7 +141,8 @@ private val LightColors = lightColorScheme(
 )
 
 private val DarkColors = darkColorScheme(
-    primary = Color(0xFF62C99A),
+    // Showcase dark-mode accent: bright emerald green.
+    primary = Color(0xFF00C98D),
     onPrimary = Color(0xFF003820),
     primaryContainer = Color(0xFF005638),
     onPrimaryContainer = Color(0xFFB9F2D3),

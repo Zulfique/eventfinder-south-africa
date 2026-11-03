@@ -13,6 +13,39 @@
     <!-- Biometric authentication (FR-01) -->
     <uses-permission android:name="android.permission.USE_BIOMETRIC" />
 
+    <!--
+        Package visibility (Android 11+): without these <queries> declarations
+        resolveActivity() returns null for map/share/speech intents even when
+        Google Maps is installed, which made Get Directions silently do nothing.
+    -->
+    <queries>
+        <!-- Get Directions: geo: deep links -->
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="geo" />
+        </intent>
+        <!-- Get Directions / share fallbacks: web maps + generic links -->
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="https" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="http" />
+        </intent>
+        <!-- Google Maps app directly -->
+        <package android:name="com.google.android.apps.maps" />
+        <!-- Share sheet targets -->
+        <intent>
+            <action android:name="android.intent.action.SEND" />
+            <data android:mimeType="text/plain" />
+        </intent>
+        <!-- Voice search in the Home search bar -->
+        <intent>
+            <action android:name="android.speech.action.RECOGNIZE_SPEECH" />
+        </intent>
+    </queries>
+
     <!-- Event reminder notifications (FR-04) -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
