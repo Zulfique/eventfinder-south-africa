@@ -56,8 +56,16 @@ import androidx.compose.material.icons.outlined.CalendarToday
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material.icons.outlined.WbSunny
 import androidx.compose.material3.AlertDialog
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
+import androidx.compose.material3.LocalContentColor
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -1120,9 +1128,12 @@ private fun WeatherCard(state: EventDetailUiState) {
 }
 
 /**
- * Showcase "Going together?" card: overlapping attendee avatars (or a
- * friendly ghost avatar before anyone joins), the going count, and the green
- * Invite Friends pill that opens the full Group Planning screen.
+ * "Going together?" banner built to the Invite Friends design spec:
+ * white avatar disc + vertical divider, #FFFFFF primary / #94A3BB secondary
+ * copy, and a 44dp emerald pill (20dp icon, 22dp radius, #00C98D with
+ * #0B1929 content) whose pressed state darkens and whose disabled state is
+ * grey. Spacing: 16dp edge-to-avatar, 12dp divider-to-copy, 16dp copy-to-
+ * button, 16dp button-to-edge.
  */
 @Composable
 private fun GroupPlanningCard(
@@ -1130,30 +1141,51 @@ private fun GroupPlanningCard(
     onInvite: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    // The spec palette is dark-anchored (#0B1929); mirror it in dark mode and
+    // fall back to theme colours in light mode so contrast stays readable.
+    val isDarkSurface = MaterialTheme.colorScheme.background.luminance() < 0.5f
+    val titleColor = if (isDarkSurface) Color.White else MaterialTheme.colorScheme.onSurface
+    val subtitleColor =
+        if (isDarkSurface) Color(0xFF94A3BB) else MaterialTheme.colorScheme.onSurfaceVariant
+
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressed by interactionSource.collectIsPressedAsState()
+    val buttonContainer by animateColorAsState(
+        targetValue = if (pressed) Color(0xFF00A274) else Color(0xFF00C98D),
+        label = "InviteButtonContainer"
+    )
+
     Card(
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(14.dp),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant
+            containerColor = MaterialTheme.colorScheme.background
         )
     ) {
         Row(
-            modifier = Modifier.padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            // Clear gaps so the avatar stack, the copy and the Invite
-            // Friends pill never crowd or overlap each other.
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            // Compact stack: 32dp avatars overlapping on an 18dp grid keeps the
-            // copy column wide enough for "Going together?" without ellipsis.
-            Box(modifier = Modifier.width(82.dp)) {
-                val shown = members.take(3)
+            // White avatar disc: ghost avatar when nobody has joined, a single
+            // disc for one member, then an overlapping stack + "+N" badge.
+            // Width tracks the stack so the divider and copy sit tight to it.
+            Box(
+                modifier = Modifier.width(
+                    when {
+                        members.size <= 1 -> 32.dp
+                        members.size == 2 -> 48.dp
+                        else -> 64.dp
+                    }
+                )
+            ) {
+                val shown = members.take(2)
                 if (shown.isEmpty()) {
                     Box(
                         modifier = Modifier
                             .size(32.dp)
                             .clip(CircleShape)
-                            .background(Color(0xFFF1F3F5)),
+                            .background(Color.White),
                         contentAlignment = Alignment.Center
                     ) {
                         Image(
@@ -1166,11 +1198,11 @@ private fun GroupPlanningCard(
                 shown.forEachIndexed { index, _ ->
                     Box(
                         modifier = Modifier
-                            .offset(x = (index * 18).dp)
+                            .offset(x = (index * 16).dp)
                             .size(32.dp)
                             .clip(CircleShape)
-                            .background(Color(0xFFF1F3F5))
-                            .border(2.dp, MaterialTheme.colorScheme.surfaceVariant, CircleShape),
+                            .background(Color.White)
+                            .border(2.dp, MaterialTheme.colorScheme.background, CircleShape),
                         contentAlignment = Alignment.Center
                     ) {
                         Image(
@@ -1180,17 +1212,17 @@ private fun GroupPlanningCard(
                         )
                     }
                 }
-                if (members.size > 3) {
+                if (members.size > 2) {
                     Box(
                         modifier = Modifier
-                            .offset(x = (3 * 18).dp)
+                            .offset(x = 32.dp)
                             .size(32.dp)
                             .clip(CircleShape)
                             .background(MaterialTheme.colorScheme.primary),
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            text = "+${members.size - 3}",
+                            text = "+${members.size - 2}",
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onPrimary
@@ -1198,11 +1230,21 @@ private fun GroupPlanningCard(
                     }
                 }
             }
+            Spacer(Modifier.width(10.dp))
+            // Spec divider between the avatar and the copy block.
+            Box(
+                modifier = Modifier
+                    .width(1.dp)
+                    .height(30.dp)
+                    .background(MaterialTheme.colorScheme.outlineVariant)
+            )
+            Spacer(Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = "Going together?",
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Bold,
+                    color = titleColor,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -1211,21 +1253,30 @@ private fun GroupPlanningCard(
                     text = if (members.isEmpty()) "Bring your crew along"
                     else "${members.size} going",
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = subtitleColor,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
             }
+            Spacer(Modifier.width(16.dp))
             Button(
                 onClick = onInvite,
-                modifier = Modifier.height(38.dp),
-                contentPadding = PaddingValues(horizontal = 12.dp),
-                shape = RoundedCornerShape(50)
+                modifier = Modifier.height(44.dp),
+                shape = RoundedCornerShape(22.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = buttonContainer,
+                    contentColor = Color(0xFF0B1929),
+                    disabledContainerColor = Color(0xFF334155),
+                    disabledContentColor = Color(0xFF94A3BB)
+                ),
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+                interactionSource = interactionSource
             ) {
                 Image(
                     painter = painterResource(R.drawable.evt_attendees),
                     contentDescription = null,
-                    modifier = Modifier.size(16.dp)
+                    modifier = Modifier.size(20.dp),
+                    colorFilter = ColorFilter.tint(LocalContentColor.current)
                 )
                 Spacer(Modifier.size(6.dp))
                 Text(
