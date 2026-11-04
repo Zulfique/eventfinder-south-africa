@@ -158,6 +158,7 @@ fun EventDetailScreen(
     onPlanWithFriends: (String) -> Unit = {},
     onOpenScanner: (String) -> Unit = {},
     onOrganizerClick: (String) -> Unit = {},
+    onReportEvent: (String) -> Unit = {},
     onOpenEvent: (String) -> Unit = {}
 ) {
     val context = LocalContext.current
@@ -171,6 +172,8 @@ fun EventDetailScreen(
     var showDeleteDialog by remember { mutableStateOf(false) }
     var showTicketDialog by remember { mutableStateOf(false) }
     var showShareSheet by remember { mutableStateOf(false) }
+    var showExportSheet by remember { mutableStateOf(false) }
+    var exportTickets by remember { mutableStateOf<List<com.eventfinder.app.domain.model.EventTicket>>(emptyList()) }
     // RSVP system (2026 spec): sheet with pending choice + notify toggle,
     // submitted state with a success/error result.
     var showRsvpSheet by remember { mutableStateOf(false) }
@@ -288,6 +291,13 @@ fun EventDetailScreen(
                                                 onClick = {
                                                     showOwnerMenu = false
                                                     onEditEvent(event.id)
+                                                }
+                                            )
+                                            DropdownMenuItem(
+                                                text = { Text("Export RSVPs") },
+                                                onClick = {
+                                                    showOwnerMenu = false
+                                                    showExportSheet = true
                                                 }
                                             )
                                             DropdownMenuItem(
@@ -860,25 +870,11 @@ fun EventDetailScreen(
                                     }
                                 }
                                 ReportEventButton(
-                                    loading = reportSubmitting,
-                                    submitted = reportSubmitted,
-                                    error = reportFailed,
-                                    enabled = !reportSubmitted,
-                                    onClick = {
-                                        reportFailed = false
-                                        reportSubmitting = true
-                                        reportScope.launch {
-                                            val outcome = container.reportRepository.report(
-                                                targetType = "event",
-                                                targetId = event.id,
-                                                reason = "user_report",
-                                                reporterId = ""
-                                            )
-                                            reportSubmitting = false
-                                            reportSubmitted = outcome.isSuccess
-                                            reportFailed = outcome.isFailure
-                                        }
-                                    },
+                                    loading = false,
+                                    submitted = false,
+                                    error = false,
+                                    enabled = true,
+                                    onClick = { onReportEvent(event.id) },
                                     modifier = Modifier.weight(1f)
                                 )
                             }
@@ -1231,6 +1227,25 @@ fun EventDetailScreen(
 
     // Branded share sheet (showcase3): WhatsApp / Messages / Email /
     // Copy Link / Nearby shortcuts plus the social row.
+    if (showExportSheet) {
+        val exportEvent = state.eventView?.event
+        LaunchedEffect(exportEvent?.id) {
+            if (exportEvent != null) {
+                exportTickets = container.ticketRepository.getAllTicketsForEvent(exportEvent.id)
+            }
+        }
+        if (exportEvent != null) {
+            com.eventfinder.app.ui.components.ExportRsvpSheet(
+                eventId = exportEvent.id,
+                eventTitle = exportEvent.title,
+                tickets = exportTickets,
+                onDismiss = { showExportSheet = false }
+            )
+        } else {
+            showExportSheet = false
+        }
+    }
+
     if (showShareSheet) {
         val shareEvent = state.eventView?.event
         if (shareEvent != null) {

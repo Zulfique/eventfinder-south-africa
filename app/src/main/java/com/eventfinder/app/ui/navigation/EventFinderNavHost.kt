@@ -74,6 +74,18 @@ import com.eventfinder.app.ui.screens.home.HomeScreen
 import com.eventfinder.app.ui.screens.tickets.TicketScannerScreen
 import com.eventfinder.app.ui.screens.profile.ProfileScreen
 import com.eventfinder.app.ui.screens.search.SearchScreen
+import com.eventfinder.app.ui.screens.collections.CollectionsScreen
+import com.eventfinder.app.ui.screens.tickets.MyTicketsScreen
+import com.eventfinder.app.ui.screens.preferences.AccessibilityProfileScreen
+import com.eventfinder.app.ui.screens.preferences.AccessibilityScreen
+import com.eventfinder.app.ui.screens.preferences.CommutePreferencesScreen
+import com.eventfinder.app.ui.screens.preferences.InterestsScreen
+import com.eventfinder.app.ui.screens.preferences.LoudNoiseScreen
+import com.eventfinder.app.ui.screens.preferences.NoMusicScreen
+import com.eventfinder.app.ui.screens.preferences.SensoryPreferencesScreen
+import com.eventfinder.app.ui.screens.preferences.WheelchairAccessibilityScreen
+import com.eventfinder.app.ui.screens.safety.ModerationScreen
+import com.eventfinder.app.ui.screens.safety.ReportScamScreen
 import com.eventfinder.app.ui.screens.settings.SettingsScreen
 import com.eventfinder.app.ui.screens.splash.SplashScreen
 
@@ -91,11 +103,26 @@ object AppDestinations {
     const val TICKET_SCANNER = "ticketScanner/{eventId}"
     const val ORGANIZER_PROFILE = "organizerProfile/{organizerId}"
 
+    // 2026 feature set
+    const val REPORT_SCAM = "reportScam/{targetId}"
+    const val MODERATION = "moderation"
+    const val ACCESSIBILITY = "accessibility"
+    const val ACCESSIBILITY_PROFILE = "accessibilityProfile"
+    const val ACCESSIBILITY_WHEELCHAIR = "accessibility/wheelchair"
+    const val ACCESSIBILITY_NOISE = "accessibility/noise"
+    const val ACCESSIBILITY_NO_MUSIC = "accessibility/noMusic"
+    const val ACCESSIBILITY_SENSORY = "accessibility/sensory"
+    const val COMMUTE = "commute"
+    const val INTERESTS = "interests"
+    const val MY_TICKETS = "myTickets"
+    const val COLLECTIONS = "collections"
+
     fun eventDetail(eventId: String) = "event/$eventId"
     fun editEvent(eventId: String) = "editEvent/$eventId"
     fun groupPlanning(eventId: String) = "groupPlanning/$eventId"
     fun ticketScanner(eventId: String) = "ticketScanner/$eventId"
     fun organizerProfile(organizerId: String) = "organizerProfile/$organizerId"
+    fun reportScam(targetId: String) = "reportScam/$targetId"
 }
 
 /**
@@ -198,6 +225,7 @@ fun EventFinderNavHost(
                                 onPlanWithFriends = { navController.navigate(AppDestinations.groupPlanning(it)) },
                                 onOpenScanner = { navController.navigate(AppDestinations.ticketScanner(it)) },
                                 onOrganizerClick = { navController.navigate(AppDestinations.organizerProfile(it)) },
+                                onReportEvent = { navController.navigate(AppDestinations.reportScam(it)) },
                                 onOpenEvent = { navController.navigate(AppDestinations.eventDetail(it)) }
                             )
                         }
@@ -229,11 +257,94 @@ fun EventFinderNavHost(
             SettingsScreen(
                 container = container,
                 onBack = { navController.popBackStack() },
+                onOpenAccessibility = { navController.navigate(AppDestinations.ACCESSIBILITY) },
+                onOpenAccessibilityProfile = { navController.navigate(AppDestinations.ACCESSIBILITY_PROFILE) },
+                onOpenCommute = { navController.navigate(AppDestinations.COMMUTE) },
+                onOpenInterests = { navController.navigate(AppDestinations.INTERESTS) },
+                onOpenModeration = { navController.navigate(AppDestinations.MODERATION) },
+                onOpenReportScam = { navController.navigate(AppDestinations.reportScam("general")) },
+                onOpenCollections = { navController.navigate(AppDestinations.COLLECTIONS) },
                 onLoggedOut = {
                     navController.navigate(AppDestinations.LOGIN) {
                         popUpTo(0) { inclusive = true }
                     }
                 }
+            )
+        }
+
+        composable(AppDestinations.ACCESSIBILITY) {
+            AccessibilityScreen(
+                container = container,
+                onBack = { navController.popBackStack() },
+                onOpenWheelchair = { navController.navigate(AppDestinations.ACCESSIBILITY_WHEELCHAIR) },
+                onOpenLoudNoise = { navController.navigate(AppDestinations.ACCESSIBILITY_NOISE) },
+                onOpenNoMusic = { navController.navigate(AppDestinations.ACCESSIBILITY_NO_MUSIC) },
+                onOpenSensory = { navController.navigate(AppDestinations.ACCESSIBILITY_SENSORY) },
+                onOpenProfile = { navController.navigate(AppDestinations.ACCESSIBILITY_PROFILE) }
+            )
+        }
+
+        composable(AppDestinations.ACCESSIBILITY_WHEELCHAIR) {
+            WheelchairAccessibilityScreen(container = container, onBack = { navController.popBackStack() })
+        }
+
+        composable(AppDestinations.ACCESSIBILITY_NOISE) {
+            LoudNoiseScreen(container = container, onBack = { navController.popBackStack() })
+        }
+
+        composable(AppDestinations.ACCESSIBILITY_NO_MUSIC) {
+            NoMusicScreen(container = container, onBack = { navController.popBackStack() })
+        }
+
+        composable(AppDestinations.ACCESSIBILITY_SENSORY) {
+            SensoryPreferencesScreen(container = container, onBack = { navController.popBackStack() })
+        }
+
+        composable(AppDestinations.ACCESSIBILITY_PROFILE) {
+            AccessibilityProfileScreen(
+                container = container,
+                onBack = { navController.popBackStack() },
+                onEdit = { navController.navigate(AppDestinations.ACCESSIBILITY) }
+            )
+        }
+
+        composable(AppDestinations.COMMUTE) {
+            CommutePreferencesScreen(container = container, onBack = { navController.popBackStack() })
+        }
+
+        composable(AppDestinations.INTERESTS) {
+            InterestsScreen(container = container, onBack = { navController.popBackStack() })
+        }
+
+        composable(AppDestinations.MY_TICKETS) {
+            MyTicketsScreen(
+                container = container,
+                onBack = { navController.popBackStack() },
+                onEventClick = { navController.navigate(AppDestinations.eventDetail(it)) }
+            )
+        }
+
+        composable(AppDestinations.COLLECTIONS) {
+            CollectionsScreen(
+                container = container,
+                onBack = { navController.popBackStack() },
+                onEventClick = { navController.navigate(AppDestinations.eventDetail(it)) }
+            )
+        }
+
+        composable(AppDestinations.MODERATION) {
+            ModerationScreen(container = container, onBack = { navController.popBackStack() })
+        }
+
+        composable(
+            route = AppDestinations.REPORT_SCAM,
+            arguments = listOf(navArgument("targetId") { type = NavType.StringType })
+        ) { entry ->
+            ReportScamScreen(
+                container = container,
+                targetId = entry.arguments?.getString("targetId").orEmpty(),
+                targetType = "event",
+                onBack = { navController.popBackStack() }
             )
         }
 
@@ -437,6 +548,11 @@ private fun MainScreen(container: AppContainer, navController: NavHostController
                     onEditProfile = { navController.navigate(AppDestinations.EDIT_PROFILE) },
                     onSettings = { navController.navigate(AppDestinations.SETTINGS) },
                     onEventClick = { navController.navigate(AppDestinations.eventDetail(it)) },
+                    onMyTickets = { navController.navigate(AppDestinations.MY_TICKETS) },
+                    onCollections = { navController.navigate(AppDestinations.COLLECTIONS) },
+                    onAccessibility = { navController.navigate(AppDestinations.ACCESSIBILITY) },
+                    onInterests = { navController.navigate(AppDestinations.INTERESTS) },
+                    onCommute = { navController.navigate(AppDestinations.COMMUTE) },
                     onLogin = { navController.navigate(AppDestinations.LOGIN) },
                     onLoggedOut = {
                         navController.navigate(AppDestinations.LOGIN) {

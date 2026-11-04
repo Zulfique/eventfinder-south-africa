@@ -591,6 +591,236 @@ class UserPreferences(private val context: Context) : SessionProvider {
      * association if they belong to this user — all in a single atomic
      * DataStore edit to prevent partial state.
      */
+    // ---- Commute preferences ("Your Commute") ----
+
+    val commuteMinutes: Flow<Int> = sessionUserId.flatMapLatest { userId ->
+        if (userId.isNullOrBlank()) flowOf(30)
+        else context.eventFinderDataStore.data.map { prefs ->
+            prefs[userStringKey("commute_minutes", userId)]?.toIntOrNull() ?: 30
+        }
+    }
+
+    suspend fun setCommuteMinutes(minutes: Int) {
+        val userId = sessionUserId.first() ?: return
+        context.eventFinderDataStore.edit {
+            it[userStringKey("commute_minutes", userId)] = minutes.coerceIn(5, 180).toString()
+        }
+    }
+
+    /** Preferred travel mode: "car", "transit", "walking" or "cycling". */
+    val commuteMode: Flow<String> = sessionUserId.flatMapLatest { userId ->
+        if (userId.isNullOrBlank()) flowOf("car")
+        else context.eventFinderDataStore.data.map { prefs ->
+            prefs[userStringKey("commute_mode", userId)] ?: "car"
+        }
+    }
+
+    suspend fun setCommuteMode(mode: String) {
+        val userId = sessionUserId.first() ?: return
+        context.eventFinderDataStore.edit {
+            it[userStringKey("commute_mode", userId)] = mode
+        }
+    }
+
+    /** "Include events near transit" toggle on the commute screen. */
+    val commuteNearTransit: Flow<Boolean> = sessionUserId.flatMapLatest { userId ->
+        if (userId.isNullOrBlank()) flowOf(false)
+        else context.eventFinderDataStore.data.map { prefs ->
+            prefs[userBoolKey("commute_near_transit", userId)] ?: false
+        }
+    }
+
+    suspend fun setCommuteNearTransit(enabled: Boolean) {
+        val userId = sessionUserId.first() ?: return
+        context.eventFinderDataStore.edit {
+            it[userBoolKey("commute_near_transit", userId)] = enabled
+        }
+    }
+
+    // ---- Interest management ("Your Interests") ----
+
+    /** Selected category label keys (e.g. cat_music), stored as a CSV list. */
+    val interests: Flow<Set<String>> = sessionUserId.flatMapLatest { userId ->
+        if (userId.isNullOrBlank()) flowOf(emptySet())
+        else context.eventFinderDataStore.data.map { prefs ->
+            prefs[userStringKey("interests", userId)]
+                ?.split(',')
+                ?.map { it.trim() }
+                ?.filter { it.isNotBlank() }
+                ?.toSet()
+                .orEmpty()
+        }
+    }
+
+    suspend fun setInterests(labelKeys: Set<String>) {
+        val userId = sessionUserId.first() ?: return
+        context.eventFinderDataStore.edit {
+            it[userStringKey("interests", userId)] = labelKeys.joinToString(",")
+        }
+    }
+
+    // ---- Accessibility detail preferences ----
+
+    /** Loud-noise sensitivity: "off", "low", "moderate" or "high". */
+    val noiseLevel: Flow<String> = sessionUserId.flatMapLatest { userId ->
+        if (userId.isNullOrBlank()) flowOf("off")
+        else context.eventFinderDataStore.data.map { prefs ->
+            prefs[userStringKey("a11y_noise_level", userId)] ?: "off"
+        }
+    }
+
+    suspend fun setNoiseLevel(level: String) {
+        val userId = sessionUserId.first() ?: return
+        context.eventFinderDataStore.edit {
+            it[userStringKey("a11y_noise_level", userId)] = level
+        }
+    }
+
+    /** Sensory triggers the user wants warned about (flashing, strobe, crowds, other). */
+    val sensoryTriggers: Flow<Set<String>> = sessionUserId.flatMapLatest { userId ->
+        if (userId.isNullOrBlank()) flowOf(emptySet())
+        else context.eventFinderDataStore.data.map { prefs ->
+            prefs[userStringKey("a11y_sensory", userId)]
+                ?.split(',')
+                ?.map { it.trim() }
+                ?.filter { it.isNotBlank() }
+                ?.toSet()
+                .orEmpty()
+        }
+    }
+
+    suspend fun setSensoryTriggers(triggers: Set<String>) {
+        val userId = sessionUserId.first() ?: return
+        context.eventFinderDataStore.edit {
+            it[userStringKey("a11y_sensory", userId)] = triggers.joinToString(",")
+        }
+    }
+
+    /** Venue features the user relies on (ramp, toilets, seating, other). */
+    val accessibilityFeatures: Flow<Set<String>> = sessionUserId.flatMapLatest { userId ->
+        if (userId.isNullOrBlank()) flowOf(emptySet())
+        else context.eventFinderDataStore.data.map { prefs ->
+            prefs[userStringKey("a11y_features", userId)]
+                ?.split(',')
+                ?.map { it.trim() }
+                ?.filter { it.isNotBlank() }
+                ?.toSet()
+                .orEmpty()
+        }
+    }
+
+    suspend fun setAccessibilityFeatures(features: Set<String>) {
+        val userId = sessionUserId.first() ?: return
+        context.eventFinderDataStore.edit {
+            it[userStringKey("a11y_features", userId)] = features.joinToString(",")
+        }
+    }
+
+    /** Accessibility-first event sorting on the discovery feed. */
+    val accessibilityFirstSorting: Flow<Boolean> = sessionUserId.flatMapLatest { userId ->
+        if (userId.isNullOrBlank()) flowOf(false)
+        else context.eventFinderDataStore.data.map { prefs ->
+            prefs[userBoolKey("a11y_first_sorting", userId)] ?: false
+        }
+    }
+
+    suspend fun setAccessibilityFirstSorting(enabled: Boolean) {
+        val userId = sessionUserId.first() ?: return
+        context.eventFinderDataStore.edit {
+            it[userBoolKey("a11y_first_sorting", userId)] = enabled
+        }
+    }
+
+    // ---- Bring a friend ----
+
+    /** True once the user has shared an invite for a specific event. */
+    val friendInvitesSent: Flow<Int> = sessionUserId.flatMapLatest { userId ->
+        if (userId.isNullOrBlank()) flowOf(0)
+        else context.eventFinderDataStore.data.map { prefs ->
+            prefs[userStringKey("friend_invites_sent", userId)]?.toIntOrNull() ?: 0
+        }
+    }
+
+    suspend fun recordFriendInviteSent() {
+        val userId = sessionUserId.first() ?: return
+        context.eventFinderDataStore.edit { prefs ->
+            val key = userStringKey("friend_invites_sent", userId)
+            prefs[key] = ((prefs[key]?.toIntOrNull() ?: 0) + 1).toString()
+        }
+    }
+
+    // ---- Smart notification tuning (Settings) ----
+
+    val notifyGroupUpdates: Flow<Boolean> = smartToggle("smart_group_updates")
+    suspend fun setNotifyGroupUpdates(enabled: Boolean) = setSmartToggle("smart_group_updates", enabled)
+
+    val notifyNearbyEvents: Flow<Boolean> = smartToggle("smart_nearby")
+    suspend fun setNotifyNearbyEvents(enabled: Boolean) = setSmartToggle("smart_nearby", enabled)
+
+    val notifyPersonalisedPicks: Flow<Boolean> = smartToggle("smart_picks")
+    suspend fun setNotifyPersonalisedPicks(enabled: Boolean) = setSmartToggle("smart_picks", enabled)
+
+    private fun smartToggle(name: String): Flow<Boolean> = sessionUserId.flatMapLatest { userId ->
+        if (userId.isNullOrBlank()) flowOf(true)
+        else context.eventFinderDataStore.data.map { prefs ->
+            prefs[userBoolKey(name, userId)] ?: true
+        }
+    }
+
+    private suspend fun setSmartToggle(name: String, enabled: Boolean) {
+        val userId = sessionUserId.first() ?: return
+        context.eventFinderDataStore.edit { it[userBoolKey(name, userId)] = enabled }
+    }
+
+    // ---- Event collections ("My Lists") ----
+
+    val eventCollections: Flow<List<EventCollection>> = sessionUserId.flatMapLatest { userId ->
+        if (userId.isNullOrBlank()) {
+            flowOf(emptyList())
+        } else {
+            context.eventFinderDataStore.data.map { prefs ->
+                prefs[userStringKey("event_collections_json", userId)]
+                    ?.let { json ->
+                        runCatching {
+                            gson.fromJson(json, Array<EventCollection>::class.java).toList()
+                        }.getOrNull()
+                    }
+                    .orEmpty()
+            }
+        }
+    }
+
+    suspend fun saveCollection(collection: EventCollection) {
+        val userId = sessionUserId.first() ?: return
+        context.eventFinderDataStore.edit { prefs ->
+            val key = userStringKey("event_collections_json", userId)
+            val current = prefs[key]
+                ?.let { json ->
+                    runCatching { gson.fromJson(json, Array<EventCollection>::class.java).toMutableList() }
+                        .getOrNull()
+                }
+                ?: mutableListOf()
+            current.removeAll { it.id == collection.id }
+            current.add(0, collection)
+            prefs[key] = gson.toJson(current.take(24))
+        }
+    }
+
+    suspend fun deleteCollection(id: String) {
+        val userId = sessionUserId.first() ?: return
+        context.eventFinderDataStore.edit { prefs ->
+            val key = userStringKey("event_collections_json", userId)
+            val current = prefs[key]
+                ?.let { json ->
+                    runCatching { gson.fromJson(json, Array<EventCollection>::class.java).toMutableList() }
+                        .getOrNull()
+                }
+                ?: return@edit
+            current.removeAll { it.id == id }
+            prefs[key] = gson.toJson(current)
+        }
+    }
+
     override suspend fun clearUserPreferences(userId: String) {
         val currentSession = sessionUserId.first()
         val biometricUser = biometricUserId.first()

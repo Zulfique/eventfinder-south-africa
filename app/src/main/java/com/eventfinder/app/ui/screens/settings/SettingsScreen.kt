@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.ui.res.painterResource
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.automirrored.outlined.ArrowForward
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.DeleteSweep
 import androidx.compose.material.icons.outlined.Fingerprint
@@ -25,6 +26,13 @@ import androidx.compose.material.icons.outlined.Language
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.NotificationsActive
+import androidx.compose.material.icons.outlined.Accessibility
+import androidx.compose.material.icons.outlined.Collections
+import androidx.compose.material.icons.outlined.DirectionsCar
+import androidx.compose.material.icons.outlined.Flag
+import androidx.compose.material.icons.outlined.Interests
+import androidx.compose.material.icons.outlined.PersonOutline
+import androidx.compose.material.icons.outlined.Shield
 import androidx.compose.material.icons.outlined.Place
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -63,6 +71,9 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.eventfinder.app.R
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import com.eventfinder.app.di.AppContainer
 import com.eventfinder.app.domain.model.SupportedLanguage
 import com.eventfinder.app.security.BiometricAuth
@@ -78,6 +89,13 @@ import com.eventfinder.app.ui.components.resolve
 fun SettingsScreen(
     container: AppContainer,
     onBack: () -> Unit,
+    onOpenAccessibility: () -> Unit = {},
+    onOpenAccessibilityProfile: () -> Unit = {},
+    onOpenCommute: () -> Unit = {},
+    onOpenInterests: () -> Unit = {},
+    onOpenModeration: () -> Unit = {},
+    onOpenReportScam: () -> Unit = {},
+    onOpenCollections: () -> Unit = {},
     onLoggedOut: () -> Unit = {}
 ) {
     val context = LocalContext.current
@@ -222,6 +240,65 @@ fun SettingsScreen(
                                 onCheckedChange = viewModel::setLocationConsent
                             )
                         }
+                    )
+                }
+            }
+
+            Card(Modifier.fillMaxWidth()) {
+                Column {
+                    SettingsNavRow(
+                        title = "Accessibility",
+                        subtitle = "Make events more accessible for you",
+                        icon = Icons.Outlined.Accessibility,
+                        onClick = onOpenAccessibility
+                    )
+                    HorizontalDivider()
+                    SettingsNavRow(
+                        title = "Accessibility profile",
+                        subtitle = "Wheelchair, noise, sensory and music needs",
+                        icon = Icons.Outlined.PersonOutline,
+                        onClick = onOpenAccessibilityProfile
+                    )
+                    HorizontalDivider()
+                    SettingsNavRow(
+                        title = "Location & commute",
+                        subtitle = "How far you are willing to travel",
+                        icon = Icons.Outlined.DirectionsCar,
+                        onClick = onOpenCommute
+                    )
+                    HorizontalDivider()
+                    SettingsNavRow(
+                        title = "Interests",
+                        subtitle = "Tune your event recommendations",
+                        icon = Icons.Outlined.Interests,
+                        onClick = onOpenInterests
+                    )
+                    HorizontalDivider()
+                    SettingsNavRow(
+                        title = "Event collections",
+                        subtitle = "Your saved lists of events",
+                        icon = Icons.Outlined.Collections,
+                        onClick = onOpenCollections
+                    )
+                }
+            }
+
+            SmartNotificationCard(container = container)
+
+            Card(Modifier.fillMaxWidth()) {
+                Column {
+                    SettingsNavRow(
+                        title = "Moderation tools",
+                        subtitle = "Review and resolve reported content",
+                        icon = Icons.Outlined.Shield,
+                        onClick = onOpenModeration
+                    )
+                    HorizontalDivider()
+                    SettingsNavRow(
+                        title = "Report a scam or issue",
+                        subtitle = "Help keep EventFinder safe for everyone",
+                        icon = Icons.Outlined.Flag,
+                        onClick = onOpenReportScam
                     )
                 }
             }
@@ -481,6 +558,78 @@ private fun ChangePasswordDialog(
         dismissButton = {
             TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
         }
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+/**
+ * "Smart notifications" — the fine-grained alert switches from the 2026
+ * showcase. Values live in DataStore and default to on.
+ */
+@Composable
+private fun SmartNotificationCard(container: AppContainer) {
+    val scope = rememberCoroutineScope()
+    val prefs = container.preferences
+    val group by prefs.notifyGroupUpdates.collectAsState(initial = true)
+    val nearby by prefs.notifyNearbyEvents.collectAsState(initial = true)
+    val picks by prefs.notifyPersonalisedPicks.collectAsState(initial = true)
+
+    Card(Modifier.fillMaxWidth()) {
+        Column {
+            ListItem(
+                headlineContent = { Text("Smart notifications") },
+                supportingContent = { Text("Only the updates that matter to you") }
+            )
+            HorizontalDivider()
+            ListItem(
+                headlineContent = { Text("Group updates") },
+                supportingContent = { Text("Changes to plans you joined") },
+                trailingContent = {
+                    Switch(
+                        checked = group,
+                        onCheckedChange = { value -> scope.launch { prefs.setNotifyGroupUpdates(value) } }
+                    )
+                }
+            )
+            HorizontalDivider()
+            ListItem(
+                headlineContent = { Text("Nearby events") },
+                supportingContent = { Text("Events happening close to you") },
+                trailingContent = {
+                    Switch(
+                        checked = nearby,
+                        onCheckedChange = { value -> scope.launch { prefs.setNotifyNearbyEvents(value) } }
+                    )
+                }
+            )
+            HorizontalDivider()
+            ListItem(
+                headlineContent = { Text("Personalised picks") },
+                supportingContent = { Text("Recommendations based on your interests") },
+                trailingContent = {
+                    Switch(
+                        checked = picks,
+                        onCheckedChange = { value -> scope.launch { prefs.setNotifyPersonalisedPicks(value) } }
+                    )
+                }
+            )
+        }
+    }
+}
+
+@Composable
+private fun SettingsNavRow(
+    title: String,
+    subtitle: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    onClick: () -> Unit
+) {
+    ListItem(
+        headlineContent = { Text(title) },
+        supportingContent = { Text(subtitle) },
+        leadingContent = { Icon(icon, contentDescription = null) },
+        trailingContent = { Icon(Icons.AutoMirrored.Outlined.ArrowForward, contentDescription = null) },
+        modifier = Modifier.clickable(onClick = onClick)
     )
 }
 

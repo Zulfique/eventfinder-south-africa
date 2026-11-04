@@ -22,7 +22,13 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.ArrowForward
+import androidx.compose.material.icons.outlined.Accessibility
+import androidx.compose.material.icons.outlined.Collections
+import androidx.compose.material.icons.outlined.ConfirmationNumber
+import androidx.compose.material.icons.outlined.DirectionsCar
 import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.Interests
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.Card
@@ -31,6 +37,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
@@ -69,6 +76,11 @@ fun ProfileScreen(
     onEditProfile: () -> Unit,
     onSettings: () -> Unit,
     onEventClick: (String) -> Unit,
+    onMyTickets: () -> Unit = {},
+    onCollections: () -> Unit = {},
+    onAccessibility: () -> Unit = {},
+    onInterests: () -> Unit = {},
+    onCommute: () -> Unit = {},
     onLogin: () -> Unit = {},
     onLoggedOut: () -> Unit = {}
 ) {
@@ -215,6 +227,30 @@ fun ProfileScreen(
             }
 
             item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(22.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surface
+                    )
+                ) {
+                    Column {
+                        ProfileMenuRow("My Tickets", Icons.Outlined.ConfirmationNumber, onMyTickets)
+                        HorizontalDivider()
+                        ProfileMenuRow("My Collections", Icons.Outlined.Collections, onCollections)
+                        HorizontalDivider()
+                        ProfileMenuRow("Interests", Icons.Outlined.Interests, onInterests)
+                        HorizontalDivider()
+                        ProfileMenuRow("Location & commute", Icons.Outlined.DirectionsCar, onCommute)
+                        HorizontalDivider()
+                        ProfileMenuRow("Accessibility", Icons.Outlined.Accessibility, onAccessibility)
+                        HorizontalDivider()
+                        ProfileMenuRow("Account & settings", Icons.Outlined.Settings, onSettings)
+                    }
+                }
+            }
+
+            item {
                 Text(
                     text = stringResource(R.string.my_events),
                     style = MaterialTheme.typography.titleLarge,
@@ -325,6 +361,28 @@ private fun StatCard(
             )
         }
     }
+}
+
+@Composable
+private fun ProfileMenuRow(
+    label: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    onClick: () -> Unit
+) {
+    ListItem(
+        headlineContent = { Text(label) },
+        leadingContent = {
+            Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        },
+        trailingContent = {
+            Icon(
+                Icons.AutoMirrored.Outlined.ArrowForward,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        },
+        modifier = Modifier.clickable(onClick = onClick)
+    )
 }
 
 @Composable
