@@ -68,23 +68,29 @@ class CommonsImageSearch(private val httpClient: OkHttpClient?) {
 
     /**
      * Ordered queries for an event: sport + town first (most specific), then
-     * the town on its own, then the town scoped to the country — which
-     * disambiguates place-name collisions ("Ceres" the Western Cape town vs
-     * the dwarf planet) — and finally the sport scoped to South Africa. The
-     * country tiers cover placeholder venues ("TBA, KZN") and tracks Commons
-     * does not know by the name the feed uses. Blank places yield only the
-     * country tier; titles with no recognisable sport yield nothing.
+     * the sport scoped to South Africa, and only then the town on its own.
+     *
+     * Subject-before-place ordering matters: a bare town query matches scenery
+     * near the venue ("Cherry Farm, Ceres") which is a real photo of the wrong
+     * subject, so an enduro championship ended up with a fruit-picking cover.
+     * The town tiers stay as a last resort so events that Commons has no
+     * subject photography for still get a recognisable South African photo.
+     * The country tier also covers placeholder venues ("TBA, KZN"). Blank
+     * places yield only the country tier; titles with no recognisable subject
+     * search by place alone.
      */
     internal fun imageQueries(title: String, place: String): List<String> {
         val town = cleanPlace(place)
         val keyword = sportKeyword(title) ?: categoryKeyword(title)
         val queries = mutableListOf<String>()
+        if (keyword != null) {
+            if (town.isNotEmpty()) queries += "$keyword $town"
+            queries += "$keyword South Africa"
+        }
         if (town.isNotEmpty()) {
-            if (keyword != null) queries += "$keyword $town"
             queries += town
             queries += "$town South Africa"
         }
-        if (keyword != null) queries += "$keyword South Africa"
         return queries.distinct().take(MAX_QUERIES)
     }
 

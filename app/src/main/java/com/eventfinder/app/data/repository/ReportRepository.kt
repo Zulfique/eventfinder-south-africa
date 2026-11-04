@@ -10,6 +10,9 @@ interface ReportRepository {
     suspend fun report(targetType: String, targetId: String, reason: String, reporterId: String): Result<Unit>
     suspend fun isBlocked(userId: String, otherId: String): Boolean
     suspend fun block(userId: String, otherId: String): Result<Unit>
+    /** Every user id [userId] has blocked; used to hide their reviews and events. */
+    suspend fun blockedIds(userId: String): Set<String>
+    suspend fun unblock(userId: String, otherId: String): Result<Unit>
 }
 
 class ReportRepositoryImpl(private val reportDao: ReportDao) : ReportRepository {
@@ -29,6 +32,12 @@ class ReportRepositoryImpl(private val reportDao: ReportDao) : ReportRepository 
 
     override suspend fun isBlocked(userId: String, otherId: String): Boolean =
         reportDao.blockedIds(userId).contains(otherId)
+
+    override suspend fun blockedIds(userId: String): Set<String> =
+        reportDao.blockedIds(userId).toSet()
+
+    override suspend fun unblock(userId: String, otherId: String): Result<Unit> =
+        runCatching { reportDao.unblock(userId, otherId) }
 
     override suspend fun block(userId: String, otherId: String): Result<Unit> =
         runCatching {

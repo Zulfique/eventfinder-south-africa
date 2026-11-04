@@ -21,6 +21,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
 import com.eventfinder.app.R
+import com.eventfinder.app.data.repository.RoutePoint
 import com.eventfinder.app.domain.model.Event
 import com.eventfinder.app.ui.components.categoryPngIcon
 import com.eventfinder.app.utils.AppLogger
@@ -28,6 +29,11 @@ import org.osmdroid.tileprovider.tilesource.TileSourceFactory
 import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.MapView
 import org.osmdroid.views.overlay.Marker
+import org.osmdroid.views.overlay.Polyline
+
+/** Google Maps-style route blue (`#4285F4`) and muted alternative grey. */
+private const val ROUTE_BLUE = 0xFF4285F4.toInt()
+private const val ROUTE_ALTERNATIVE = 0xB394A3B8.toInt()
 
 /**
  * Interactive event map built on the osmdroid (OpenStreetMap) SDK — the
@@ -45,11 +51,15 @@ fun EventMap(
     userLocation: Location?,
     onEventSelect: (String) -> Unit,
     onMapViewCreated: (MapView) -> Unit = {},
+    routeLines: List<List<RoutePoint>> = emptyList(),
+    selectedRouteIndex: Int = 0,
+    onRouteTap: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
     var hasCenteredOnUser by rememberSaveable { mutableStateOf(false) }
     val currentOnEventSelect by rememberUpdatedState(onEventSelect)
+    val currentOnRouteTap by rememberUpdatedState(onRouteTap)
 
     val mapView = remember {
         MapView(context).apply {
@@ -82,7 +92,8 @@ fun EventMap(
         }
     }
 
-    // Rebuild event markers only when the event list actually changes.
+    // Rebuild event markers only when the event list actually changes, and
+    // route lines only when the route itself changes (see routeSignature).
     val eventSignature = remember(events) {
         events.fold(1) { hash, event ->
             var result = hash * 31 + event.id.hashCode()
@@ -94,8 +105,38 @@ fun EventMap(
         }
     }
 
-    LaunchedEffect(eventSignature) {
+    val routeSignature = remember(routeLines, selectedRouteIndex) {
+        routeLines.fold(selectedRouteIndex) { hash, line -> hash * 31 + line.hashCode() }
+    }
+
+    LaunchedEffect(eventSignature, routeSignature) {
         mapView.overlays.clear()
+
+        // Route lines first, so event markers keep priority for drawing and
+        // taps — the blue route sits above the road/terrain tiles, pins above it.
+        if (routeLines.isNotEmpty()) {
+            val density = context.resources.displayMetrics.density
+            routeLines.forEachIndexed { index, line ->
+                if (line.size < 2) return@forEachIndexed
+                val selected = index == selectedRouteIndex
+                val polyline = Polyline(mapView).apply {
+                    setPoints(line.map { point -> GeoPoint(point.lat, point.lng) })
+                    outlinePaint.apply {
+                        color = if (selected) ROUTE_BLUE else ROUTE_ALTERNATIVE
+                        strokeWidth = (if (selected) 8f else 5f) * density
+                        strokeCap = Paint.Cap.ROUND
+                        strokeJoin = Paint.Join.ROUND
+                        isAntiAlias = true
+                    }
+                    // Tapping the line reports a route tap (Panel re-fit).
+                    setOnClickListener { _, _, _ ->
+                        currentOnRouteTap()
+                        true
+                    }
+                }
+                mapView.overlays.add(polyline)
+            }
+        }
 
         events.forEach { event ->
             val latitude = event.latitude
@@ -126,6 +167,12 @@ fun EventMap(
 
         userLocation?.let { location ->
             userMarker.position = GeoPoint(location.latitude, location.longitude)
+            mapView.overlays.add(userMarker)
+        }
+
+        // The clear above also removes the user dot when the location effect
+        // already placed it — re-add it if it still has a position.
+        if (userMarker.position != null && !mapView.overlays.contains(userMarker)) {
             mapView.overlays.add(userMarker)
         }
 

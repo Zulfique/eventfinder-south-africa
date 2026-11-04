@@ -9,8 +9,11 @@ import android.os.Build
 import android.os.Bundle
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.platform.LocalView
+import androidx.core.view.WindowCompat
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
@@ -77,6 +80,15 @@ class MainActivity : FragmentActivity() {
                 "light" -> false
                 "dark" -> true
                 else -> isSystemInDarkTheme()
+            }
+            // Keep the status/navigation bar icons legible on both schemes:
+            // white icons on the #0B1929 night surface, dark icons on the
+            // near-white light surface.
+            val view = LocalView.current
+            SideEffect {
+                val controller = WindowCompat.getInsetsController(window, view)
+                controller.isAppearanceLightStatusBars = !darkTheme
+                controller.isAppearanceLightNavigationBars = !darkTheme
             }
             EventFinderTheme(
                 darkTheme = darkTheme,

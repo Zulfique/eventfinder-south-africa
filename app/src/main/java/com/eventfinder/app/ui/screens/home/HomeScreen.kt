@@ -7,6 +7,8 @@ import android.content.pm.PackageManager
 import android.location.Location
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -37,15 +39,25 @@ import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Remove
 import androidx.compose.material.icons.outlined.FilterList
 import androidx.compose.material.icons.automirrored.outlined.List
+import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.Directions
+import androidx.compose.material.icons.outlined.DirectionsBike
+import androidx.compose.material.icons.outlined.DirectionsCar
+import androidx.compose.material.icons.outlined.DirectionsWalk
 import androidx.compose.material.icons.outlined.Map
 import androidx.compose.material.icons.outlined.MyLocation
+import androidx.compose.material.icons.outlined.Navigation
+import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.TrendingUp
 import androidx.compose.material.icons.automirrored.outlined.TrendingUp
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconToggleButton
@@ -60,6 +72,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.Switch
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -81,6 +94,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
+import org.osmdroid.util.BoundingBox
+import org.osmdroid.util.GeoPoint
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -89,6 +105,10 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.eventfinder.app.R
+import com.eventfinder.app.data.repository.RouteOption
+import com.eventfinder.app.data.repository.TravelMode
+import com.eventfinder.app.data.repository.formatRouteDistance
+import com.eventfinder.app.data.repository.formatRouteDuration
 import com.eventfinder.app.di.AppContainer
 import com.eventfinder.app.domain.model.EventSort
 import com.eventfinder.app.domain.model.TimeWindow
@@ -110,6 +130,7 @@ import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.outlined.LocationOn
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.layout.ContentScale
@@ -173,6 +194,8 @@ fun HomeScreen(
 
     var userLocation by rememberSaveable { mutableStateOf<Location?>(null) }
     var mapViewRef by remember { mutableStateOf<MapView?>(null) }
+    // Google Maps-style routing: blue route lines + info panel over the map.
+    val routeState by viewModel.route.collectAsState()
     // Showcase map: pin taps select an event; the floating card opens it.
     var selectedEventId by remember { mutableStateOf<String?>(null) }
     var locationPermissionGranted by remember { mutableStateOf(hasLocationPermission(context)) }
@@ -397,8 +420,31 @@ fun HomeScreen(
                             userLocation = userLocation,
                             onEventSelect = { id -> selectedEventId = id },
                             onMapViewCreated = { mapViewRef = it },
+                            routeLines = routeState?.routes?.map { it.points }.orEmpty(),
+                            selectedRouteIndex = routeState?.selectedRouteIndex ?: 0,
+                            // Tapping the blue line re-fits the camera to it.
+                            onRouteTap = {
+                                mapViewRef?.let { map ->
+                                    routeState?.routes
+                                        ?.getOrNull(routeState?.selectedRouteIndex ?: 0)
+                                        ?.let { fitMapToRoute(map, it) }
+                                }
+                            },
                             modifier = Modifier.fillMaxSize()
                         )
+
+                        // Frame the whole route whenever a new route (or a
+                        // different alternative/mode) becomes available.
+                        LaunchedEffect(
+                            routeState?.routes,
+                            routeState?.selectedRouteIndex
+                        ) {
+                            val map = mapViewRef ?: return@LaunchedEffect
+                            val active = routeState?.routes
+                                ?.getOrNull(routeState?.selectedRouteIndex ?: 0)
+                                ?: return@LaunchedEffect
+                            map.post { fitMapToRoute(map, active) }
+                        }
 
                         val selectedView = state.events
                             .firstOrNull { it.event.id == selectedEventId }
@@ -422,28 +468,77 @@ fun HomeScreen(
                                 contentDescription = "Zoom out",
                                 onClick = { mapViewRef?.controller?.zoomOut() }
                             )
+                            // Recenter route: visible only while a route is up.
+                            if (routeState != null) {
+                                val active = routeState?.routes
+                                    ?.getOrNull(routeState?.selectedRouteIndex ?: 0)
+                                MapCircleButton(
+                                    icon = Icons.Outlined.Navigation,
+                                    contentDescription = stringResource(R.string.route_recenter),
+                                    enabled = active != null,
+                                    onClick = {
+                                        active?.let { route -> mapViewRef?.let { fitMapToRoute(it, route) } }
+                                    }
+                                )
+                            }
                         }
 
-                        // Floating showcase card + View Details, kept clear of
-                        // the locate-me FAB in the bottom-right corner.
-                        selectedView?.let { selected ->
-                            MapEventCard(
-                                view = selected,
-                                onOpen = {
-                                    onEventClick(selected.event.id)
+                        // Route panel replaces the event card while
+                        // directions are open (spec: destination, distance,
+                        // ETA, mode, start navigation, close).
+                        if (routeState != null) {
+                            RoutePanel(
+                                state = routeState!!,
+                                onModeChange = viewModel::changeRouteMode,
+                                onRetry = viewModel::retryRoute,
+                                onClose = {
+                                    viewModel.clearRoute()
+                                    selectedEventId = null
                                 },
-                                onFavoriteToggle = {
-                                    viewModel.toggleFavorite(selected.event.id)
+                                onStartNavigation = { route ->
+                                    openNavigation(
+                                        context = context,
+                                        title = routeState!!.destinationTitle,
+                                        lat = routeState!!.destinationLat,
+                                        lng = routeState!!.destinationLng,
+                                        mode = routeState!!.mode
+                                    )
                                 },
+                                onSelectAlternative = viewModel::selectRouteOption,
                                 modifier = Modifier
                                     .align(Alignment.BottomCenter)
                                     .fillMaxWidth()
-                                    .padding(start = 16.dp, end = 84.dp, bottom = 16.dp)
+                                    .padding(16.dp)
                             )
+                        } else {
+                            // Floating showcase card + View Details, kept clear of
+                            // the locate-me FAB in the bottom-right corner.
+                            selectedView?.let { selected ->
+                                MapEventCard(
+                                    view = selected,
+                                    onOpen = {
+                                        onEventClick(selected.event.id)
+                                    },
+                                    onFavoriteToggle = {
+                                        viewModel.toggleFavorite(selected.event.id)
+                                    },
+                                    onRouteClick = {
+                                        viewModel.requestRouteTo(selected.event)
+                                    },
+                                    onDirections = {
+                                        openDirections(context, selected.event)
+                                    },
+                                    modifier = Modifier
+                                        .align(Alignment.BottomCenter)
+                                        .fillMaxWidth()
+                                        .padding(start = 16.dp, end = 84.dp, bottom = 16.dp)
+                                )
+                            }
                         }
 
-                        // Locate Me button
-                        FloatingActionButton(
+                        // Locate Me button (hidden while a route panel owns
+                        // the bottom-right corner so nothing overlaps).
+                        if (routeState == null) FloatingActionButton(
                             onClick = {
                                 if (!locationPermissionGranted) {
                                     locationLauncher.launch(
@@ -501,7 +596,8 @@ fun HomeScreen(
                         onRetry = viewModel::refresh,
                         onSeeAll = onSeeAll,
                         onNearMe = viewModel::onNearMeNow,
-                        onTrendingWeekend = viewModel::onTrendingWeekend
+                        onTrendingWeekend = viewModel::onTrendingWeekend,
+                        onCollectionSelect = viewModel::onCollectionSelect
                     )
                 }
             }
@@ -527,7 +623,8 @@ private fun ColumnScope.EventList(
     onRetry: () -> Unit = {},
     onSeeAll: () -> Unit = {},
     onNearMe: () -> Unit = {},
-    onTrendingWeekend: () -> Unit = {}
+    onTrendingWeekend: () -> Unit = {},
+    onCollectionSelect: (String) -> Unit = {}
 ) {
     if (state.events.isEmpty()) {
         Column(
@@ -668,6 +765,44 @@ private fun ColumnScope.EventList(
                 }
             }
 
+            // Curated collections — one-tap filter presets over the catalogue.
+            if (state.collections.isNotEmpty()) {
+                item {
+                    Text(
+                        text = "Collections",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.ExtraBold,
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
+                }
+
+                item {
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        items(
+                            items = state.collections,
+                            key = { it.collection.id }
+                        ) { chip ->
+                            val selected = state.activeCollectionId == chip.collection.id
+                            FilterChip(
+                                selected = selected,
+                                onClick = { onCollectionSelect(chip.collection.id) },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.16f),
+                                    selectedLabelColor = MaterialTheme.colorScheme.primary
+                                ),
+                                label = {
+                                    Text(
+                                        text = "${chip.collection.title}  ${chip.count}",
+                                        style = MaterialTheme.typography.labelLarge,
+                                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium
+                                    )
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+
             item {
                 Row(
                     modifier = Modifier
@@ -743,6 +878,8 @@ private fun MapEventCard(
     view: EventView,
     onOpen: () -> Unit,
     onFavoriteToggle: () -> Unit,
+    onRouteClick: () -> Unit = {},
+    onDirections: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val event = view.event
@@ -835,7 +972,341 @@ private fun MapEventCard(
         ) {
             Text("View Details  \u2192", fontWeight = FontWeight.Bold)
         }
+        Spacer(Modifier.height(8.dp))
+        // Directions row: draws the real blue route on the map, or hands the
+        // venue to an installed maps app.
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(
+                onClick = onRouteClick,
+                modifier = Modifier.weight(1f).height(44.dp),
+                shape = RoundedCornerShape(12.dp),
+                contentPadding = PaddingValues(horizontal = 8.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.Directions,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(Modifier.width(6.dp))
+                Text(
+                    text = stringResource(R.string.route_show),
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
+            OutlinedButton(
+                onClick = onDirections,
+                modifier = Modifier.weight(1f).height(44.dp),
+                shape = RoundedCornerShape(12.dp),
+                contentPadding = PaddingValues(horizontal = 8.dp)
+            ) {
+                Text(
+                    text = stringResource(R.string.directions),
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1
+                )
+            }
+        }
     }
+}
+
+/**
+ * Google Maps-inspired route panel: destination, distance, ETA, travel-mode
+ * chips, alternative-route selector, Start navigation, recenter and close.
+ * Renders the spec's loading, available, cached, alternative and unavailable
+ * states over the `#0B1929` surface with `#4285F4` route accents.
+ */
+@Composable
+private fun RoutePanel(
+    state: RouteUiState,
+    onModeChange: (TravelMode) -> Unit,
+    onRetry: () -> Unit,
+    onClose: () -> Unit,
+    onStartNavigation: (RouteOption) -> Unit,
+    onSelectAlternative: (Int) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val active = state.routes.getOrNull(state.selectedRouteIndex)
+
+    Card(
+        modifier = modifier,
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 10.dp)
+    ) {
+        Column(Modifier.padding(14.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.Outlined.Directions,
+                    contentDescription = null,
+                    tint = Color(0xFF4285F4),
+                    modifier = Modifier.size(20.dp)
+                )
+                Spacer(Modifier.width(8.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        text = state.destinationTitle,
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        text = when {
+                            state.isLoading -> stringResource(R.string.route_calculating)
+                            state.hasError -> stringResource(R.string.route_unavailable)
+                            active != null && state.fromCache -> stringResource(R.string.route_cached)
+                            active != null ->
+                                "${formatRouteDistance(active.distanceMeters)} · " +
+                                    formatRouteDuration(active.durationSeconds)
+                            else -> ""
+                        },
+                        style = MaterialTheme.typography.labelMedium,
+                        color = if (state.hasError) MaterialTheme.colorScheme.error
+                        else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                IconButton(onClick = onClose, modifier = Modifier.size(48.dp)) {
+                    Icon(
+                        imageVector = Icons.Outlined.Close,
+                        contentDescription = stringResource(R.string.route_close),
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(10.dp))
+
+            // Travel-mode chips: driving / walking / cycling.
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                RouteModeChip(
+                    mode = TravelMode.DRIVING,
+                    selected = state.mode == TravelMode.DRIVING,
+                    icon = Icons.Outlined.DirectionsCar,
+                    label = stringResource(R.string.route_mode_drive),
+                    onSelect = onModeChange
+                )
+                RouteModeChip(
+                    mode = TravelMode.WALKING,
+                    selected = state.mode == TravelMode.WALKING,
+                    icon = Icons.Outlined.DirectionsWalk,
+                    label = stringResource(R.string.route_mode_walk),
+                    onSelect = onModeChange
+                )
+                RouteModeChip(
+                    mode = TravelMode.CYCLING,
+                    selected = state.mode == TravelMode.CYCLING,
+                    icon = Icons.Outlined.DirectionsBike,
+                    label = stringResource(R.string.route_mode_cycle),
+                    onSelect = onModeChange
+                )
+            }
+
+            when {
+                state.isLoading -> {
+                    Spacer(Modifier.height(12.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(18.dp),
+                            strokeWidth = 2.dp,
+                            color = Color(0xFF4285F4)
+                        )
+                        Spacer(Modifier.width(10.dp))
+                        Text(
+                            text = stringResource(R.string.route_calculating),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+
+                state.hasError -> {
+                    Spacer(Modifier.height(8.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = stringResource(R.string.route_unavailable),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.weight(1f)
+                        )
+                        TextButton(onClick = onRetry) {
+                            Icon(
+                                imageVector = Icons.Outlined.Refresh,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(Modifier.width(4.dp))
+                            Text(stringResource(R.string.retry))
+                        }
+                    }
+                }
+
+                active != null -> {
+                    // Alternative-route selector: primary blue, others muted.
+                    if (state.routes.size > 1) {
+                        Spacer(Modifier.height(10.dp))
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.horizontalScroll(rememberScrollState())
+                        ) {
+                            state.routes.forEachIndexed { index, option ->
+                                val selected = index == state.selectedRouteIndex
+                                Surface(
+                                    shape = RoundedCornerShape(12.dp),
+                                    color = if (selected) Color(0xFF4285F4).copy(alpha = 0.16f)
+                                    else MaterialTheme.colorScheme.surfaceVariant,
+                                    border = BorderStroke(
+                                        1.dp,
+                                        if (selected) Color(0xFF4285F4) else MaterialTheme.colorScheme.outlineVariant
+                                    ),
+                                    modifier = Modifier.clickable { onSelectAlternative(index) }
+                                ) {
+                                    Text(
+                                        text = "${index + 1} · ${formatRouteDuration(option.durationSeconds)}",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = if (selected) Color(0xFF4285F4)
+                                        else MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    Spacer(Modifier.height(12.dp))
+                    Button(
+                        onClick = { onStartNavigation(active) },
+                        modifier = Modifier.fillMaxWidth().height(48.dp),
+                        shape = RoundedCornerShape(24.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFF4285F4),
+                            contentColor = Color.White
+                        )
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Navigation,
+                            contentDescription = null,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            text = stringResource(R.string.route_start_navigation),
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** Travel-mode chip for the route panel (48dp touch target). */
+@Composable
+private fun RouteModeChip(
+    mode: TravelMode,
+    selected: Boolean,
+    icon: ImageVector,
+    label: String,
+    onSelect: (TravelMode) -> Unit
+) {
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = if (selected) Color(0xFF4285F4).copy(alpha = 0.16f)
+        else MaterialTheme.colorScheme.surfaceVariant,
+        border = BorderStroke(
+            1.dp,
+            if (selected) Color(0xFF4285F4) else MaterialTheme.colorScheme.outlineVariant
+        ),
+        modifier = Modifier
+            .height(48.dp)
+            .clickable { onSelect(mode) }
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(horizontal = 12.dp)
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = if (selected) Color(0xFF4285F4) else MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(18.dp)
+            )
+            Spacer(Modifier.width(6.dp))
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = if (selected) Color(0xFF4285F4) else MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+/** Fits the camera around the whole route with breathing room for the panel. */
+private fun fitMapToRoute(map: MapView, route: RouteOption) {
+    if (route.points.size < 2) return
+    val lats = route.points.map { it.lat }
+    val lngs = route.points.map { it.lng }
+    val box = BoundingBox(lats.max(), lngs.max(), lats.min(), lngs.min())
+    runCatching {
+        map.zoomToBoundingBox(box, false, 96)
+    }.onFailure { AppLogger.w("EventMap", "Route camera fit failed: ${it.message}") }
+}
+
+/**
+ * Hands the destination to an installed maps app in navigation mode
+ * (Google Maps style: driving/walking/bicycling deep link).
+ */
+private fun openNavigation(
+    context: Context,
+    title: String,
+    lat: Double,
+    lng: Double,
+    mode: TravelMode
+) {
+    val label = android.net.Uri.encode(title)
+    val candidates = listOf(
+        android.content.Intent(
+            android.content.Intent.ACTION_VIEW,
+            android.net.Uri.parse("google.navigation:q=$lat,$lng&mode=${mode.googleMapsMode.first()}")
+        ),
+        android.content.Intent(
+            android.content.Intent.ACTION_VIEW,
+            android.net.Uri.parse(
+                "https://www.google.com/maps/dir/?api=1&destination=$lat,$lng&travelmode=${mode.googleMapsMode}"
+            )
+        ),
+        android.content.Intent(
+            android.content.Intent.ACTION_VIEW,
+            android.net.Uri.parse("geo:$lat,$lng?q=$lat,$lng($label)")
+        )
+    )
+    for (intent in candidates) {
+        try {
+            context.startActivity(intent)
+            return
+        } catch (_: android.content.ActivityNotFoundException) {
+            // try the next candidate
+        }
+    }
+}
+
+/** Opens an installed maps app for directions to [event] (no route drawn). */
+private fun openDirections(
+    context: Context,
+    event: com.eventfinder.app.domain.model.Event
+) {
+    val latitude = event.latitude ?: return
+    val longitude = event.longitude ?: return
+    openNavigation(
+        context = context,
+        title = event.venueName,
+        lat = latitude,
+        lng = longitude,
+        mode = TravelMode.DRIVING
+    )
 }
 
 /** "4.8 (2.5k)"-style review counts for the floating card. */
@@ -847,6 +1318,7 @@ private fun formatReviewCount(count: Int): String =
 private fun MapCircleButton(
     icon: ImageVector,
     contentDescription: String,
+    enabled: Boolean = true,
     onClick: () -> Unit
 ) {
     Surface(
@@ -857,13 +1329,14 @@ private fun MapCircleButton(
         Box(
             modifier = Modifier
                 .size(48.dp)
-                .clickable(onClick = onClick),
+                .clickable(enabled = enabled, onClick = onClick),
             contentAlignment = Alignment.Center
         ) {
             Icon(
                 imageVector = icon,
                 contentDescription = contentDescription,
-                tint = MaterialTheme.colorScheme.onSurface,
+                tint = if (enabled) MaterialTheme.colorScheme.onSurface
+                else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f),
                 modifier = Modifier.size(22.dp)
             )
         }

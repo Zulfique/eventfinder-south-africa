@@ -10,12 +10,16 @@ import com.eventfinder.app.R
 import com.eventfinder.app.di.AppContainer
 import com.eventfinder.app.domain.model.Event
 import com.eventfinder.app.domain.model.EventCategory
+import com.eventfinder.app.domain.model.EventCollection
 import com.eventfinder.app.domain.model.EventFilterer
 import com.eventfinder.app.domain.model.EventSort
 import com.eventfinder.app.domain.model.EventView
 import com.eventfinder.app.domain.model.RsvpStatus
 import com.eventfinder.app.domain.model.TimeWindow
 import com.eventfinder.app.data.repository.RatingSummary
+import com.eventfinder.app.data.repository.RouteOption
+import com.eventfinder.app.data.repository.RouteRepository
+import com.eventfinder.app.data.repository.TravelMode
 import com.eventfinder.app.domain.model.EventAlertDetector.Alerts
 import com.eventfinder.app.domain.model.EventAlertDetector.detect
 import com.eventfinder.app.notifications.NotificationHelper
@@ -61,7 +65,35 @@ data class HomeUiState(
     val timeWindow: TimeWindow = TimeWindow.ANYTIME,
     val minRating: Int = 0,
     val verifiedOnly: Boolean = false,
-    val accessibleOnly: Boolean = false
+    val accessibleOnly: Boolean = false,
+    /** Curated collections shown as a rail on Home, with current match counts. */
+    val collections: List<CollectionChip> = emptyList(),
+    /** Id of the active collection ([EventCollection.id]), null when none. */
+    val activeCollectionId: String? = null
+)
+
+/** A curated collection plus how many upcoming events it currently holds. */
+data class CollectionChip(
+    val collection: EventCollection,
+    val count: Int
+)
+
+/**
+ * Map route-panel state: real road routes between the user's location and
+ * the selected event, covering the routing spec's loading, available,
+ * alternative, offline-cache and unavailable states.
+ */
+data class RouteUiState(
+    val isLoading: Boolean = false,
+    val hasError: Boolean = false,
+    val fromCache: Boolean = false,
+    val destinationEventId: String = "",
+    val destinationTitle: String = "",
+    val destinationLat: Double = 0.0,
+    val destinationLng: Double = 0.0,
+    val mode: TravelMode = TravelMode.DRIVING,
+    val routes: List<RouteOption> = emptyList(),
+    val selectedRouteIndex: Int = 0
 )
 
 /**
@@ -83,6 +115,8 @@ class HomeViewModel(
 
     val uiState: StateFlow<HomeUiState> = _uiState
     val messages: kotlinx.coroutines.flow.SharedFlow<UiMessage> = _messages
+
+    private val collectionFlow = MutableStateFlow<String?>(null)
 
     private val _previousEvents = MutableStateFlow<List<EventView>>(emptyList())
     val previousEvents: StateFlow<List<EventView>> = _previousEvents.asStateFlow()
@@ -120,7 +154,8 @@ class HomeViewModel(
         val timeWindow: TimeWindow,
         val minRating: Int,
         val verifiedOnly: Boolean,
-        val accessibleOnly: Boolean
+        val accessibleOnly: Boolean,
+        val collectionId: String? = null
     )
 
     init {
@@ -170,19 +205,29 @@ class HomeViewModel(
         ) { window, rating, verified, accessible ->
             FilterDraft(window, rating, verified, accessible)
         }
-        val controlsFlow = combine(textControlsFlow, rangeControlsFlow, filtersFlow) { text, range, filters ->
-            Controls(
-                text.first, text.second, text.third,
-                range.first, range.second, range.third,
-                filters.window, filters.minRating, filters.verified, filters.accessible
-            )
+        val baseControlsFlow =
+            combine(textControlsFlow, rangeControlsFlow, filtersFlow) { text, range, filters ->
+                Controls(
+                    text.first, text.second, text.third,
+                    range.first, range.second, range.third,
+                    filters.window, filters.minRating, filters.verified, filters.accessible
+                )
+            }
+        val controlsFlow = combine(baseControlsFlow, collectionFlow) { controls, collectionId ->
+            controls.copy(collectionId = collectionId)
         }
 
         viewModelScope.launch {
-            combinedFlow.combine(controlsFlow) { combined, controls -> applyControls(combined, controls) }
-                .collect { views ->
-                    _uiState.value = _uiState.value.copy(events = views, isLoading = false, lastRefreshAt = System.currentTimeMillis())
-                }
+            combinedFlow.combine(controlsFlow) { combined, controls ->
+                applyControls(combined, controls) to collectionChips(combined.events)
+            }.collect { (views, chips) ->
+                _uiState.value = _uiState.value.copy(
+                    events = views,
+                    collections = chips,
+                    isLoading = false,
+                    lastRefreshAt = System.currentTimeMillis()
+                )
+            }
         }
 
         // Wire up new event / favourite updated alerts (FR-04)
@@ -240,14 +285,22 @@ class HomeViewModel(
             }
 
         // Showcase "When?" window (Smart Discovery's Trending card reuses WEEKEND).
+        // Curated collection narrows the feed before the user filters run.
+        val collection = EventCollection.byId(c.collectionId)
+        val collectionScoped = if (collection == null) {
+            upcomingEvents
+        } else {
+            upcomingEvents.filter { collection.matches(it, now) }
+        }
+
         val inScope = when (c.timeWindow) {
-            TimeWindow.ANYTIME -> upcomingEvents
-            TimeWindow.TODAY -> upcomingEvents.filter { it.startDate <= endOfTodayMillis(now) }
+            TimeWindow.ANYTIME -> collectionScoped
+            TimeWindow.TODAY -> collectionScoped.filter { it.startDate <= endOfTodayMillis(now) }
             TimeWindow.WEEKEND -> {
                 val weekend = upcomingWeekendWindow(now)
-                upcomingEvents.filter { it.startDate in weekend }
+                collectionScoped.filter { it.startDate in weekend }
             }
-            TimeWindow.NEXT_WEEK -> upcomingEvents.filter { it.startDate <= now + 7 * 86_400_000L }
+            TimeWindow.NEXT_WEEK -> collectionScoped.filter { it.startDate <= now + 7 * 86_400_000L }
         }
 
         val scoped = inScope.filter { event ->
@@ -277,6 +330,26 @@ class HomeViewModel(
         return if (c.minRating > 0) {
             views.filter { (it.averageRating ?: 0.0) >= c.minRating }
         } else views
+    }
+
+    /**
+     * Upcoming-event counts for each curated collection. Empty collections are
+     * dropped so the rail never shows a dead end.
+     */
+    private fun collectionChips(events: List<Event>): List<CollectionChip> {
+        val now = System.currentTimeMillis()
+        val upcoming = events.filter { it.endDate > now }
+        return EventCollection.curated.mapNotNull { collection ->
+            val count = upcoming.count { collection.matches(it, now) }
+            if (count == 0) null else CollectionChip(collection, count)
+        }
+    }
+
+    /** Activate a curated collection, or clear it when the same chip is tapped. */
+    fun onCollectionSelect(id: String?) {
+        val next = if (collectionFlow.value == id) null else id
+        collectionFlow.value = next
+        _uiState.value = _uiState.value.copy(activeCollectionId = next)
     }
 
     /** Last millisecond of the calendar day containing [now]. */
@@ -321,6 +394,131 @@ class HomeViewModel(
     fun onToggleMapView() {
         _uiState.value = _uiState.value.copy(isMapView = !_uiState.value.isMapView)
         AppLogger.d("HomeViewModel", "Map view toggled -> ${_uiState.value.isMapView}")
+    }
+
+    // ------------------------------------------------------------------ route
+
+    private val routeRepository: RouteRepository = container.routeRepository
+    private val _route = MutableStateFlow<RouteUiState?>(null)
+
+    /** Current map route (null = normal event discovery map). */
+    val route: StateFlow<RouteUiState?> = _route.asStateFlow()
+
+    private var routeJob: kotlinx.coroutines.Job? = null
+
+    /**
+     * Request a real road route from the user's location to [event]'s venue.
+     * The panel enters its loading state immediately; a missing location or a
+     * provider/cache failure surfaces the spec's message + retry states.
+     */
+    fun requestRouteTo(event: Event) {
+        val destLat = event.latitude
+        val destLng = event.longitude
+        val originLat = _uiState.value.userLat
+        val originLng = _uiState.value.userLng
+        if (destLat == null || destLng == null || originLat == null || originLng == null) {
+            viewModelScope.launch { _messages.emit(UiMessage.Resource(R.string.route_location_needed)) }
+            return
+        }
+        _route.value = RouteUiState(
+            isLoading = true,
+            destinationEventId = event.id,
+            destinationTitle = event.title,
+            destinationLat = destLat,
+            destinationLng = destLng,
+            mode = TravelMode.DRIVING
+        )
+        fetchRoute()
+    }
+
+    /** Travel mode changed: refetch the route for the same destination. */
+    fun changeRouteMode(mode: TravelMode) {
+        val current = _route.value ?: return
+        if (current.mode == mode && !current.hasError) return
+        _route.update {
+            it?.copy(
+                mode = mode,
+                isLoading = true,
+                hasError = false,
+                fromCache = false,
+                routes = emptyList(),
+                selectedRouteIndex = 0
+            )
+        }
+        fetchRoute()
+    }
+
+    /** Pick an alternative route (index into [RouteUiState.routes]). */
+    fun selectRouteOption(index: Int) {
+        _route.update { state ->
+            if (state == null || index !in state.routes.indices) state
+            else state.copy(selectedRouteIndex = index)
+        }
+    }
+
+    /** Retry after a failed request (panel error state). */
+    fun retryRoute() {
+        val current = _route.value ?: return
+        _route.update {
+            it?.copy(isLoading = true, hasError = false, fromCache = false, routes = emptyList())
+        }
+        if (current.destinationLat != 0.0 || current.destinationLng != 0.0) fetchRoute()
+    }
+
+    /** Close directions: clears the route and its lines from the map. */
+    fun clearRoute() {
+        routeJob?.cancel()
+        _route.value = null
+    }
+
+    private fun fetchRoute() {
+        val current = _route.value ?: return
+        val originLat = _uiState.value.userLat
+        val originLng = _uiState.value.userLng
+        if (originLat == null || originLng == null) {
+            _route.update { it?.copy(isLoading = false, hasError = true) }
+            return
+        }
+        routeJob?.cancel()
+        routeJob = viewModelScope.launch {
+            routeRepository.route(
+                fromLat = originLat,
+                fromLng = originLng,
+                toLat = current.destinationLat,
+                toLng = current.destinationLng,
+                mode = current.mode
+            ).fold(
+                onSuccess = { result ->
+                    _route.update { state ->
+                        if (state == null || state.destinationEventId != current.destinationEventId) {
+                            state
+                        } else {
+                            state.copy(
+                                isLoading = false,
+                                hasError = false,
+                                fromCache = result.fromCache,
+                                routes = result.routes,
+                                selectedRouteIndex = 0
+                            )
+                        }
+                    }
+                },
+                onFailure = {
+                    _route.update { state ->
+                        if (state == null || state.destinationEventId != current.destinationEventId) {
+                            state
+                        } else {
+                            state.copy(
+                                isLoading = false,
+                                hasError = true,
+                                fromCache = false,
+                                routes = emptyList()
+                            )
+                        }
+                    }
+                }
+            )
+        }
     }
 
     /**

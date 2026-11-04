@@ -23,6 +23,8 @@ import com.eventfinder.app.data.repository.GroupPlanningRepository
 import com.eventfinder.app.data.repository.GroupPlanningRepositoryImpl
 import com.eventfinder.app.data.repository.ReportRepository
 import com.eventfinder.app.data.repository.ReportRepositoryImpl
+import com.eventfinder.app.data.repository.RouteRepository
+import com.eventfinder.app.data.repository.RouteRepositoryImpl
 import com.eventfinder.app.data.repository.TicketRepository
 import com.eventfinder.app.data.repository.TicketRepositoryImpl
 import com.eventfinder.app.data.repository.OpenStreetMapRepository
@@ -126,6 +128,11 @@ class AppContainer(context: Context) {
 
     val reportRepository: ReportRepository by lazy {
         ReportRepositoryImpl(database.reportDao())
+    }
+
+    /** Real road routing (Valhalla → OSRM) with an offline route cache. */
+    val routeRepository: RouteRepository by lazy {
+        RouteRepositoryImpl(httpClient = httpClient, cacheDir = appContext.cacheDir)
     }
 
     val weatherRepository: WeatherRepository by lazy {

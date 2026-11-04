@@ -496,6 +496,59 @@ class UserPreferences(private val context: Context) : SessionProvider {
         }
     }
 
+    // ---- User-scoped saved searches (pinned, never auto-expire) ----
+
+    val savedSearches: Flow<List<String>> = sessionUserId.flatMapLatest { userId ->
+        if (userId.isNullOrBlank()) {
+            flowOf(emptyList())
+        } else {
+            context.eventFinderDataStore.data.map { prefs ->
+                prefs[userStringKey("saved_searches_json", userId)]
+                    ?.let { json ->
+                        runCatching {
+                            gson.fromJson(json, Array<String>::class.java).toList()
+                        }.getOrNull()
+                    }
+                    .orEmpty()
+            }
+        }
+    }
+
+    suspend fun saveSearch(term: String) {
+        val trimmed = term.trim()
+        if (trimmed.isEmpty()) return
+        val userId = sessionUserId.first() ?: return
+        context.eventFinderDataStore.edit { prefs ->
+            val key = userStringKey("saved_searches_json", userId)
+            val current = prefs[key]
+                ?.let { json ->
+                    runCatching { gson.fromJson(json, Array<String>::class.java).toMutableList() }
+                        .getOrNull()
+                }
+                ?: mutableListOf()
+
+            current.removeAll { it.equals(trimmed, ignoreCase = true) }
+            current.add(0, trimmed)
+            prefs[key] = gson.toJson(current.take(12))
+        }
+        AppLogger.i("UserPreferences", "Saved search recorded: $trimmed")
+    }
+
+    suspend fun removeSavedSearch(term: String) {
+        val userId = sessionUserId.first() ?: return
+        context.eventFinderDataStore.edit { prefs ->
+            val key = userStringKey("saved_searches_json", userId)
+            val current = prefs[key]
+                ?.let { json ->
+                    runCatching { gson.fromJson(json, Array<String>::class.java).toMutableList() }
+                        .getOrNull()
+                }
+                ?: return@edit
+            current.removeAll { it.equals(term, ignoreCase = true) }
+            prefs[key] = gson.toJson(current)
+        }
+    }
+
     /**
      * Synchronous language read used when the Activity recreates for a locale change.
      *

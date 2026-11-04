@@ -197,7 +197,8 @@ fun EventFinderNavHost(
                                 onEditEvent = { navController.navigate(AppDestinations.editEvent(it)) },
                                 onPlanWithFriends = { navController.navigate(AppDestinations.groupPlanning(it)) },
                                 onOpenScanner = { navController.navigate(AppDestinations.ticketScanner(it)) },
-                                onOrganizerClick = { navController.navigate(AppDestinations.organizerProfile(it)) }
+                                onOrganizerClick = { navController.navigate(AppDestinations.organizerProfile(it)) },
+                                onOpenEvent = { navController.navigate(AppDestinations.eventDetail(it)) }
                             )
                         }
 

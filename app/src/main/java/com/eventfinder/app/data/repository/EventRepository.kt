@@ -300,7 +300,9 @@ override suspend fun ensureSeeded() {
             organizerId = userId,
             organizerName = "You",
             attendeeCount = 0,
-            isCreatedByUser = true
+            isCreatedByUser = true,
+            version = 1,
+            updatedAt = System.currentTimeMillis()
         )
         database.createEventAtomically(entity)
         AppLogger.i(tag, "Community event created locally: $id")
@@ -343,7 +345,11 @@ override suspend fun ensureSeeded() {
             latitude = draft.latitude,
             longitude = draft.longitude,
             imageUrl = newImageUrl,
-            isPublic = draft.isPublic
+            isPublic = draft.isPublic,
+            // Conflict resolution: every local edit advances the version and
+            // stamps updatedAt so a stale cloud copy cannot overwrite it.
+            version = existing.version + 1,
+            updatedAt = System.currentTimeMillis()
         )
         database.updateEventAtomically(updated)
         AppLogger.i(tag, "Community event updated locally: $eventId")

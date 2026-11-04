@@ -45,6 +45,9 @@ data class Event(
     val organizerName: String,
     val organizerIsVerified: Boolean = false,
     val attendeeCount: Int,
+    /** RSVP tallies from the source feed (0 when the feed has no breakdown). */
+    val maybeCount: Int = 0,
+    val notGoingCount: Int = 0,
     val isFavorite: Boolean,
     val isCreatedByUser: Boolean,
     /** Accessibility flags for the venue/event. */

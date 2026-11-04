@@ -384,4 +384,26 @@
   <string name="view_profile">View profile</string>
   <string name="share_with_friends">Share with Friends!</string>
   <string name="link_copied">Link copied</string>
+
+  <!-- Map route panel (Google Maps-style blue route) -->
+  <string name="route_show">Show route</string>
+  <string name="route_calculating">Calculating route\u2026</string>
+  <string name="route_unavailable">Route unavailable</string>
+  <string name="route_start_navigation">Start navigation</string>
+  <string name="route_recenter">Recenter route</string>
+  <string name="route_close">Close route</string>
+  <string name="route_mode_drive">Drive</string>
+  <string name="route_mode_walk">Walk</string>
+  <string name="route_mode_cycle">Cycle</string>
+  <string name="route_cached">Cached route</string>
+  <string name="route_location_needed">Turn on location to calculate a route</string>
+  <string name="route_option">Route %1$d</string>
+
+  <!-- Spec-sheet button states -->
+  <string name="getting_tickets">Getting Tickets\u2026</string>
+  <string name="tickets_added">Tickets Added!</string>
+  <string name="try_again">Try Again</string>
+  <string name="reporting">Reporting\u2026</string>
+  <string name="report_sent">Report Submitted</string>
+  <string name="share_event">Share event</string>
 </resources>

@@ -268,7 +268,11 @@ class EventDiscoveryRepository(
             id = "remote:$stableId",
             title = title,
             description = description,
-            category = mapCategory(category),
+            // Feeds frequently publish an unusable category ("other",
+            // "all_categories"); falling back to the title keeps the category
+            // filters, chips and collections meaningful for those events.
+            category = mapCategory(category).takeUnless { it == EventCategory.OTHER.labelKey }
+                ?: mapCategory("$title $description"),
             startDate = startDate,
             endDate = endDate,
             venueName = venueName,
@@ -294,6 +298,9 @@ class EventDiscoveryRepository(
             value.contains("nightlife") || value.contains("night club") || value.contains("club") || value.contains("rave") ->
                 EventCategory.NIGHTLIFE.labelKey
             value.contains("sport") || value.contains("football") || value.contains("rugby") || value.contains("running") ->
+                EventCategory.SPORTS.labelKey
+            value.contains("enduro") || value.contains("motocross") || value.contains("karting") ||
+                value.contains("rally") || value.contains("racing") || Regex("\\brace\\b").containsMatchIn(value) ->
                 EventCategory.SPORTS.labelKey
             value.contains("market") -> EventCategory.MARKETS.labelKey
             value.contains("food") || value.contains("restaurant") || value.contains("dinner") ->

@@ -53,6 +53,7 @@ import com.eventfinder.app.domain.model.EventView
 import com.eventfinder.app.ui.components.EventCard
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -296,6 +297,26 @@ fun OrganizerProfileScreen(
                 }
             }
 
+            // Block / unblock the organiser (safety control).
+            item(key = "block") {
+                TextButton(
+                    onClick = { vm.toggleBlockOrganizer() },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(
+                        painter = androidx.compose.ui.res.painterResource(R.drawable.ic_ms_block),
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        text = if (state.blocked) "Unblock organizer" else "Block organizer",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
             // Upcoming events hosted by this organizer
             if (state.upcomingEvents.isNotEmpty()) {
                 item(key = "upcoming_title") {
@@ -390,6 +411,8 @@ private data class OrganizerUiState(
     val websiteUrl: String? = null,
     val upcomingEvents: List<Event> = emptyList(),
     val reported: Boolean = false,
+    /** Organiser is blocked by the signed-in user (their events stay hidden). */
+    val blocked: Boolean = false,
     val loading: Boolean = true
 )
 
@@ -407,6 +430,13 @@ private class OrganizerProfileViewModel(
     val state: StateFlow<OrganizerUiState> = _state
 
     init {
+        viewModelScope.launch {
+            val userId = container.preferences.sessionUserId.first()
+            if (!userId.isNullOrBlank()) {
+                val blocked = container.reportRepository.isBlocked(userId, organizerId)
+                _state.value = _state.value.copy(blocked = blocked)
+            }
+        }
         viewModelScope.launch {
             combine(
                 container.eventRepository.observeAllEvents(),
@@ -434,7 +464,10 @@ private class OrganizerProfileViewModel(
                     val name = hosted.firstOrNull()?.organizerName ?: organizerId
                     _state.value = OrganizerUiState(
                         organizerName = name,
-                        verified = name in TRUSTED_ORGANIZERS,
+                        // Data first: the feed's verified flag, with the
+                        // ticketing-platform allowlist as a fallback.
+                        verified = hosted.any { it.organizerIsVerified } ||
+                            name in TRUSTED_ORGANIZERS,
                         eventCount = hosted.size,
                         attendeeTotal = hosted.sumOf { it.attendeeCount },
                         averageRating = average,
@@ -443,6 +476,7 @@ private class OrganizerProfileViewModel(
                         },
                         upcomingEvents = upcoming,
                         reported = _state.value.reported,
+                        blocked = _state.value.blocked,
                         loading = false
                     )
                 }
@@ -465,6 +499,21 @@ private class OrganizerProfileViewModel(
     fun toggleFavorite(eventId: String) {
         viewModelScope.launch {
             container.eventRepository.toggleFavorite(eventId)
+        }
+    }
+
+    /** Blocks or unblocks this organiser; the state drives the button label. */
+    fun toggleBlockOrganizer() {
+        viewModelScope.launch {
+            val userId = container.preferences.sessionUserId.first() ?: return@launch
+            val repository = container.reportRepository
+            val nowBlocked = !_state.value.blocked
+            if (nowBlocked) {
+                repository.block(userId, organizerId)
+            } else {
+                repository.unblock(userId, organizerId)
+            }
+            _state.value = _state.value.copy(blocked = nowBlocked)
         }
     }
 }

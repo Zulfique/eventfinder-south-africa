@@ -375,4 +375,22 @@
   <string name="view_profile">Beskou profiel</string>
   <string name="share_with_friends">Deel met vriende!</string>
   <string name="link_copied">Skakel gekopieer</string>
+  <string name="getting_tickets">Kry tans kaartjies…</string>
+  <string name="report_sent">Verslag ingedien</string>
+  <string name="reporting">Stuur tans verslag…</string>
+  <string name="route_cached">Gekasde roete</string>
+  <string name="route_calculating">Bereken tans roete…</string>
+  <string name="route_close">Sluit roete</string>
+  <string name="route_location_needed">Skakel ligging aan om \'n roete te bereken</string>
+  <string name="route_mode_cycle">Fietsry</string>
+  <string name="route_mode_drive">Ry</string>
+  <string name="route_mode_walk">Stap</string>
+  <string name="route_option">Roete %1$d</string>
+  <string name="route_recenter">Herpositioneer roete</string>
+  <string name="route_show">Wys roete</string>
+  <string name="route_start_navigation">Begin navigasie</string>
+  <string name="route_unavailable">Roete nie beskikbaar nie</string>
+  <string name="share_event">Deel geleentheid</string>
+  <string name="tickets_added">Kaartjies bygevoeg!</string>
+  <string name="try_again">Probeer weer</string>
 </resources>

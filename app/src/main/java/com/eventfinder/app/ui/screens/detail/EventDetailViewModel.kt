@@ -12,6 +12,7 @@ import com.eventfinder.app.di.AppContainer
 import com.eventfinder.app.domain.model.Event
 import com.eventfinder.app.domain.model.EventReview
 import com.eventfinder.app.domain.model.EventView
+import com.eventfinder.app.domain.model.SimilarEvents
 import com.eventfinder.app.domain.model.RsvpStatus
 import com.eventfinder.app.notifications.NotificationHelper
 import com.eventfinder.app.ui.components.UiMessage
@@ -32,7 +33,9 @@ enum class ReviewFilter(val label: String) {
     RATING_4("4★"),
     RATING_3("3★"),
     RATING_2("2★"),
-    VERIFIED("Verified ✓");
+    VERIFIED("Verified ✓"),
+    RECENT("Last 30 days"),
+    PHOTOS("With photos");
 
     fun matches(review: com.eventfinder.app.domain.model.EventReview): Boolean = when (this) {
         ALL -> true
@@ -41,6 +44,12 @@ enum class ReviewFilter(val label: String) {
         RATING_3 -> review.rating == 3
         RATING_2 -> review.rating <= 2
         VERIFIED -> review.verifiedAttendance
+        RECENT -> review.createdAt >= System.currentTimeMillis() - THIRTY_DAYS_MS
+        PHOTOS -> review.photoUrls.isNotEmpty()
+    }
+
+    private companion object {
+        const val THIRTY_DAYS_MS = 30L * 24 * 60 * 60 * 1000
     }
 }
 
@@ -62,10 +71,16 @@ data class EventDetailUiState(
     val reviewDraftPhotos: List<String> = emptyList(),
     val isSubmittingReview: Boolean = false,
     /** The signed-in attendee's own ticket for this event (QR shows this). */
-    val myTicket: com.eventfinder.app.domain.model.EventTicket? = null
+    val myTicket: com.eventfinder.app.domain.model.EventTicket? = null,
+    /** True while an RSVP write (and its reminder/ticket side-effects) runs. */
+    val rsvpSaving: Boolean = false,
+    /** Authors the signed-in user has blocked; their reviews stay hidden. */
+    val blockedUserIds: Set<String> = emptySet(),
+    /** Nearby events in the same category, loaded on demand. */
+    val similarEvents: List<EventView> = emptyList()
 ) { 
     val visibleReviews: List<EventReview>
-        get() = reviews.filter(reviewFilter::matches)
+        get() = reviews.filter { it.userId !in blockedUserIds && reviewFilter.matches(it) }
 }
 
 /**
@@ -103,6 +118,7 @@ class EventDetailViewModel(
         viewModelScope.launch {
             currentUserId = container.preferences.sessionUserId.first()
             loadMyTicket()
+            loadBlockedUsers()
         }
         viewModelScope.launch {
             kotlinx.coroutines.flow.combine(
@@ -152,6 +168,7 @@ class EventDetailViewModel(
             }
             eventFlow.value = event
             loadMyTicket()
+            loadSimilarEvents(event)
             val latitude = event.latitude
             val longitude = event.longitude
             if (latitude != null && longitude != null) {
@@ -162,6 +179,50 @@ class EventDetailViewModel(
                     it.copy(weather = null, weatherUnavailable = true)
                 }
             }
+        }
+    }
+
+    /** Users this account has blocked — their reviews never render. */
+    private suspend fun loadBlockedUsers() {
+        val userId = currentUserId ?: return
+        val blocked = container.reportRepository.blockedIds(userId)
+        _uiState.update { it.copy(blockedUserIds = blocked) }
+    }
+
+    /** Blocks the author of a review and hides their content immediately. */
+    fun blockReviewer(authorId: String) {
+        val userId = currentUserId ?: return
+        if (authorId.isBlank() || authorId == userId) return
+        viewModelScope.launch {
+            container.reportRepository.block(userId, authorId)
+            loadBlockedUsers()
+            _messages.emit(UiMessage.Literal("Reviewer blocked"))
+        }
+    }
+
+    /**
+     * Builds the "Similar events" rail from the local catalogue: same category,
+     * same organiser and nearby venues, soonest first. Works offline.
+     */
+    private suspend fun loadSimilarEvents(event: Event) {
+        val candidates = eventRepository.observeAllEvents().first()
+        val ranked = SimilarEvents.rank(event, candidates)
+        if (ranked.isEmpty()) {
+            _uiState.update { it.copy(similarEvents = emptyList()) }
+            return
+        }
+        val favorites = eventRepository.observeFavoriteIds().first()
+        val rsvps = eventRepository.observeRsvpStatuses().first()
+        _uiState.update { state ->
+            state.copy(
+                similarEvents = ranked.map { similar ->
+                    EventView(
+                        event = similar,
+                        rsvpStatus = rsvps[similar.id],
+                        isFavorite = favorites.contains(similar.id)
+                    )
+                }
+            )
         }
     }
 
@@ -229,6 +290,8 @@ class EventDetailViewModel(
 
     fun setRsvp(status: RsvpStatus) {
         viewModelScope.launch {
+            _uiState.update { it.copy(rsvpSaving = true) }
+            try {
             eventRepository.setRsvp(eventId, status)
             when (status) {
                 RsvpStatus.ATTENDING -> {
@@ -256,6 +319,9 @@ class EventDetailViewModel(
                     NotificationHelper.cancelEventReminders(appContext, eventId)
                     _messages.emit(UiMessage.Resource(R.string.reminders_cancelled))
                 }
+            }
+            } finally {
+                _uiState.update { it.copy(rsvpSaving = false) }
             }
         }
     }

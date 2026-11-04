@@ -20,11 +20,13 @@ class CommonsImageSearchTest {
     // ------------------------------------------------------------ queries
 
     @Test
-    fun `queries the sport first and the town alone as a fallback`() {
+    fun `queries the sport first and only falls back to the town after it`() {
         val queries = search().imageQueries("TRACN4 NATIONAL RALLY", "DULLSTROOM")
 
+        // Subject-scoped queries (town, then country) must be exhausted before
+        // a bare-town scenery photo is allowed to become the cover.
         assertEquals(
-            listOf("rally DULLSTROOM", "DULLSTROOM", "DULLSTROOM South Africa", "rally South Africa"),
+            listOf("rally DULLSTROOM", "rally South Africa", "DULLSTROOM", "DULLSTROOM South Africa"),
             queries
         )
     }
@@ -56,7 +58,7 @@ class CommonsImageSearchTest {
         val queries = search().imageQueries("JAZZ IN THE PARK", "DURBAN")
 
         assertEquals(
-            listOf("music concert DURBAN", "DURBAN", "DURBAN South Africa", "music concert South Africa"),
+            listOf("music concert DURBAN", "music concert South Africa", "DURBAN", "DURBAN South Africa"),
             queries
         )
     }
@@ -66,7 +68,7 @@ class CommonsImageSearchTest {
         val queries = search().imageQueries("CLUB CHAMPIONSHIP", "KILLARNEY OVAL TRACK\\, WC")
 
         assertEquals(
-            listOf("motorsport KILLARNEY OVAL TRACK", "KILLARNEY OVAL TRACK", "KILLARNEY OVAL TRACK South Africa", "motorsport South Africa"),
+            listOf("motorsport KILLARNEY OVAL TRACK", "motorsport South Africa", "KILLARNEY OVAL TRACK", "KILLARNEY OVAL TRACK South Africa"),
             queries
         )
     }

@@ -1,6 +1,7 @@
 package com.eventfinder.app.data.sources
 
 import com.eventfinder.app.data.remote.model.RemoteEvent
+import com.eventfinder.app.domain.model.EventCategory
 import com.eventfinder.app.utils.AppLogger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -166,7 +167,7 @@ class IcsEventSource(
                             sourceId = occSourceId,
                             title = summary,
                             description = description,
-                            category = categories.ifBlank { "OTHER" },
+                            category = resolvedCategory(categories, summary, description),
                             startDate = occurrence,
                             endDate = occurrence + duration,
                             venueName = venueName,
@@ -188,7 +189,7 @@ class IcsEventSource(
                         sourceId = uid,
                         title = summary,
                         description = description,
-                        category = categories.ifBlank { "OTHER" },
+                        category = resolvedCategory(categories, summary, description),
                         startDate = startDate,
                         endDate = startDate + duration,
                         venueName = venueName,
@@ -204,6 +205,20 @@ class IcsEventSource(
         }
 
         return events
+    }
+
+    /**
+     * Uses the feed's own category when it has one, otherwise infers it from the
+     * event text so ICS imports are not all dumped into "Other".
+     */
+    private fun resolvedCategory(categories: String, title: String, description: String): String {
+        val raw = categories.trim()
+        if (raw.isNotBlank() && raw.equals("OTHER", ignoreCase = true).not() &&
+            raw.equals("all_categories", ignoreCase = true).not()
+        ) {
+            return raw
+        }
+        return EventCategory.inferFromText("$title $description").labelKey
     }
 
     private fun expandRrule(startMillis: Long, rrule: String, exdates: Set<Long>): List<Long> {

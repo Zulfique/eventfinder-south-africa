@@ -26,14 +26,23 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import com.eventfinder.app.ui.components.EventCard
+import com.eventfinder.app.ui.components.UiMessage
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.outlined.Accessible
 import androidx.compose.material.icons.outlined.CalendarMonth
+import androidx.compose.material.icons.outlined.FlashOn
+import androidx.compose.material.icons.outlined.Spa
+import androidx.compose.material.icons.outlined.VolumeUp
 import androidx.compose.material.icons.outlined.Favorite
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.outlined.Group
@@ -77,8 +86,10 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.Switch
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -124,6 +135,14 @@ import androidx.compose.material.icons.outlined.ConfirmationNumber
 import androidx.compose.material.icons.outlined.Repeat
 import androidx.compose.material.icons.outlined.Verified
 import com.eventfinder.app.ui.components.QrImage
+import com.eventfinder.app.ui.components.AboutEventButton
+import com.eventfinder.app.ui.components.RsvpActionButton
+import com.eventfinder.app.ui.components.RsvpOptionPill
+import com.eventfinder.app.ui.components.RsvpTallyChips
+import com.eventfinder.app.ui.components.ReportEventButton
+import com.eventfinder.app.ui.components.RsvpStatusNotice
+import androidx.compose.material3.SwitchDefaults
+import androidx.compose.material3.Surface
 
 /**
  * Screen 6 (Event Detail): hero image, metadata, RSVP, favourite, share,
@@ -138,7 +157,8 @@ fun EventDetailScreen(
     onEditEvent: (String) -> Unit = {},
     onPlanWithFriends: (String) -> Unit = {},
     onOpenScanner: (String) -> Unit = {},
-    onOrganizerClick: (String) -> Unit = {}
+    onOrganizerClick: (String) -> Unit = {},
+    onOpenEvent: (String) -> Unit = {}
 ) {
     val context = LocalContext.current
     val viewModel: EventDetailViewModel = viewModel(
@@ -151,6 +171,15 @@ fun EventDetailScreen(
     var showDeleteDialog by remember { mutableStateOf(false) }
     var showTicketDialog by remember { mutableStateOf(false) }
     var showShareSheet by remember { mutableStateOf(false) }
+    // RSVP system (2026 spec): sheet with pending choice + notify toggle,
+    // submitted state with a success/error result.
+    var showRsvpSheet by remember { mutableStateOf(false) }
+    var rsvpNotifyMe by remember { mutableStateOf(true) }
+    // True between tapping Confirm and the repository reporting the new status.
+    var rsvpAwaitingConfirm by remember { mutableStateOf(false) }
+    var rsvpError by remember { mutableStateOf(false) }
+    var rsvpJustConfirmed by remember { mutableStateOf(false) }
+    var aboutExpanded by remember { mutableStateOf(false) }
 
     BackHandler { onBack() }
 
@@ -355,11 +384,43 @@ fun EventDetailScreen(
                         ) {
                             Text(event.title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
                             Spacer(Modifier.height(4.dp))
-                            Text(
-                                "Source: ${event.provenance}",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
+                            // Provenance badge + event accessibility chips,
+                            // all driven by real event fields (no decoration).
+                            ProvenanceBadge(event.provenance)
+                            if (event.wheelchairAccessible || event.loudMusic ||
+                                event.sensoryFriendly || event.strobeLights
+                            ) {
+                                Spacer(Modifier.height(8.dp))
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                    modifier = Modifier.horizontalScroll(rememberScrollState())
+                                ) {
+                                    if (event.wheelchairAccessible) {
+                                        AccessibilityChip(
+                                            icon = Icons.Outlined.Accessible,
+                                            label = "Wheelchair access"
+                                        )
+                                    }
+                                    if (event.sensoryFriendly) {
+                                        AccessibilityChip(
+                                            icon = Icons.Outlined.Spa,
+                                            label = "Sensory friendly"
+                                        )
+                                    }
+                                    if (event.loudMusic) {
+                                        AccessibilityChip(
+                                            icon = Icons.Outlined.VolumeUp,
+                                            label = "Loud music"
+                                        )
+                                    }
+                                    if (event.strobeLights) {
+                                        AccessibilityChip(
+                                            icon = Icons.Outlined.FlashOn,
+                                            label = "Strobe lights"
+                                        )
+                                    }
+                                }
+                            }
                             Spacer(Modifier.height(6.dp))
                             Text(
                                 stringResource(
@@ -646,6 +707,19 @@ fun EventDetailScreen(
                                                         style = MaterialTheme.typography.labelSmall,
                                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                                     )
+                                                    IconButton(
+                                                        onClick = {
+                                                            viewModel.blockReviewer(review.userId)
+                                                        },
+                                                        modifier = Modifier.size(32.dp)
+                                                    ) {
+                                                        Icon(
+                                                            painter = painterResource(R.drawable.ic_ms_block),
+                                                            contentDescription = "Block this reviewer",
+                                                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                            modifier = Modifier.size(16.dp)
+                                                        )
+                                                    }
                                                 }
                                                 Spacer(Modifier.height(4.dp))
                                                 Text(review.comment, style = MaterialTheme.typography.bodyMedium)
@@ -699,33 +773,43 @@ fun EventDetailScreen(
                                     fontWeight = FontWeight.Bold
                                 )
                             }
-                            Spacer(Modifier.height(8.dp))
-                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                OutlinedButton(
-                                    onClick = {
-                                        viewModel.setRsvp(
-                                            if (view.rsvpStatus == RsvpStatus.MAYBE) RsvpStatus.DECLINED
-                                            else RsvpStatus.MAYBE
-                                        )
-                                    },
-                                    modifier = Modifier.weight(1f).height(44.dp)
-                                ) {
-                                    Text(stringResource(R.string.attend_maybe))
-                                }
-                                OutlinedButton(
-                                    onClick = {
-                                        openDirections(context, event)
-                                    },
-                                    modifier = Modifier.weight(1f).height(44.dp)
-                                ) {
-                                    Image(
-                                        painter = painterResource(R.drawable.evt_directions),
-                                        contentDescription = "Directions",
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                    Spacer(Modifier.size(6.dp))
-                                    Text(stringResource(R.string.directions))
-                                }
+                            Spacer(Modifier.height(10.dp))
+                            // RSVP tallies (Going / Maybe / Not Going) from the
+                            // event's real attendee data, then the single RSVP
+                            // action button with its confirmed/cancel states.
+                            RsvpTallyChips(
+                                going = event.attendeeCount,
+                                maybe = event.maybeCount,
+                                notGoing = event.notGoingCount
+                            )
+                            Spacer(Modifier.height(10.dp))
+                            RsvpActionButton(
+                                status = view.rsvpStatus,
+                                onOpenSheet = {
+                                    rsvpError = false
+                                    rsvpJustConfirmed = false
+                                    showRsvpSheet = true
+                                },
+                                onCancel = { viewModel.setRsvp(RsvpStatus.DECLINED) },
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            Spacer(Modifier.height(10.dp))
+                            OutlinedButton(
+                                onClick = { openDirections(context, event) },
+                                modifier = Modifier.fillMaxWidth().height(48.dp),
+                                shape = RoundedCornerShape(24.dp)
+                            ) {
+                                Icon(
+                                    painter = painterResource(R.drawable.ic_ms_pin),
+                                    contentDescription = null,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Spacer(Modifier.size(8.dp))
+                                Text(
+                                    text = stringResource(R.string.directions),
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Medium
+                                )
                             }
                              // Showcase Group Planning card: avatar stack,
                              // going count and the green Invite Friends pill.
@@ -748,34 +832,55 @@ fun EventDetailScreen(
                                  }
                                  Spacer(Modifier.height(8.dp))
                              }
-                            FilledTonalButton(
-                                onClick = { showShareSheet = true },
-                                 modifier = Modifier.fillMaxWidth().height(44.dp)
-                             ) {
-                                 Image(
-                                     painter = painterResource(R.drawable.evt_share),
-                                     contentDescription = "Share",
-                                     modifier = Modifier.size(20.dp)
-                                 )
-                                 Spacer(Modifier.size(6.dp))
-                                 Text(stringResource(R.string.share))
-                             }
-
+                            // Share (Share design system: filled green 48dp
+                            // circular icon button) beside the outlined
+                            // "Report this Event" pill with its real states.
                             val reportScope = rememberCoroutineScope()
-                            TextButton(
-                                onClick = {
-                                    reportScope.launch {
-                                        container.reportRepository.report(
-                                            targetType = "event",
-                                            targetId = event.id,
-                                            reason = "user_report",
-                                            reporterId = ""
+                            var reportSubmitting by remember { mutableStateOf(false) }
+                            var reportSubmitted by remember { mutableStateOf(false) }
+                            var reportFailed by remember { mutableStateOf(false) }
+
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Surface(
+                                    onClick = { showShareSheet = true },
+                                    shape = CircleShape,
+                                    color = Color(0xFF00C98D),
+                                    modifier = Modifier.size(48.dp)
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Icon(
+                                            painter = painterResource(R.drawable.ic_ms_share),
+                                            contentDescription = stringResource(R.string.share),
+                                            tint = Color(0xFF0B1929),
+                                            modifier = Modifier.size(24.dp)
                                         )
                                     }
-                                },
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Text("Report this event")
+                                }
+                                ReportEventButton(
+                                    loading = reportSubmitting,
+                                    submitted = reportSubmitted,
+                                    error = reportFailed,
+                                    enabled = !reportSubmitted,
+                                    onClick = {
+                                        reportFailed = false
+                                        reportSubmitting = true
+                                        reportScope.launch {
+                                            val outcome = container.reportRepository.report(
+                                                targetType = "event",
+                                                targetId = event.id,
+                                                reason = "user_report",
+                                                reporterId = ""
+                                            )
+                                            reportSubmitting = false
+                                            reportSubmitted = outcome.isSuccess
+                                            reportFailed = outcome.isFailure
+                                        }
+                                    },
+                                    modifier = Modifier.weight(1f)
+                                )
                             }
 
                             Spacer(Modifier.height(24.dp))
@@ -788,10 +893,335 @@ fun EventDetailScreen(
                                 )
                                 Spacer(Modifier.height(8.dp))
                             }
-                            Text(stringResource(R.string.about_event), style = MaterialTheme.typography.titleMedium)
-                            Spacer(Modifier.height(8.dp))
-                            Text(event.description, style = MaterialTheme.typography.bodyMedium)
+                            // About This Event button (About spec): the info
+                            // disc + divider + label + chevron, which reveals
+                            // the description when expanded.
+                            AboutEventButton(
+                                expanded = aboutExpanded,
+                                onClick = { aboutExpanded = !aboutExpanded }
+                            )
+                            if (aboutExpanded) {
+                                Spacer(Modifier.height(12.dp))
+                                Text(
+                                    event.description,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+
+                            // "Similar events": same category / organiser / nearby
+                            // venues from the local catalogue (works offline).
+                            if (state.similarEvents.isNotEmpty()) {
+                                Spacer(Modifier.height(24.dp))
+                                Text(
+                                    "Similar events",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Spacer(Modifier.height(10.dp))
+                                LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                    items(
+                                        items = state.similarEvents,
+                                        key = { it.event.id }
+                                    ) { similar ->
+                                        EventCard(
+                                            view = similar,
+                                            onClick = { onOpenEvent(similar.event.id) },
+                                            modifier = Modifier.width(260.dp)
+                                        )
+                                    }
+                                }
+                            }
                             Spacer(Modifier.height(32.dp))
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // RSVP sheet (2026 spec): event header, three option pills, notify switch
+    // and a Confirm RSVP button; submitting / failed / closed states included.
+    val rsvpEvent = state.eventView
+    if (showRsvpSheet && rsvpEvent != null) {
+        val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        var pendingStatus by remember(rsvpEvent.event.id) {
+            mutableStateOf(rsvpEvent.rsvpStatus ?: RsvpStatus.ATTENDING)
+        }
+
+        ModalBottomSheet(
+            onDismissRequest = {
+                showRsvpSheet = false
+                rsvpAwaitingConfirm = false
+                rsvpError = false
+            },
+            sheetState = sheetState,
+            containerColor = com.eventfinder.app.ui.components.EventFinderTokens.Surface
+        ) {
+            Column(Modifier.padding(horizontal = 16.dp).padding(bottom = 20.dp)) {
+                if (rsvpJustConfirmed) {
+                    // Success state: green check badge + confirmation + View Event.
+                    Column(
+                        Modifier.fillMaxWidth(),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Spacer(Modifier.height(8.dp))
+                        Box(
+                            modifier = Modifier
+                                .size(84.dp)
+                                .clip(CircleShape)
+                                .background(com.eventfinder.app.ui.components.EventFinderTokens.Green),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_ms_check_circle),
+                                contentDescription = null,
+                                tint = com.eventfinder.app.ui.components.EventFinderTokens.Night,
+                                modifier = Modifier.size(44.dp)
+                            )
+                        }
+                        Spacer(Modifier.height(16.dp))
+                        Text(
+                            text = "You're Going!",
+                            style = MaterialTheme.typography.headlineSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = com.eventfinder.app.ui.components.EventFinderTokens.TextPrimary
+                        )
+                        Spacer(Modifier.height(6.dp))
+                        Text(
+                            text = "You've successfully RSVP'd to ${rsvpEvent.event.title}.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = com.eventfinder.app.ui.components.EventFinderTokens.TextSecondary,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                        )
+                        Spacer(Modifier.height(20.dp))
+                        Button(
+                            onClick = { showRsvpSheet = false },
+                            modifier = Modifier.fillMaxWidth().height(48.dp),
+                            shape = RoundedCornerShape(24.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = com.eventfinder.app.ui.components.EventFinderTokens.Green,
+                                contentColor = com.eventfinder.app.ui.components.EventFinderTokens.Night
+                            )
+                        ) {
+                            Text("View Event", fontWeight = FontWeight.Bold)
+                            Spacer(Modifier.size(8.dp))
+                            Icon(
+                                painter = painterResource(R.drawable.ic_ms_arrow_forward),
+                                contentDescription = null,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    }
+                } else {
+                    // Event header card
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(64.dp)
+                                .clip(RoundedCornerShape(16.dp))
+                                .background(MaterialTheme.colorScheme.surfaceVariant)
+                        ) {
+                            AsyncImage(
+                                model = rsvpEvent.event.imageUrl,
+                                contentDescription = null,
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        }
+                        Spacer(Modifier.width(12.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                text = rsvpEvent.event.title,
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = com.eventfinder.app.ui.components.EventFinderTokens.TextPrimary,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Spacer(Modifier.height(4.dp))
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    painter = painterResource(R.drawable.ic_ms_calendar),
+                                    contentDescription = null,
+                                    tint = com.eventfinder.app.ui.components.EventFinderTokens.TextSecondary,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                                Spacer(Modifier.width(4.dp))
+                                Text(
+                                    text = DateTimeUtils.formatFullDateTime(rsvpEvent.event.startDate),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = com.eventfinder.app.ui.components.EventFinderTokens.TextSecondary
+                                )
+                            }
+                            Spacer(Modifier.height(2.dp))
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    painter = painterResource(R.drawable.ic_ms_pin),
+                                    contentDescription = null,
+                                    tint = com.eventfinder.app.ui.components.EventFinderTokens.TextSecondary,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                                Spacer(Modifier.width(4.dp))
+                                Text(
+                                    text = "${rsvpEvent.event.venueName}, ${rsvpEvent.event.address}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = com.eventfinder.app.ui.components.EventFinderTokens.TextSecondary,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
+                        IconButton(onClick = { showRsvpSheet = false }) {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_ms_close),
+                                contentDescription = stringResource(R.string.close),
+                                tint = com.eventfinder.app.ui.components.EventFinderTokens.TextSecondary
+                            )
+                        }
+                    }
+
+                    Spacer(Modifier.height(18.dp))
+                    Text(
+                        text = "RSVP to this event",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = com.eventfinder.app.ui.components.EventFinderTokens.TextPrimary
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        RsvpOptionPill(
+                            status = RsvpStatus.ATTENDING,
+                            selected = pendingStatus == RsvpStatus.ATTENDING,
+                            onClick = { pendingStatus = RsvpStatus.ATTENDING },
+                            modifier = Modifier.weight(1f)
+                        )
+                        RsvpOptionPill(
+                            status = RsvpStatus.MAYBE,
+                            selected = pendingStatus == RsvpStatus.MAYBE,
+                            onClick = { pendingStatus = RsvpStatus.MAYBE },
+                            modifier = Modifier.weight(1f)
+                        )
+                        RsvpOptionPill(
+                            status = RsvpStatus.DECLINED,
+                            selected = pendingStatus == RsvpStatus.DECLINED,
+                            onClick = { pendingStatus = RsvpStatus.DECLINED },
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+
+                    Spacer(Modifier.height(14.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_ms_bell),
+                            contentDescription = null,
+                            tint = com.eventfinder.app.ui.components.EventFinderTokens.TextSecondary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(Modifier.width(10.dp))
+                        Text(
+                            text = "Notify me about updates",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = com.eventfinder.app.ui.components.EventFinderTokens.TextPrimary,
+                            modifier = Modifier.weight(1f)
+                        )
+                        Switch(
+                            checked = rsvpNotifyMe,
+                            onCheckedChange = { rsvpNotifyMe = it },
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = Color.White,
+                                checkedTrackColor = com.eventfinder.app.ui.components.EventFinderTokens.Green,
+                                checkedBorderColor = com.eventfinder.app.ui.components.EventFinderTokens.Green
+                            )
+                        )
+                    }
+
+                    // Real RSVP states from the repository: the write is only
+                    // acknowledged once the event's status actually changes.
+                    val saving = state.rsvpSaving || rsvpAwaitingConfirm
+                    val rsvpClosed = rsvpEvent.event.endDate < System.currentTimeMillis()
+                    androidx.compose.runtime.LaunchedEffect(
+                        rsvpAwaitingConfirm,
+                        state.eventView?.rsvpStatus
+                    ) {
+                        if (rsvpAwaitingConfirm &&
+                            state.eventView?.rsvpStatus == pendingStatus
+                        ) {
+                            rsvpAwaitingConfirm = false
+                            rsvpJustConfirmed = pendingStatus == RsvpStatus.ATTENDING
+                            if (pendingStatus != RsvpStatus.ATTENDING) showRsvpSheet = false
+                        }
+                    }
+
+                    if (rsvpClosed) {
+                        Spacer(Modifier.height(14.dp))
+                        RsvpStatusNotice(
+                            title = "RSVP Closed",
+                            subtitle = "This event is no longer accepting RSVPs.",
+                            accent = com.eventfinder.app.ui.components.EventFinderTokens.TextSecondary,
+                            icon = R.drawable.ic_ms_info
+                        )
+                    } else if (saving) {
+                        Spacer(Modifier.height(14.dp))
+                        RsvpStatusNotice(
+                            title = "Submitting RSVP…",
+                            subtitle = "Please wait a moment.",
+                            accent = com.eventfinder.app.ui.components.EventFinderTokens.Green,
+                            loading = true
+                        )
+                    }
+
+                    if (rsvpError) {
+                        Spacer(Modifier.height(14.dp))
+                        RsvpStatusNotice(
+                            title = "Failed to RSVP",
+                            subtitle = "Something went wrong. Please try again.",
+                            accent = com.eventfinder.app.ui.components.EventFinderTokens.ErrorRed,
+                            icon = R.drawable.ic_ms_warning,
+                            onRetry = {
+                                rsvpError = false
+                                rsvpAwaitingConfirm = true
+                                viewModel.setRsvp(pendingStatus)
+                            }
+                        )
+                    }
+
+                    Spacer(Modifier.height(16.dp))
+                    Button(
+                        onClick = {
+                            rsvpError = false
+                            rsvpAwaitingConfirm = true
+                            viewModel.setRsvp(pendingStatus)
+                        },
+                        enabled = !saving && !rsvpClosed,
+                        modifier = Modifier.fillMaxWidth().height(52.dp),
+                        shape = RoundedCornerShape(26.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = com.eventfinder.app.ui.components.EventFinderTokens.Green,
+                            contentColor = com.eventfinder.app.ui.components.EventFinderTokens.Night,
+                            disabledContainerColor = Color(0xFF1E2933),
+                            disabledContentColor = com.eventfinder.app.ui.components.EventFinderTokens.TextSecondary
+                        )
+                    ) {
+                        if (saving) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(20.dp),
+                                strokeWidth = 2.dp,
+                                color = com.eventfinder.app.ui.components.EventFinderTokens.Night
+                            )
+                            Spacer(Modifier.width(10.dp))
+                            Text("Submitting…", fontWeight = FontWeight.Bold)
+                        } else {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_ms_check_circle),
+                                contentDescription = null,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                if (rsvpClosed) "RSVP Closed" else "Confirm RSVP",
+                                fontWeight = FontWeight.Bold
+                            )
                         }
                     }
                 }
@@ -954,7 +1384,7 @@ private fun ShareSheet(
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold
             )
-            Spacer(Modifier.height(20.dp))
+            Spacer(Modifier.height(24.dp))
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceEvenly
@@ -962,27 +1392,27 @@ private fun ShareSheet(
                 ShareTarget(
                     label = "WhatsApp",
                     color = Color(0xFF25D366),
-                    icon = Icons.Filled.Chat
+                    icon = R.drawable.ic_brand_whatsapp
                 ) { sendTo("com.whatsapp") }
                 ShareTarget(
                     label = "Messages",
                     color = Color(0xFF3DDC84),
-                    icon = Icons.Filled.Sms
+                    icon = R.drawable.ic_ms_chat
                 ) { sendTo("com.google.android.apps.messaging") }
                 ShareTarget(
                     label = "Email",
                     color = Color(0xFF1A73E8),
-                    icon = Icons.Filled.Email
+                    icon = R.drawable.ic_ms_mail
                 ) { sendTo(null, type = "message/rfc822") }
                 ShareTarget(
                     label = "Copy Link",
                     color = Color(0xFF7C4DFF),
-                    icon = Icons.Outlined.ContentCopy
+                    icon = R.drawable.ic_ms_copy
                 ) { copyLink() }
                 ShareTarget(
                     label = "Nearby",
                     color = Color(0xFF4285F4),
-                    icon = Icons.Outlined.Share
+                    icon = R.drawable.ic_ms_share
                 ) { sendTo(null) }
             }
 
@@ -1000,30 +1430,32 @@ private fun ShareSheet(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceEvenly
             ) {
-                SocialShortcut("f") { sendTo("com.facebook.katana") }
-                SocialShortcut("X") { sendTo("com.twitter.android") }
-                SocialShortcut("in") { sendTo("com.linkedin.android") }
-                SocialShortcut("P") { sendTo("com.pinterest") }
-                SocialShortcut("IG") { sendTo("com.instagram.android") }
-                SocialShortcut("TT") { sendTo("com.zhiliaoapp.musically") }
+                SocialShortcut("Facebook", R.drawable.ic_brand_facebook) { sendTo("com.facebook.katana") }
+                SocialShortcut("X", R.drawable.ic_brand_x) { sendTo("com.twitter.android") }
+                SocialShortcut("LinkedIn", R.drawable.ic_brand_linkedin) { sendTo("com.linkedin.android") }
+                SocialShortcut("Pinterest", R.drawable.ic_brand_pinterest) { sendTo("com.pinterest") }
+                SocialShortcut("Instagram", R.drawable.ic_brand_instagram) { sendTo("com.instagram.android") }
+                SocialShortcut("TikTok", R.drawable.ic_brand_tiktok) { sendTo("com.zhiliaoapp.musically") }
             }
         }
     }
 }
 
-/** One solid-colour share target circle with its label. */
+/** One solid-colour share target circle with its real brand/glyph icon. */
 @Composable
 private fun ShareTarget(
     label: String,
     color: Color,
-    icon: ImageVector,
+    @androidx.annotation.DrawableRes icon: Int,
     onClick: () -> Unit
 ) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier
+            .clip(CircleShape)
             .clickable(onClick = onClick)
             .padding(4.dp)
+            .widthIn(min = 48.dp)
     ) {
         Box(
             modifier = Modifier
@@ -1032,32 +1464,36 @@ private fun ShareTarget(
             contentAlignment = Alignment.Center
         ) {
             Icon(
-                imageVector = icon,
+                painter = painterResource(icon),
                 contentDescription = label,
                 tint = Color.White,
                 modifier = Modifier.size(26.dp)
             )
         }
-        Spacer(Modifier.height(6.dp))
+        Spacer(Modifier.height(8.dp))
         Text(
             text = label,
-            fontSize = 11.sp,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            fontSize = 12.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1
         )
     }
 }
 
-/** One grayscale social shortcut circle (monogram) with its label. */
+/** One grayscale social shortcut circle (real brand glyph) with its label. */
 @Composable
 private fun SocialShortcut(
-    monogram: String,
+    label: String,
+    @androidx.annotation.DrawableRes icon: Int,
     onClick: () -> Unit
 ) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier
+            .clip(CircleShape)
             .clickable(onClick = onClick)
             .padding(4.dp)
+            .widthIn(min = 44.dp)
     ) {
         Box(
             modifier = Modifier
@@ -1065,17 +1501,71 @@ private fun SocialShortcut(
                 .background(MaterialTheme.colorScheme.surfaceVariant, CircleShape),
             contentAlignment = Alignment.Center
         ) {
-            Text(
-                text = monogram,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+            Icon(
+                painter = painterResource(icon),
+                contentDescription = label,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(20.dp)
             )
         }
-        Spacer(Modifier.height(4.dp))
+        Spacer(Modifier.height(6.dp))
         Text(
-            text = monogram,
+            text = label,
             fontSize = 10.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1
+        )
+    }
+}
+
+/**
+ * Rounded provenance pill so live, cached, imported and sample data are
+ * distinguishable without reading a bare "Source:" string.
+ */
+@Composable
+private fun ProvenanceBadge(provenance: String) {
+    val (label, color) = when (provenance.lowercase()) {
+        "live" -> "Live" to Color(0xFF00C98D)
+        "cached" -> "Cached" to Color(0xFF4285F4)
+        "imported" -> "Imported" to Color(0xFFF59E0B)
+        else -> "Sample" to Color(0xFF94A3B8)
+    }
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .background(color.copy(alpha = 0.14f), RoundedCornerShape(8.dp))
+            .padding(horizontal = 8.dp, vertical = 4.dp)
+    ) {
+        Box(Modifier.size(6.dp).background(color, CircleShape))
+        Spacer(Modifier.width(6.dp))
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.SemiBold,
+            color = color
+        )
+    }
+}
+
+/** Compact event-accessibility chip: 14dp icon + label, 8dp radius. */
+@Composable
+private fun AccessibilityChip(icon: ImageVector, label: String) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(8.dp))
+            .padding(horizontal = 8.dp, vertical = 5.dp)
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.size(14.dp)
+        )
+        Spacer(Modifier.width(5.dp))
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
     }

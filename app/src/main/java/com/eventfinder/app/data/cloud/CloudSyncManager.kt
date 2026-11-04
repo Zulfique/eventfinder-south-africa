@@ -310,10 +310,15 @@ class CloudSyncManager(
             }
 
 
-            // Save valid records before advancing the checkpoint.
+            // Save valid records before advancing the checkpoint. Remote copies
+            // are merged, never blindly overwritten: a local edit with a newer
+            // updatedAt wins and is re-pushed on the next sync.
             if (mappedEvents.isNotEmpty()) {
-                eventDao.upsertAll(mappedEvents)
-                totalPulled += mappedEvents.size
+                val merged = resolveConflicts(mappedEvents)
+                if (merged.isNotEmpty()) {
+                    eventDao.upsertAll(merged)
+                    totalPulled += merged.size
+                }
             }
 
 
@@ -409,6 +414,43 @@ class CloudSyncManager(
     private fun userFavoritesCollection(ownerId: String) = userCollection(ownerId).collection(FAVORITES_COLLECTION)
     private fun userRsvpsCollection(ownerId: String) = userCollection(ownerId).collection(RSVPS_COLLECTION)
 
+    /**
+     * Last-write-wins merge for user-created events.
+     *
+     * Local records whose `updatedAt` is newer than the incoming cloud copy are
+     * kept (and pushed again next cycle) so an edit made offline is never lost.
+     * Everything else takes the remote copy with a bumped version.
+     */
+    private suspend fun resolveConflicts(remote: List<EventEntity>): List<EventEntity> {
+        val localById = runCatching { eventDao.findByIds(remote.map { it.id }) }
+            .getOrDefault(emptyList())
+            .associateBy { it.id }
+
+        val out = mutableListOf<EventEntity>()
+        for (incoming in remote) {
+            val local = localById[incoming.id]
+            if (local == null) {
+                out.add(incoming)
+                continue
+            }
+            val localIsNewer = local.isCreatedByUser && local.updatedAt > incoming.updatedAt
+            if (localIsNewer) {
+                AppLogger.i(
+                    tag,
+                    "Conflict on ${incoming.id}: keeping local edit (v${local.version}) over cloud v${incoming.version}"
+                )
+                continue
+            }
+            out.add(
+                incoming.copy(
+                    version = maxOf(incoming.version, local.version) + 1,
+                    updatedAt = maxOf(incoming.updatedAt, local.updatedAt)
+                )
+            )
+        }
+        return out
+    }
+
     companion object {
         private const val USERS_COLLECTION = "users"
         private const val EVENTS_COLLECTION = "events"
@@ -420,9 +462,9 @@ class CloudSyncManager(
     }
 }
 
-// ------------------------------------------------------------------
-// Mapping helpers
-// ------------------------------------------------------------------
+    // ------------------------------------------------------------------
+    // Mapping helpers
+    // ------------------------------------------------------------------
 
 /** Serialises an event into a Firestore document map. */
 internal fun EventEntity.toFirestoreMap(): Map<String, Any?> = mapOf(
@@ -442,6 +484,10 @@ internal fun EventEntity.toFirestoreMap(): Map<String, Any?> = mapOf(
     "organizerName" to organizerName,
     "attendeeCount" to attendeeCount,
     "isCreatedByUser" to true,
+    // Conflict resolution: version + updatedAt travel with the document so a
+    // newer local edit can win over a stale cloud copy (last-write-wins).
+    "version" to version,
+    "updatedAt" to updatedAt,
     "syncedAt" to System.currentTimeMillis()
 )
 
@@ -468,6 +514,8 @@ internal fun Map<String, Any?>.toEventEntity(docId: String): EventEntity? {
         organizerId = get("organizerId") as? String ?: "",
         organizerName = get("organizerName") as? String ?: "",
         attendeeCount = (get("attendeeCount") as? Number)?.toInt() ?: 0,
-        isCreatedByUser = true
+        isCreatedByUser = true,
+        version = (get("version") as? Number)?.toInt() ?: 1,
+        updatedAt = (get("updatedAt") as? Number)?.toLong() ?: 0L
     )
 }
