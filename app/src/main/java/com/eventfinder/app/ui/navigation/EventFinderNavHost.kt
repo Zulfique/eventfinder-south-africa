@@ -75,6 +75,7 @@ import com.eventfinder.app.ui.screens.tickets.TicketScannerScreen
 import com.eventfinder.app.ui.screens.profile.ProfileScreen
 import com.eventfinder.app.ui.screens.search.SearchScreen
 import com.eventfinder.app.ui.screens.collections.CollectionsScreen
+import com.eventfinder.app.ui.screens.settings.BlockedUsersScreen
 import com.eventfinder.app.ui.screens.tickets.MyTicketsScreen
 import com.eventfinder.app.ui.screens.preferences.AccessibilityProfileScreen
 import com.eventfinder.app.ui.screens.preferences.AccessibilityScreen
@@ -116,6 +117,7 @@ object AppDestinations {
     const val INTERESTS = "interests"
     const val MY_TICKETS = "myTickets"
     const val COLLECTIONS = "collections"
+    const val BLOCKED_USERS = "blockedUsers"
 
     fun eventDetail(eventId: String) = "event/$eventId"
     fun editEvent(eventId: String) = "editEvent/$eventId"
@@ -264,6 +266,7 @@ fun EventFinderNavHost(
                 onOpenModeration = { navController.navigate(AppDestinations.MODERATION) },
                 onOpenReportScam = { navController.navigate(AppDestinations.reportScam("general")) },
                 onOpenCollections = { navController.navigate(AppDestinations.COLLECTIONS) },
+                onOpenBlockedUsers = { navController.navigate(AppDestinations.BLOCKED_USERS) },
                 onLoggedOut = {
                     navController.navigate(AppDestinations.LOGIN) {
                         popUpTo(0) { inclusive = true }
@@ -329,6 +332,13 @@ fun EventFinderNavHost(
                 container = container,
                 onBack = { navController.popBackStack() },
                 onEventClick = { navController.navigate(AppDestinations.eventDetail(it)) }
+            )
+        }
+
+        composable(AppDestinations.BLOCKED_USERS) {
+            BlockedUsersScreen(
+                container = container,
+                onBack = { navController.popBackStack() }
             )
         }
 

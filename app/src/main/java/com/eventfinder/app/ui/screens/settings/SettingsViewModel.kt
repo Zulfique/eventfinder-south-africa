@@ -52,7 +52,8 @@ class SettingsViewModel(
     private val authRepository: AuthRepository,
     private val eventRepository: EventRepository,
     private val context: Context,
-    private val eventDao: EventDao
+    private val eventDao: EventDao,
+    private val ticketRepository: com.eventfinder.app.data.repository.TicketRepository? = null
 ) : ViewModel() {
 
     private val _messages = MutableSharedFlow<UiMessage>()
@@ -188,24 +189,69 @@ class SettingsViewModel(
     private val _exportPath = kotlinx.coroutines.flow.MutableSharedFlow<String>()
     val exportPath = _exportPath.asSharedFlow()
 
+    /**
+     * POPIA/GDPR data export: the user's profile, favourites, RSVPs, tickets and
+     * collections, not just the public event catalogue. Built with Gson so the
+     * escaping is correct for any name or ticket code.
+     */
     fun exportData() {
         viewModelScope.launch {
             try {
                 val userId = preferences.sessionUserId.first()
+                val user = authRepository.currentUser.first()
                 val events = eventRepository.observeAllEvents().first()
-                val json = buildString {
-                    append("{")
-                    append("\"userId\":\"").append(userId ?: "").append("\",")
-                    append("\"exportedAt\":").append(System.currentTimeMillis()).append(",")
-                    append("\"events\":[")
-                    events.forEachIndexed { i, e ->
-                        if (i > 0) append(",")
-                        append("{\"id\":\"").append(e.id).append("\",\"title\":\"").append(e.title).append("\"}")
-                    }
-                    append("]}")
+                val favouriteIds = eventRepository.observeFavoriteIds().first()
+                val rsvps = eventRepository.observeRsvpStatuses().first()
+                val tickets = userId?.let { ticketRepository?.observeTicketsForUser(it)?.first() }
+                    .orEmpty()
+                val collections = preferences.eventCollections.first()
+
+                val root = com.google.gson.JsonObject().apply {
+                    addProperty("exportedAt", System.currentTimeMillis())
+                    add("profile", com.google.gson.JsonObject().apply {
+                        addProperty("userId", userId ?: "")
+                        addProperty("fullName", user?.fullName ?: "")
+                        addProperty("email", user?.email ?: "")
+                        addProperty("avatarType", user?.avatarType ?: "")
+                        addProperty("memberSince", user?.createdAt ?: 0L)
+                    })
+                    add("favourites", com.google.gson.JsonArray().apply {
+                        favouriteIds.forEach { add(it) }
+                    })
+                    add("rsvps", com.google.gson.JsonObject().apply {
+                        rsvps.forEach { (eventId, status) -> addProperty(eventId, status.name) }
+                    })
+                    add("tickets", com.google.gson.JsonArray().apply {
+                        tickets.forEach { ticket ->
+                            add(com.google.gson.JsonObject().apply {
+                                addProperty("eventId", ticket.eventId)
+                                addProperty("ticketCode", ticket.ticketCode)
+                                addProperty("issuedAt", ticket.issuedAt)
+                                addProperty("checkedInAt", ticket.checkedInAt)
+                            })
+                        }
+                    })
+                    add("collections", com.google.gson.JsonArray().apply {
+                        collections.forEach { collection ->
+                            add(com.google.gson.JsonObject().apply {
+                                addProperty("name", collection.name)
+                                addProperty("category", collection.categoryKey ?: "all")
+                            })
+                        }
+                    })
+                    add("events", com.google.gson.JsonArray().apply {
+                        events.forEach { event ->
+                            add(com.google.gson.JsonObject().apply {
+                                addProperty("id", event.id)
+                                addProperty("title", event.title)
+                                addProperty("category", event.category.name)
+                            })
+                        }
+                    })
                 }
+
                 val file = java.io.File(context.cacheDir, "eventfinder_export.json")
-                file.writeText(json)
+                file.writeText(root.toString())
                 _exportPath.emit(file.absolutePath)
                 _messages.emit(com.eventfinder.app.ui.components.UiMessage.Literal("Data exported"))
             } catch (e: Exception) {
@@ -304,7 +350,8 @@ class SettingsViewModel(
                     container.authRepository,
                     container.eventRepository,
                     appContext,
-                    container.database.eventDao()
+                    container.database.eventDao(),
+                    container.ticketRepository
                 )
             }
         }

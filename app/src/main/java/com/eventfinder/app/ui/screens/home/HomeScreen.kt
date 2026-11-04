@@ -33,6 +33,9 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.pullrefresh.PullRefreshIndicator
+import androidx.compose.material.pullrefresh.pullRefresh
+import androidx.compose.material.pullrefresh.rememberPullRefreshState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.EventBusy
 import androidx.compose.material.icons.outlined.Add
@@ -176,7 +179,10 @@ private fun hasLocationPermission(context: Context): Boolean {
  * Screen 4 & 5 (Home): interactive OpenStreetMap view + scrollable event list
  * with category chips, keyword search and a sort/filter sheet.
  */
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(
+    androidx.compose.material3.ExperimentalMaterial3Api::class,
+    androidx.compose.material.ExperimentalMaterialApi::class
+)
 @SuppressLint("MissingPermission")
 @Composable
 fun HomeScreen(
@@ -345,7 +351,16 @@ fun HomeScreen(
         },
         snackbarHost = { SnackbarHost(snackbarHostState) }
     ) { padding ->
-        Box(Modifier.fillMaxSize().padding(padding)) {
+        val pullRefreshState = rememberPullRefreshState(
+            refreshing = state.isRefreshing,
+            onRefresh = viewModel::refresh
+        )
+        Box(
+            Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .pullRefresh(pullRefreshState)
+        ) {
             Column(Modifier.fillMaxSize()) {
                 if (state.isOffline) {
                     Surface(color = MaterialTheme.colorScheme.secondaryContainer) {
@@ -601,6 +616,13 @@ fun HomeScreen(
                     )
                 }
             }
+
+            PullRefreshIndicator(
+                refreshing = state.isRefreshing,
+                state = pullRefreshState,
+                contentColor = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.align(Alignment.TopCenter)
+            )
         }
     }
 

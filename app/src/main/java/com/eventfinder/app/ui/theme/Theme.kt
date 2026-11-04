@@ -157,20 +157,22 @@ private val DarkColors = darkColorScheme(
     tertiaryContainer = Color(0xFF182A86),
     onTertiaryContainer = Color(0xFFE0E5FF),
 
+    // 2026 dark palette: #0B1929 background, #13293D surface, #1E2A44 raised
+    // cards, #2D3852 outlines and the secondary text blue-grey.
     background = Color(0xFF0B1929),
-    onBackground = Color(0xFFE5E7EB),
+    onBackground = Color(0xFFFFFFFF),
 
-    surface = SurfaceCardDark,
-    onSurface = Color(0xFFE5E7EB),
+    surface = Color(0xFF13293D),
+    onSurface = Color(0xFFFFFFFF),
 
-    surfaceVariant = Color(0xFF2A3038),
-    onSurfaceVariant = Color(0xFFC2C8D0),
+    surfaceVariant = Color(0xFF1E2A44),
+    onSurfaceVariant = Color(0xFFA6B8D3),
 
-    outline = Color(0xFF46515E),
-    outlineVariant = Color(0xFF303B49),
+    outline = Color(0xFF2D3852),
+    outlineVariant = Color(0xFF24334A),
 
-    error = BrandRedGlow,
-    onError = Color(0xFF410002)
+    error = Color(0xFFEF4444),
+    onError = Color(0xFFFFFFFF)
 )
 
 private val EventFinderShapes = Shapes(

@@ -46,6 +46,8 @@ import java.time.ZoneId
 data class HomeUiState(
     val events: List<EventView> = emptyList(),
     val isLoading: Boolean = true,
+    /** True only while a user-initiated pull-to-refresh is running. */
+    val isRefreshing: Boolean = false,
     val isOffline: Boolean = false,
     val lastRefreshAt: Long = 0L,
     val selectedCategory: EventCategory? = null,
@@ -134,6 +136,27 @@ class HomeViewModel(
 
     private val reviewRepository = container.eventReviewRepository
 
+    /**
+     * Settings that previously only existed as screens: interests rank the
+     * feed, commute time caps how far the radius filter reaches, and the
+     * accessibility preference picks the accessible-first ordering.
+     */
+    private data class Personalisation(
+        val interests: Set<String> = emptySet(),
+        val commuteMinutes: Int = 30,
+        val commuteMode: String = "car",
+        val accessibilityFirst: Boolean = false
+    )
+
+    private val personalisationFlow = combine(
+        preferences.interests,
+        preferences.commuteMinutes,
+        preferences.commuteMode,
+        preferences.accessibilityFirstSorting
+    ) { interests, minutes, mode, accessibilityFirst ->
+        Personalisation(interests, minutes, mode, accessibilityFirst)
+    }
+
     /** True while an explicit city from the header selector overrides the GPS fix. */
     private var manualCityActive = false
 
@@ -155,7 +178,11 @@ class HomeViewModel(
         val minRating: Int,
         val verifiedOnly: Boolean,
         val accessibleOnly: Boolean,
-        val collectionId: String? = null
+        val collectionId: String? = null,
+        val interests: Set<String> = emptySet(),
+        val commuteMinutes: Int = 30,
+        val commuteMode: String = "car",
+        val accessibilityFirst: Boolean = false
     )
 
     init {
@@ -213,8 +240,18 @@ class HomeViewModel(
                     filters.window, filters.minRating, filters.verified, filters.accessible
                 )
             }
-        val controlsFlow = combine(baseControlsFlow, collectionFlow) { controls, collectionId ->
-            controls.copy(collectionId = collectionId)
+        val controlsFlow = combine(
+            baseControlsFlow,
+            collectionFlow,
+            personalisationFlow
+        ) { controls, collectionId, personalisation ->
+            controls.copy(
+                collectionId = collectionId,
+                interests = personalisation.interests,
+                commuteMinutes = personalisation.commuteMinutes,
+                commuteMode = personalisation.commuteMode,
+                accessibilityFirst = personalisation.accessibilityFirst
+            )
         }
 
         viewModelScope.launch {
@@ -316,20 +353,58 @@ class HomeViewModel(
             userLng = userLng,
             radiusKm = if (c.radiusEnabled) c.radiusKm else 0
         )
-        val sorted = EventFilterer.sort(filtered, c.sort, userLat, userLng)
-        val views = EventFilterer.attachDistances(sorted, userLat, userLng, combined.favoriteIds)
-            .map { view ->
-                val rating = combined.ratings[view.event.id]
-                view.copy(
-                    rsvpStatus = combined.rsvps[view.event.id],
-                    averageRating = rating?.average,
-                    reviewCount = rating?.count ?: 0
-                )
-            }
+        // The accessibility-first preference picks the accessible-first order
+        // unless the user explicitly chose another sort on this screen.
+        val effectiveSort = if (c.accessibilityFirst && c.sort == EventSort.DATE) {
+            EventSort.ACCESSIBILITY
+        } else {
+            c.sort
+        }
+        val sorted = EventFilterer.sort(filtered, effectiveSort, userLat, userLng)
+        val withDistance = EventFilterer.attachDistances(sorted, userLat, userLng, combined.favoriteIds)
+
+        // "Max 30 min commute" caps the radius filter rather than being a dead
+        // setting. It only applies while the radius filter itself is on, so a
+        // national browse is never silently cut down to the neighbourhood.
+        val reachable = if (c.radiusEnabled && userLat != null && userLng != null) {
+            val maxKm = commuteReachKm(c.commuteMinutes, c.commuteMode)
+            withDistance.filter { (it.distanceKm ?: 0.0) <= maxKm }
+        } else {
+            withDistance
+        }
+
+        val views = reachable.map { view ->
+            val rating = combined.ratings[view.event.id]
+            view.copy(
+                rsvpStatus = combined.rsvps[view.event.id],
+                averageRating = rating?.average,
+                reviewCount = rating?.count ?: 0
+            )
+        }
+
+        // Interests are a stable boost: the chosen sort still decides the order
+        // inside "matches your interests" and "everything else".
+        val ranked = if (c.interests.isEmpty()) {
+            views
+        } else {
+            views.sortedByDescending { it.event.category.labelKey in c.interests }
+        }
+
         // Showcase "Rating" filter runs on the enriched views.
         return if (c.minRating > 0) {
-            views.filter { (it.averageRating ?: 0.0) >= c.minRating }
-        } else views
+            ranked.filter { (it.averageRating ?: 0.0) >= c.minRating }
+        } else ranked
+    }
+
+    /** Urban travel speeds used to turn "max commute minutes" into kilometres. */
+    private fun commuteReachKm(minutes: Int, mode: String): Double {
+        val kmPerHour = when (mode.lowercase()) {
+            "walking" -> 5.0
+            "cycling" -> 15.0
+            "transit" -> 20.0
+            else -> 40.0
+        }
+        return (minutes.coerceIn(5, 180) / 60.0) * kmPerHour
     }
 
     /**
@@ -705,17 +780,17 @@ class HomeViewModel(
     fun refresh() {
         viewModelScope.launch {
             if (!networkMonitor.isCurrentlyOnline()) {
-                _uiState.update { it.copy(isLoading = false, isOffline = true) }
+                _uiState.update { it.copy(isLoading = false, isRefreshing = false, isOffline = true) }
                 return@launch
             }
 
-            _uiState.update { it.copy(isLoading = true, isOffline = false) }
+            _uiState.update { it.copy(isLoading = true, isRefreshing = true, isOffline = false) }
 
             runCatching { eventDiscoveryRepository.refresh() }.onFailure {
                 AppLogger.e("HomeViewModel", "Event discovery failed on refresh", it)
             }
 
-            _uiState.update { it.copy(isLoading = false) }
+            _uiState.update { it.copy(isLoading = false, isRefreshing = false) }
         }
     }
 

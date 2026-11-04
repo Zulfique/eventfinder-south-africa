@@ -56,8 +56,9 @@ private val BrandGreen = Color(0xFF00C98D)
 /**
  * "My Tickets" — every ticket the signed-in user holds, with its QR code.
  *
- * Ticket data comes from the encrypted local ticket store, so tickets stay
- * available at the gate with no connectivity.
+ * Ticket data comes from the on-device Room store, so tickets stay available
+ * at the gate with no connectivity. The store is app-private but not
+ * additionally encrypted (no SQLCipher in this build).
  */
 @Composable
 fun MyTicketsScreen(

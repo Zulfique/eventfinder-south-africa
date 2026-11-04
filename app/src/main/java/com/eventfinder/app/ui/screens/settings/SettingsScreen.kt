@@ -27,6 +27,7 @@ import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.NotificationsActive
 import androidx.compose.material.icons.outlined.Accessibility
+import androidx.compose.material.icons.outlined.Block
 import androidx.compose.material.icons.outlined.Collections
 import androidx.compose.material.icons.outlined.DirectionsCar
 import androidx.compose.material.icons.outlined.Flag
@@ -96,6 +97,7 @@ fun SettingsScreen(
     onOpenModeration: () -> Unit = {},
     onOpenReportScam: () -> Unit = {},
     onOpenCollections: () -> Unit = {},
+    onOpenBlockedUsers: () -> Unit = {},
     onLoggedOut: () -> Unit = {}
 ) {
     val context = LocalContext.current
@@ -299,6 +301,13 @@ fun SettingsScreen(
                         subtitle = "Help keep EventFinder safe for everyone",
                         icon = Icons.Outlined.Flag,
                         onClick = onOpenReportScam
+                    )
+                    HorizontalDivider()
+                    SettingsNavRow(
+                        title = "Blocked users",
+                        subtitle = "Review and unblock people you have blocked",
+                        icon = Icons.Outlined.Block,
+                        onClick = onOpenBlockedUsers
                     )
                 }
             }
