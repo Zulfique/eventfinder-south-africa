@@ -9,6 +9,33 @@
 
     <!-- Auth -->
     <string name="login_title">Teken in</string>
+    <string name="brand_country">SUID-AFRIKA</string>
+    <string name="brand_tagline">Ontdek. Beplan. Woon by.</string>
+    <string name="welcome_back">Welkom terug</string>
+    <string name="sign_in_to_continue">Teken in om voort te gaan</string>
+    <string name="email_address">E-posadres</string>
+    <string name="remember_me">Onthou my</string>
+    <string name="show_password">Wys wagwoord</string>
+    <string name="hide_password">Versteek wagwoord</string>
+    <string name="login_action">Teken in</string>
+    <string name="no_account_yet">Nog nie \'n rekening nie?</string>
+    <string name="sign_up">Registreer</string>
+    <string name="phone_with_soon">Foon · Binnekort</string>
+    <string name="phone_sign_in_soon">Foon-aanmelding is nog nie beskikbaar nie — teken in met jou e-posadres.</string>
+    <string name="auth_or">of</string>
+    <string name="biometrics_title">Teken in met biometrie</string>
+    <string name="biometrics_subtitle">Gebruik jou vingerafdruk, gesig of toestelbewyse</string>
+    <string name="biometric_method_fingerprint">Vingerafdruk</string>
+    <string name="biometric_method_face">Gesig-ID</string>
+    <string name="biometric_method_pin">Toestel-PIN</string>
+    <string name="use_password_instead">Gebruik eerder wagwoord</string>
+    <string name="use_password">Gebruik wagwoord</string>
+    <string name="biometric_success_title">Suksesvol ingeteken!</string>
+    <string name="biometric_success_hint">Welkom terug by EventFinder</string>
+    <string name="continue_to_home">Gaan voort na Tuis</string>
+    <string name="biometric_failed_title">Verifikasie het misluk</string>
+    <string name="biometric_failed_hint">Probeer asseblief weer of gebruik \'n ander metode</string>
+    <string name="need_help">Hulp nodig?</string>
     <string name="login_subtitle">Vind jou volgende plaaslike gebeurtenis</string>
     <string name="email">E-pos</string>
     <string name="password">Wagwoord</string>
@@ -47,6 +74,10 @@
     <string name="register_success">Rekening geskep</string>
     <string name="login_failed">Verkeerde e-pos of wagwoord</string>
     <string name="biometric_hint">Bevestig met jou vingerafdruk</string>
+    <string name="biometric_invalidated">Jou toestel se biometrie het verander, so biometriese aanmelding is afgeskakel. Teken in met jou wagwoord om dit weer op te stel.</string>
+    <string name="biometric_locked_out">Te veel pogings. Wag \'n oomblik, of teken in met jou wagwoord.</string>
+    <string name="biometric_unavailable_now">Biometriese ontsluiting is tans nie beskikbaar nie. Gebruik jou wagwoord.</string>
+    <string name="biometric_enable_failed">Kon nie jou vingerafdruk of gesig bevestig nie, so biometriese aanmelding bly af.</string>
     <string name="forgot_password_hint">Voer jou e-pos en \'n nuwe wagwoord hieronder in. Jou wagwoord sal plaaslik opgedateer word.</string>
     <string name="reset_password_title">Herstel wagwoord</string>
     <string name="reset_password_action">Herstel wagwoord</string>
