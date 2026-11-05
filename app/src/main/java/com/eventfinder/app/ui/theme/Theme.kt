@@ -144,8 +144,9 @@ private val DarkColors = darkColorScheme(
     // Showcase dark-mode accent: bright emerald green.
     primary = Color(0xFF00C98D),
     onPrimary = Color(0xFF003820),
-    primaryContainer = Color(0xFF005638),
-    onPrimaryContainer = Color(0xFFB9F2D3),
+    // 2026 palette: "primary dark" #00906B for contained accents.
+    primaryContainer = Color(0xFF00906B),
+    onPrimaryContainer = Color(0xFFFFFFFF),
 
     secondary = BrandGold,
     onSecondary = Color(0xFF332300),
@@ -157,18 +158,18 @@ private val DarkColors = darkColorScheme(
     tertiaryContainer = Color(0xFF182A86),
     onTertiaryContainer = Color(0xFFE0E5FF),
 
-    // 2026 dark palette: #0B1929 background, #13293D surface, #1E2A44 raised
-    // cards, #2D3852 outlines and the secondary text blue-grey.
+    // 2026 dark palette: #0B1929 background, #14203A surface, #1E2A44 raised
+    // cards, #2D3E52 borders and the blue-grey secondary text.
     background = Color(0xFF0B1929),
     onBackground = Color(0xFFFFFFFF),
 
-    surface = Color(0xFF13293D),
+    surface = Color(0xFF14203A),
     onSurface = Color(0xFFFFFFFF),
 
     surfaceVariant = Color(0xFF1E2A44),
-    onSurfaceVariant = Color(0xFFA6B8D3),
+    onSurfaceVariant = Color(0xFFA6B8D1),
 
-    outline = Color(0xFF2D3852),
+    outline = Color(0xFF2D3E52),
     outlineVariant = Color(0xFF24334A),
 
     error = Color(0xFFEF4444),

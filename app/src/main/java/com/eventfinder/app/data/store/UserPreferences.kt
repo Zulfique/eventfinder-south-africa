@@ -749,6 +749,23 @@ class UserPreferences(private val context: Context) : SessionProvider {
         }
     }
 
+    // ---- Admin mode ----
+
+    /**
+     * Unlocked by tapping the version row in Settings seven times. Destructive
+     * maintenance actions ("Repair local data", crash-log export) stay hidden
+     * from ordinary users until this is on.
+     */
+    private val adminModeKey = booleanPreferencesKey("admin_mode")
+
+    val adminMode: Flow<Boolean> = context.eventFinderDataStore.data.map { prefs ->
+        prefs[adminModeKey] ?: false
+    }
+
+    suspend fun setAdminMode(enabled: Boolean) {
+        context.eventFinderDataStore.edit { prefs -> prefs[adminModeKey] = enabled }
+    }
+
     // ---- Per-event reminder opt-out ("Skip reminders: this event only") ----
 
     /** Events whose reminder the user muted individually. */

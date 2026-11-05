@@ -72,8 +72,12 @@ class EventDiscoveryRepositoryTest {
             rows.values.filter { !it.isCreatedByUser }.map { it.id }.forEach { rows.remove(it) }
         }
 
-        override suspend fun deleteStale(cutoff: Long) {
-            rows.values.filter { !it.isCreatedByUser && it.endDate < cutoff }.map { it.id }.forEach { rows.remove(it) }
+        override suspend fun deleteStale(cutoff: Long): Int {
+            val stale = rows.values
+                .filter { !it.isCreatedByUser && it.endDate < cutoff }
+                .map { it.id }
+            stale.forEach { rows.remove(it) }
+            return stale.size
         }
 
         override suspend fun deleteCreatedByUser() {

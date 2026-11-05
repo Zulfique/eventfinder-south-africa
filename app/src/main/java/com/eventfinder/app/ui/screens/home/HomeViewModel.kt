@@ -205,6 +205,17 @@ class HomeViewModel(
 
             eventRepository.ensureSeeded()
 
+            // Surface expiry instead of silently shrinking the offline
+            // catalogue: the user learns why older events disappeared.
+            val expired = runCatching { eventRepository.expireStaleEvents() }.getOrDefault(0)
+            if (expired > 0) {
+                _messages.emit(
+                    UiMessage.Literal(
+                        "$expired expired event${if (expired == 1) "" else "s"} removed from the local cache"
+                    )
+                )
+            }
+
             if (online) {
                 runCatching { eventDiscoveryRepository.refresh() }.onFailure {
                     AppLogger.e("HomeViewModel", "Event discovery failed", it)

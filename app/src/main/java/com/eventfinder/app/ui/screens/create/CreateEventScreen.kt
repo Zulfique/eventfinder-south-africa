@@ -6,6 +6,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,6 +18,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.material3.FilterChip
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -441,6 +443,34 @@ private fun StepDateVenue(
             color = MaterialTheme.colorScheme.error,
             style = MaterialTheme.typography.bodySmall
         )
+    }
+
+    // Recurring series: the rule is stored on the event and shown on its detail
+    // page, so an organiser can publish "every week" without re-creating it.
+    Column(Modifier.fillMaxWidth()) {
+        Text(
+            "Repeats",
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(Modifier.height(4.dp))
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.horizontalScroll(rememberScrollState())
+        ) {
+            listOf(
+                null to "One-off",
+                "weekly" to "Weekly",
+                "fortnightly" to "Fortnightly",
+                "monthly" to "Monthly"
+            ).forEach { (rule, label) ->
+                FilterChip(
+                    selected = state.recurrenceRule == rule,
+                    onClick = { viewModel.onRecurrenceChange(rule) },
+                    label = { Text(label) }
+                )
+            }
+        }
     }
     OutlinedTextField(
         value = state.venueName,

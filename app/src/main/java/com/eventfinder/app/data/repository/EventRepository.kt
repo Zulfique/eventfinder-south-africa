@@ -38,7 +38,9 @@ data class NewEventDraft(
     val longitude: Double?,
     val isPublic: Boolean,
     /** null = unchanged (edit mode), IMAGE_REMOVED = user removed image, otherwise = new image URL. */
-    val imageUrl: String? = null
+    val imageUrl: String? = null,
+    /** e.g. "weekly", "fortnightly", "monthly"; null for a one-off event. */
+    val recurrenceRule: String? = null
 )
 
 /**
@@ -301,6 +303,8 @@ override suspend fun ensureSeeded() {
             organizerName = "You",
             attendeeCount = 0,
             isCreatedByUser = true,
+            isRecurring = !draft.recurrenceRule.isNullOrBlank(),
+            recurrenceRule = draft.recurrenceRule?.takeIf { it.isNotBlank() },
             version = 1,
             updatedAt = System.currentTimeMillis()
         )
@@ -346,6 +350,8 @@ override suspend fun ensureSeeded() {
             longitude = draft.longitude,
             imageUrl = newImageUrl,
             isPublic = draft.isPublic,
+            isRecurring = !draft.recurrenceRule.isNullOrBlank(),
+            recurrenceRule = draft.recurrenceRule?.takeIf { it.isNotBlank() },
             // Conflict resolution: every local edit advances the version and
             // stamps updatedAt so a stale cloud copy cannot overwrite it.
             version = existing.version + 1,
@@ -434,9 +440,11 @@ override suspend fun ensureSeeded() {
 
     override suspend fun expireStaleEvents(): Int {
         val cutoff = System.currentTimeMillis() - (7L * 24L * 60L * 60L * 1000L)
-        eventDao.deleteStale(cutoff)
-        AppLogger.i(tag, "Expired stale cached events older than 7 days")
-        return 0
+        val removed = eventDao.deleteStale(cutoff)
+        if (removed > 0) {
+            AppLogger.i(tag, "Expired $removed stale cached event(s) older than 7 days")
+        }
+        return removed
     }
 
     private fun Event.toEntity(isCreatedByUser: Boolean): EventEntity =

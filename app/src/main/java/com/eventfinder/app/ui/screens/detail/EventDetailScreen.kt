@@ -48,8 +48,10 @@ import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.outlined.Group
 import androidx.compose.material.icons.outlined.LocationOn
 import androidx.compose.material.icons.outlined.MoreVert
+import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Navigation
 import androidx.compose.material.icons.outlined.NotificationsOff
+import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.QrCodeScanner
 import androidx.compose.material.icons.outlined.Share
@@ -217,6 +219,10 @@ fun EventDetailScreen(
                 else -> {
                     val view = state.eventView!!
                     val event = view.event
+                    // A finished event keeps its details but swaps the buying /
+                    // RSVP actions for the ended-state guidance from the 2026
+                    // design, so nobody can RSVP to something that already ran.
+                    val eventEnded = event.endDate < System.currentTimeMillis()
 
                     Column(
                         Modifier.fillMaxSize().verticalScroll(rememberScrollState())
@@ -394,10 +400,24 @@ fun EventDetailScreen(
                                 .padding(horizontal = 20.dp, vertical = 22.dp)
                         ) {
                             Text(event.title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                            if (eventEnded) {
+                                Spacer(Modifier.height(8.dp))
+                                StatusChip(
+                                    label = "Event Ended",
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
                             Spacer(Modifier.height(4.dp))
                             // Provenance badge + event accessibility chips,
                             // all driven by real event fields (no decoration).
                             ProvenanceBadge(event.provenance)
+                            if (!event.recurrenceRule.isNullOrBlank()) {
+                                Spacer(Modifier.height(8.dp))
+                                StatusChip(
+                                    label = "Repeats ${event.recurrenceRule}",
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
                             if (event.wheelchairAccessible || event.loudMusic ||
                                 event.sensoryFriendly || event.strobeLights
                             ) {
@@ -757,6 +777,7 @@ fun EventDetailScreen(
                                 Spacer(Modifier.height(12.dp))
                             }
 
+                            if (!eventEnded) {
                             // Showcase primary action: Get Tickets issues the
                             // QR ticket, RSVPs attending and opens the code.
                             Button(
@@ -841,6 +862,44 @@ fun EventDetailScreen(
                                 )
                             }
                             Spacer(Modifier.height(10.dp))
+                            }
+
+                            if (eventEnded) {
+                                Surface(
+                                    color = MaterialTheme.colorScheme.surface,
+                                    shape = RoundedCornerShape(18.dp),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(14.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Outlined.Info,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(22.dp)
+                                        )
+                                        Spacer(Modifier.size(12.dp))
+                                        Column {
+                                            Text(
+                                                text = "This event has ended",
+                                                style = MaterialTheme.typography.titleSmall,
+                                                fontWeight = FontWeight.SemiBold
+                                            )
+                                            Text(
+                                                text = "It took place on " +
+                                                    com.eventfinder.app.utils.DateTimeUtils.formatShortDate(event.startDate) +
+                                                    ". You can still browse similar events below.",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                    }
+                                }
+                                Spacer(Modifier.height(10.dp))
+                            }
+
                             OutlinedButton(
                                 onClick = { openDirections(context, event) },
                                 modifier = Modifier.fillMaxWidth().height(48.dp),
@@ -1574,6 +1633,32 @@ private fun SocialShortcut(
  * Rounded provenance pill so live, cached, imported and sample data are
  * distinguishable without reading a bare "Source:" string.
  */
+/** Small pill for event state chips such as "Event Ended". */
+@Composable
+private fun StatusChip(label: String, color: Color) {
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(50))
+            .background(color.copy(alpha = 0.14f))
+            .padding(horizontal = 10.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            imageVector = Icons.Outlined.Schedule,
+            contentDescription = null,
+            tint = color,
+            modifier = Modifier.size(14.dp)
+        )
+        Spacer(Modifier.size(6.dp))
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = color,
+            fontWeight = FontWeight.SemiBold
+        )
+    }
+}
+
 @Composable
 private fun ProvenanceBadge(provenance: String) {
     val (label, color) = when (provenance.lowercase()) {

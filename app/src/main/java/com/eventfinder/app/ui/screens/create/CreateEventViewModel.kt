@@ -46,6 +46,8 @@ data class CreateEventUiState(
     val longitude: String = "",
     val isPublic: Boolean = true,
     val imageUrl: String? = null,
+    /** null = one-off, otherwise "weekly" / "fortnightly" / "monthly". */
+    val recurrenceRule: String? = null,
     /** True once the user has tried to advance an invalid step, enabling inline errors. */
     val showErrors: Boolean = false
 )
@@ -239,7 +241,8 @@ class CreateEventViewModel(
                 latitude = event.latitude?.toString() ?: "",
                 longitude = event.longitude?.toString() ?: "",
                 isPublic = event.isPublic,
-                imageUrl = event.imageUrl
+                imageUrl = event.imageUrl,
+                recurrenceRule = event.recurrenceRule
             )
         }
     }
@@ -268,6 +271,10 @@ class CreateEventViewModel(
     fun onDescriptionChange(v: String) = _uiState.update { it.copy(description = v) }
     fun onCategoryChange(c: EventCategory) = _uiState.update { it.copy(category = c) }
     fun onDateChange(millis: Long) = _uiState.update { it.copy(dateMillis = millis) }
+
+    /** null clears the repeat rule (one-off event). */
+    fun onRecurrenceChange(rule: String?) =
+        _uiState.update { it.copy(recurrenceRule = rule) }
     fun onVenueChange(v: String) = _uiState.update { it.copy(venueName = v) }
     fun onAddressChange(v: String) = _uiState.update { it.copy(address = v) }
     fun onLatitudeChange(v: String) = _uiState.update { it.copy(latitude = v) }
@@ -378,7 +385,8 @@ class CreateEventViewModel(
                 latitude = lat,
                 longitude = lng,
                 isPublic = state.isPublic,
-                imageUrl = imageUrl
+                imageUrl = imageUrl,
+                recurrenceRule = state.recurrenceRule
             )
             val result: Result<*> = if (eventId != null) {
                 eventRepository.updateEvent(eventId, draft)

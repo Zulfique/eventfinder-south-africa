@@ -28,6 +28,8 @@ import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.NotificationsActive
 import androidx.compose.material.icons.outlined.Accessibility
 import androidx.compose.material.icons.outlined.Block
+import androidx.compose.material.icons.outlined.BugReport
+import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Collections
 import androidx.compose.material.icons.outlined.DirectionsCar
 import androidx.compose.material.icons.outlined.Flag
@@ -104,6 +106,8 @@ fun SettingsScreen(
     val viewModel: SettingsViewModel = viewModel(factory = SettingsViewModel.factory(container, context))
     val state by viewModel.uiState.collectAsState()
     val themeMode by container.preferences.themeMode.collectAsState(initial = "system")
+    val adminMode by container.preferences.adminMode.collectAsState(initial = false)
+    var unlockTaps by remember { androidx.compose.runtime.mutableIntStateOf(0) }
     val biometricSupported = BiometricAuth.isAvailable(context)
     val snackbarHostState = remember { SnackbarHostState() }
     val screenScope = rememberCoroutineScope()
@@ -195,13 +199,62 @@ fun SettingsScreen(
                         leadingContent = { Image(painterResource(R.drawable.usr_eraser), contentDescription = null, modifier = Modifier.size(22.dp)) },
                         modifier = Modifier.clickable { viewModel.clearCache() }
                     )
-                    HorizontalDivider()
-                    ListItem(
-                        headlineContent = { Text(stringResource(R.string.repair_local_data)) },
-                        supportingContent = { Text(stringResource(R.string.repair_local_data_hint)) },
-                        leadingContent = { Image(painterResource(R.drawable.usr_check), contentDescription = null, modifier = Modifier.size(22.dp)) },
-                        modifier = Modifier.clickable { viewModel.repairLocalData() }
-                    )
+                    // Destructive maintenance stays hidden until admin mode is
+                    // unlocked from the version row below.
+                    if (adminMode) {
+                        HorizontalDivider()
+                        ListItem(
+                            headlineContent = { Text(stringResource(R.string.repair_local_data)) },
+                            supportingContent = { Text(stringResource(R.string.repair_local_data_hint)) },
+                            leadingContent = { Image(painterResource(R.drawable.usr_check), contentDescription = null, modifier = Modifier.size(22.dp)) },
+                            modifier = Modifier.clickable { viewModel.repairLocalData() }
+                        )
+                        HorizontalDivider()
+                        ListItem(
+                            headlineContent = { Text("Share crash log") },
+                            supportingContent = {
+                                Text("Most recent captured crash, shared only when you choose")
+                            },
+                            leadingContent = {
+                                Icon(
+                                    Icons.Outlined.BugReport,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            },
+                            modifier = Modifier.clickable {
+                                val report =
+                                    com.eventfinder.app.utils.CrashReporter.latest(context)
+                                if (report == null) {
+                                    android.widget.Toast.makeText(
+                                        context,
+                                        "No crash reports captured",
+                                        android.widget.Toast.LENGTH_SHORT
+                                    ).show()
+                                } else {
+                                    val intent = android.content.Intent(
+                                        android.content.Intent.ACTION_SEND
+                                    ).apply {
+                                        type = "text/plain"
+                                        putExtra(
+                                            android.content.Intent.EXTRA_SUBJECT,
+                                            "EventFinder crash report"
+                                        )
+                                        putExtra(
+                                            android.content.Intent.EXTRA_TEXT,
+                                            report.readText()
+                                        )
+                                    }
+                                    context.startActivity(
+                                        android.content.Intent.createChooser(
+                                            intent,
+                                            "Share crash report"
+                                        )
+                                    )
+                                }
+                            }
+                        )
+                    }
                     HorizontalDivider()
                     ListItem(
                         headlineContent = {
@@ -310,6 +363,34 @@ fun SettingsScreen(
                         onClick = onOpenBlockedUsers
                     )
                 }
+            }
+
+            Card(Modifier.fillMaxWidth()) {
+                ListItem(
+                    headlineContent = { Text("About EventFinder") },
+                    supportingContent = {
+                        Text(
+                            if (adminMode) "Version ${com.eventfinder.app.BuildConfig.VERSION_NAME} · Admin tools enabled"
+                            else "Version ${com.eventfinder.app.BuildConfig.VERSION_NAME}"
+                        )
+                    },
+                    leadingContent = {
+                        Icon(
+                            Icons.Outlined.Info,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    },
+                    // Seven taps toggles admin mode; a deliberate, harmless
+                    // gesture that never fires by accident.
+                    modifier = Modifier.clickable {
+                        unlockTaps += 1
+                        if (unlockTaps >= 7) {
+                            unlockTaps = 0
+                            screenScope.launch { container.preferences.setAdminMode(!adminMode) }
+                        }
+                    }
+                )
             }
 
             Card(Modifier.fillMaxWidth()) {

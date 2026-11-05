@@ -68,6 +68,7 @@ class EventFinderApp : Application(), ImageLoaderFactory {
     override fun onCreate() {
         super.onCreate()
         enableStartupLogging()
+        com.eventfinder.app.utils.CrashReporter.install(this)
         container = AppContainer(this)
         startNetworkMonitoring()
         startReconnectSync()
