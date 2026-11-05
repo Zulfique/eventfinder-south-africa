@@ -99,15 +99,21 @@ fun BiometricLoginScreen(
                 .padding(top = 12.dp, bottom = 120.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            IconButton(
-                onClick = onUsePassword,
-                modifier = Modifier.align(Alignment.Start)
-            ) {
-                Icon(
-                    Icons.AutoMirrored.Outlined.ArrowBack,
-                    contentDescription = stringResource(R.string.back),
-                    tint = colors.onBackground
-                )
+            // The session already exists once the success panel shows, so there
+            // is nothing to go back to — only the explicit Continue button.
+            if (stage == BiometricStage.SUCCESS) {
+                Spacer(Modifier.height(48.dp))
+            } else {
+                IconButton(
+                    onClick = onUsePassword,
+                    modifier = Modifier.align(Alignment.Start)
+                ) {
+                    Icon(
+                        Icons.AutoMirrored.Outlined.ArrowBack,
+                        contentDescription = stringResource(R.string.back),
+                        tint = colors.onBackground
+                    )
+                }
             }
 
             Spacer(Modifier.height(24.dp))
