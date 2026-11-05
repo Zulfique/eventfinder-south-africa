@@ -57,6 +57,7 @@ class UserPreferences(private val context: Context) : SessionProvider {
         val AUTH_TOKEN = stringPreferencesKey("auth_token")
         val FIREBASE_UID = stringPreferencesKey("firebase_uid")
         val DYNAMIC_COLOR = booleanPreferencesKey("dynamic_color")
+        val SAVED_EMAIL = stringPreferencesKey("saved_login_email")
     }
 
     // ---- Helpers for user-scoped keys ----
@@ -183,6 +184,18 @@ class UserPreferences(private val context: Context) : SessionProvider {
         context.eventFinderDataStore.edit {
             if (userId == null) it.remove(Keys.BIOMETRIC_USER_ID)
             else it[Keys.BIOMETRIC_USER_ID] = userId
+        }
+    }
+
+    // ---- "Remember me": the address to prefill on the next sign-in ----
+
+    val savedEmail: Flow<String?> = context.eventFinderDataStore.data
+        .map { it[Keys.SAVED_EMAIL] }
+
+    suspend fun setSavedEmail(email: String?) {
+        context.eventFinderDataStore.edit {
+            if (email.isNullOrBlank()) it.remove(Keys.SAVED_EMAIL)
+            else it[Keys.SAVED_EMAIL] = email
         }
     }
 

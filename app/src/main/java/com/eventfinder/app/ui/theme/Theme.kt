@@ -158,21 +158,21 @@ private val DarkColors = darkColorScheme(
     tertiaryContainer = Color(0xFF182A86),
     onTertiaryContainer = Color(0xFFE0E5FF),
 
-    // 2026 dark palette: #0B1929 background, #14203A surface, #1E2A44 raised
-    // cards, #2D3E52 borders and the blue-grey secondary text.
+    // 2026 dark palette: #0B1929 background, #13293D surface, #1E2A44 raised
+    // cards, #203852 borders and the blue-grey secondary text.
     background = Color(0xFF0B1929),
     onBackground = Color(0xFFFFFFFF),
 
-    surface = Color(0xFF14203A),
+    surface = Color(0xFF13293D),
     onSurface = Color(0xFFFFFFFF),
 
     surfaceVariant = Color(0xFF1E2A44),
-    onSurfaceVariant = Color(0xFFA6B8D1),
+    onSurfaceVariant = Color(0xFFA8B5D3),
 
-    outline = Color(0xFF2D3E52),
-    outlineVariant = Color(0xFF24334A),
+    outline = Color(0xFF203852),
+    outlineVariant = Color(0xFF1B2C3F),
 
-    error = Color(0xFFEF4444),
+    error = Color(0xFFFF4444),
     onError = Color(0xFFFFFFFF)
 )
 

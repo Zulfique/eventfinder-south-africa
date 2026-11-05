@@ -27,6 +27,7 @@ data class LoginUiState(
     val passwordError: Int? = null,
     val biometricAvailable: Boolean = false,
     val biometricEnabled: Boolean = false,
+    val rememberMe: Boolean = true,
     val passwordResetComplete: Boolean = false,
     val resetEmailSent: Boolean = false,
     val isGoogleSigningIn: Boolean = false
@@ -53,6 +54,13 @@ class LoginViewModel(
 
     init {
         viewModelScope.launch {
+            // "Remember me" prefills the form; off means the address is forgotten.
+            val saved = authRepository.savedLoginEmail()
+            if (!saved.isNullOrBlank()) {
+                _uiState.update { it.copy(email = saved) }
+            }
+        }
+        viewModelScope.launch {
             authRepository.biometricEnrolled.collect { enrolled ->
                 _uiState.update {
                     it.copy(
@@ -76,6 +84,14 @@ class LoginViewModel(
         _uiState.update { it.copy(showPassword = !it.showPassword) }
     }
 
+    /** Turning this off forgets the stored address immediately. */
+    fun setRememberMe(enabled: Boolean) {
+        _uiState.update { it.copy(rememberMe = enabled) }
+        if (!enabled) {
+            viewModelScope.launch { authRepository.rememberLoginEmail(null) }
+        }
+    }
+
     /** Validates and attempts a password login. */
     fun login(onSuccess: () -> Unit) {
         val state = _uiState.value
@@ -97,6 +113,9 @@ class LoginViewModel(
             authRepository.login(state.email, state.password)
                 .onSuccess { user ->
                     AppLogger.i("LoginViewModel", "Login succeeded for ${user.email}")
+                    authRepository.rememberLoginEmail(
+                        if (state.rememberMe) user.email else null
+                    )
                     _messages.emit(UiMessage.Resource(R.string.login_success))
                     onSuccess()
                 }
@@ -127,16 +146,23 @@ class LoginViewModel(
         }
     }
 
-    /** Completes a biometric unlock straight into the app. */
-    fun confirmBiometricLogin(onSuccess: () -> Unit) {
+    /**
+     * Completes a biometric unlock. The prompt already proved the user, so a
+     * failure here means the stored account is gone or disabled — the caller
+     * shows the failure panel rather than a success screen.
+     */
+    fun confirmBiometricLogin(onSuccess: () -> Unit, onFailure: () -> Unit = {}) {
         viewModelScope.launch {
             authRepository.biometricLogin()
                 .onSuccess {
                     AppLogger.i("LoginViewModel", "Biometric login succeeded")
                     onSuccess()
                 }
-                .onFailure {
-                    _messages.emit(UiMessage.Resource(R.string.login_failed))
+                .onFailure { throwable ->
+                    AppLogger.w("LoginViewModel", "Biometric login failed: ${throwable.message}")
+                    clearBiometricEnrollment()
+                    _messages.emit(UiMessage.Resource(R.string.biometric_failed_hint))
+                    onFailure()
                 }
         }
     }

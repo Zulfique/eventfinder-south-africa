@@ -9,6 +9,33 @@
 
     <!-- Auth -->
     <string name="login_title">Sign In</string>
+    <string name="brand_country">SOUTH AFRICA</string>
+    <string name="brand_tagline">Discover. Plan. Attend.</string>
+    <string name="welcome_back">Welcome Back</string>
+    <string name="sign_in_to_continue">Sign in to continue</string>
+    <string name="email_address">Email address</string>
+    <string name="remember_me">Remember me</string>
+    <string name="show_password">Show password</string>
+    <string name="hide_password">Hide password</string>
+    <string name="login_action">Login</string>
+    <string name="no_account_yet">Don\'t have an account?</string>
+    <string name="sign_up">Sign Up</string>
+    <string name="phone_with_soon">Phone · Soon</string>
+    <string name="phone_sign_in_soon">Phone sign-in isn\'t available yet — sign in with your email address.</string>
+    <string name="auth_or">or</string>
+    <string name="biometrics_title">Login with Biometrics</string>
+    <string name="biometrics_subtitle">Use your fingerprint, face or device credentials</string>
+    <string name="biometric_method_fingerprint">Fingerprint</string>
+    <string name="biometric_method_face">Face ID</string>
+    <string name="biometric_method_pin">Device PIN</string>
+    <string name="use_password_instead">Use Password Instead</string>
+    <string name="use_password">Use Password</string>
+    <string name="biometric_success_title">Login Successful!</string>
+    <string name="biometric_success_hint">Welcome back to EventFinder</string>
+    <string name="continue_to_home">Continue to Home</string>
+    <string name="biometric_failed_title">Authentication Failed</string>
+    <string name="biometric_failed_hint">Please try again or use another method</string>
+    <string name="need_help">Need Help?</string>
     <string name="login_subtitle">Find your next local event</string>
     <string name="email">Email</string>
     <string name="password">Password</string>

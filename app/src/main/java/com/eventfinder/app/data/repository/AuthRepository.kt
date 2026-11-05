@@ -55,6 +55,12 @@ interface AuthRepository {
      */
     suspend fun clearBiometricEnrollment() = setBiometricEnabled(false)
 
+    /** Address to prefill on the login form, or null when "Remember me" is off. */
+    suspend fun savedLoginEmail(): String? = null
+
+    /** Stores (or, with null, forgets) the address kept by "Remember me". */
+    suspend fun rememberLoginEmail(email: String?) = Unit
+
     /** Signs in (or provisions) an account from a verified Google ID token. */
     suspend fun googleSignIn(idToken: String, language: String = "en"): Result<User>
 
@@ -394,6 +400,16 @@ class AuthRepositoryImpl(
             userDao.upsert(it.copy(biometricEnabled = enabled))
         }
         AppLogger.i("AuthRepository", "Biometric preference updated: $enabled")
+    }
+
+    override suspend fun savedLoginEmail(): String? =
+        (preferences as? com.eventfinder.app.data.store.UserPreferences)
+            ?.savedEmail
+            ?.first()
+
+    override suspend fun rememberLoginEmail(email: String?) {
+        (preferences as? com.eventfinder.app.data.store.UserPreferences)
+            ?.setSavedEmail(email)
     }
 
     override suspend fun clearBiometricEnrollment() {
