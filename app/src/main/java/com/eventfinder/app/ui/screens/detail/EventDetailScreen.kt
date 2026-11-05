@@ -1,5 +1,6 @@
 ﻿package com.eventfinder.app.ui.screens.detail
 
+import com.eventfinder.app.ui.theme.LocalAccentText
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Intent
@@ -415,7 +416,7 @@ fun EventDetailScreen(
                                 Spacer(Modifier.height(8.dp))
                                 StatusChip(
                                     label = "Repeats ${event.recurrenceRule}",
-                                    color = MaterialTheme.colorScheme.primary
+                                    color = LocalAccentText.current
                                 )
                             }
                             if (event.wheelchairAccessible || event.loudMusic ||
@@ -507,7 +508,7 @@ fun EventDetailScreen(
                                     Text(
                                         "· ${com.eventfinder.app.utils.DistanceCalculator.displayDistanceKm(view.distanceKm)} km " +
                                             stringResource(R.string.distance_away),
-                                        color = MaterialTheme.colorScheme.primary,
+                                        color = LocalAccentText.current,
                                         style = MaterialTheme.typography.bodyMedium
                                     )
                                 }
@@ -553,7 +554,7 @@ fun EventDetailScreen(
                                 Text(
                                     stringResource(R.string.view_profile),
                                     style = MaterialTheme.typography.labelMedium,
-                                    color = MaterialTheme.colorScheme.primary
+                                    color = LocalAccentText.current
                                 )
                             }
                             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -722,13 +723,13 @@ fun EventDetailScreen(
                                                                 Icons.Outlined.Verified,
                                                                 contentDescription = stringResource(R.string.review_verified),
                                                                 modifier = Modifier.size(14.dp),
-                                                                tint = MaterialTheme.colorScheme.primary
+                                                                tint = LocalAccentText.current
                                                             )
                                                             Spacer(Modifier.size(3.dp))
                                                             Text(
                                                                 stringResource(R.string.review_verified),
                                                                 style = MaterialTheme.typography.labelSmall,
-                                                                color = MaterialTheme.colorScheme.primary
+                                                                color = LocalAccentText.current
                                                             )
                                                         }
                                                     }
@@ -877,7 +878,7 @@ fun EventDetailScreen(
                                         Icon(
                                             imageVector = Icons.Outlined.Info,
                                             contentDescription = null,
-                                            tint = MaterialTheme.colorScheme.primary,
+                                            tint = LocalAccentText.current,
                                             modifier = Modifier.size(22.dp)
                                         )
                                         Spacer(Modifier.size(12.dp))
@@ -1696,7 +1697,7 @@ private fun AccessibilityChip(icon: ImageVector, label: String) {
         Icon(
             imageVector = icon,
             contentDescription = null,
-            tint = MaterialTheme.colorScheme.primary,
+            tint = LocalAccentText.current,
             modifier = Modifier.size(14.dp)
         )
         Spacer(Modifier.width(5.dp))

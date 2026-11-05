@@ -35,7 +35,7 @@ android {
         applicationId = "com.eventfinder.app"
         minSdk = 26
         targetSdk = 34
-        versionCode = 3
+        versionCode = 4
         versionName = "1.2.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"

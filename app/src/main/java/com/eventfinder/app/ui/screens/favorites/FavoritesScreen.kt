@@ -1,5 +1,6 @@
 ﻿package com.eventfinder.app.ui.screens.favorites
 
+import com.eventfinder.app.ui.theme.LocalAccentText
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -106,7 +107,7 @@ fun FavoritesScreen(
                     Text(
                         text = "${events.size} saved ${if (events.size == 1) "event" else "events"}",
                         style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.primary,
+                        color = LocalAccentText.current,
                         fontWeight = FontWeight.Bold
                     )
                 }

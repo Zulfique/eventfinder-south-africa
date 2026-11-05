@@ -1,5 +1,6 @@
 package com.eventfinder.app.ui.screens.collections
 
+import com.eventfinder.app.ui.theme.LocalAccentText
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -138,7 +139,7 @@ fun CollectionsScreen(
                             Icon(
                                 Icons.Outlined.Collections,
                                 contentDescription = null,
-                                tint = BrandGreen,
+                                tint = LocalAccentText.current,
                                 modifier = Modifier.size(20.dp)
                             )
                         }

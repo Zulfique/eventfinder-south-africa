@@ -1,5 +1,6 @@
 ﻿package com.eventfinder.app.ui.navigation
 
+import com.eventfinder.app.ui.theme.LocalAccentText
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -489,7 +490,7 @@ private fun EventFinderBottomBar(
                                 },
                                 contentDescription = stringResource(destination.labelRes),
                                 tint = if (selected) {
-                                    MaterialTheme.colorScheme.primary
+                                    LocalAccentText.current
                                 } else {
                                     MaterialTheme.colorScheme.onSurfaceVariant
                                 },
@@ -511,7 +512,7 @@ private fun EventFinderBottomBar(
                         },
                         color = when {
                             isCreate -> MaterialTheme.colorScheme.onSurface
-                            selected -> MaterialTheme.colorScheme.primary
+                            selected -> LocalAccentText.current
                             else -> MaterialTheme.colorScheme.onSurfaceVariant
                         }
                     )

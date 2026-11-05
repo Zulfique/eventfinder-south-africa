@@ -1,5 +1,6 @@
 ﻿package com.eventfinder.app.ui.screens.search
 
+import com.eventfinder.app.ui.theme.LocalAccentText
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -185,7 +186,7 @@ fun SearchScreen(
                                 selectedContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.16f),
                                 selectedLabelColor = MaterialTheme.colorScheme.primary,
                                 selectedLeadingIconColor = MaterialTheme.colorScheme.primary,
-                                selectedTrailingIconColor = MaterialTheme.colorScheme.primary
+                                selectedTrailingIconColor = LocalAccentText.current
                             ),
                             label = { Text(term) },
                             trailingIcon = {

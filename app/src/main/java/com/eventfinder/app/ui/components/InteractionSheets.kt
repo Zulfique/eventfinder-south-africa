@@ -1,5 +1,6 @@
 package com.eventfinder.app.ui.components
 
+import com.eventfinder.app.ui.theme.LocalAccentText
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.background
@@ -100,7 +101,7 @@ fun BringAFriendSheet(
                 Icon(
                     imageVector = Icons.Outlined.GroupAdd,
                     contentDescription = null,
-                    tint = BrandGreen,
+                    tint = LocalAccentText.current,
                     modifier = Modifier.size(46.dp)
                 )
             }
@@ -226,7 +227,7 @@ fun ExportRsvpSheet(
                 Icon(
                     imageVector = Icons.Outlined.Description,
                     contentDescription = null,
-                    tint = BrandGreen,
+                    tint = LocalAccentText.current,
                     modifier = Modifier.size(44.dp)
                 )
             }
@@ -291,7 +292,7 @@ private fun BulletRow(text: String) {
         Icon(
             imageVector = Icons.Outlined.CheckCircle,
             contentDescription = null,
-            tint = BrandGreen,
+            tint = LocalAccentText.current,
             modifier = Modifier.size(18.dp)
         )
         Spacer(Modifier.width(10.dp))
@@ -382,7 +383,7 @@ fun MeetingPointSheet(
                 Icon(
                     imageVector = Icons.Outlined.LocationOn,
                     contentDescription = null,
-                    tint = BrandGreen,
+                    tint = LocalAccentText.current,
                     modifier = Modifier.size(44.dp)
                 )
                 Box(
@@ -396,7 +397,7 @@ fun MeetingPointSheet(
                         Icon(
                             imageVector = Icons.Outlined.CheckCircle,
                             contentDescription = null,
-                            tint = BrandGreen,
+                            tint = LocalAccentText.current,
                             modifier = Modifier.size(14.dp)
                         )
                         Spacer(Modifier.width(6.dp))
@@ -421,7 +422,7 @@ fun MeetingPointSheet(
                 Icon(
                     imageVector = Icons.Outlined.PinDrop,
                     contentDescription = null,
-                    tint = BrandGreen,
+                    tint = LocalAccentText.current,
                     modifier = Modifier.size(20.dp)
                 )
                 Spacer(Modifier.width(12.dp))

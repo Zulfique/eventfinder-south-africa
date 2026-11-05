@@ -1,5 +1,7 @@
 package com.eventfinder.app.ui.screens.auth
 
+import com.eventfinder.app.ui.theme.LocalAccentText
+
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -138,11 +140,11 @@ private fun MethodsPanel(
     onAuthenticate: (() -> Unit)?,
     onUsePassword: () -> Unit
 ) {
-    GlowRing(color = MaterialTheme.colorScheme.primary, size = 132.dp) {
+    GlowRing(color = LocalAccentText.current, size = 132.dp) {
         Icon(
             Icons.Outlined.Fingerprint,
             contentDescription = null,
-            tint = MaterialTheme.colorScheme.primary,
+            tint = LocalAccentText.current,
             modifier = Modifier.size(64.dp)
         )
     }
@@ -212,7 +214,7 @@ private fun SuccessPanel(onContinue: () -> Unit) {
         Icon(
             Icons.Outlined.Check,
             contentDescription = null,
-            tint = primary,
+            tint = LocalAccentText.current,
             modifier = Modifier.size(86.dp)
         )
     }
@@ -324,7 +326,7 @@ private fun FailurePanel(
     TextButton(onClick = onNeedHelp) {
         Text(
             stringResource(R.string.need_help),
-            color = MaterialTheme.colorScheme.primary
+            color = LocalAccentText.current
         )
     }
 }
@@ -337,7 +339,7 @@ private fun MethodTile(
     onClick: (() -> Unit)?,
     modifier: Modifier = Modifier
 ) {
-    val tint = if (enabled) MaterialTheme.colorScheme.primary
+    val tint = if (enabled) LocalAccentText.current
     else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f)
     Column(
         modifier = modifier,
@@ -421,7 +423,7 @@ fun OrDivider() {
 @Composable
 private fun SkylineScrim(modifier: Modifier = Modifier) {
     val line = MaterialTheme.colorScheme.outline
-    val tint = MaterialTheme.colorScheme.primary
+    val tint = LocalAccentText.current
     Canvas(
         modifier = modifier
             .fillMaxWidth()

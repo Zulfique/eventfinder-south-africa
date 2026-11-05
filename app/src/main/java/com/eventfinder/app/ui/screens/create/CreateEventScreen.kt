@@ -1,5 +1,6 @@
 ﻿package com.eventfinder.app.ui.screens.create
 
+import com.eventfinder.app.ui.theme.LocalAccentText
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -541,7 +542,7 @@ private fun StepReview(state: CreateEventUiState) {
                 Icon(
                     Icons.Outlined.CheckCircle,
                     contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary
+                    tint = LocalAccentText.current
                 )
                 Spacer(Modifier.width(8.dp))
                 Text(state.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)

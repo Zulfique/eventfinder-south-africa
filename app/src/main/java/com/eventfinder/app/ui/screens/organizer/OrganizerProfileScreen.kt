@@ -1,5 +1,7 @@
 package com.eventfinder.app.ui.screens.organizer
 
+import com.eventfinder.app.ui.theme.LocalAccentText
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -138,7 +140,7 @@ fun OrganizerProfileScreen(
                         modifier = Modifier
                             .size(64.dp)
                             .background(
-                                color = MaterialTheme.colorScheme.primary,
+                                color = LocalAccentText.current,
                                 shape = RoundedCornerShape(18.dp)
                             ),
                         contentAlignment = Alignment.Center
@@ -165,14 +167,14 @@ fun OrganizerProfileScreen(
                                     Icons.Filled.Star,
                                     contentDescription = null,
                                     modifier = Modifier.size(16.dp),
-                                    tint = MaterialTheme.colorScheme.primary
+                                    tint = LocalAccentText.current
                                 )
                                 Spacer(Modifier.width(4.dp))
                                 Text(
                                     text = stringResource(R.string.verified_organizer),
                                     fontSize = 13.sp,
                                     fontWeight = FontWeight.SemiBold,
-                                    color = MaterialTheme.colorScheme.primary
+                                    color = LocalAccentText.current
                                 )
                             }
                         } else {
@@ -268,7 +270,7 @@ fun OrganizerProfileScreen(
                                     text = websiteLabel(url),
                                     fontSize = 15.sp,
                                     fontWeight = FontWeight.SemiBold,
-                                    color = MaterialTheme.colorScheme.primary
+                                    color = LocalAccentText.current
                                 )
                             }
                         }
@@ -357,7 +359,7 @@ private fun StatCell(
                     Icons.Filled.Star,
                     contentDescription = null,
                     modifier = Modifier.size(20.dp),
-                    tint = MaterialTheme.colorScheme.primary
+                    tint = LocalAccentText.current
                 )
                 Spacer(Modifier.width(4.dp))
             }

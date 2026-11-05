@@ -1,5 +1,6 @@
 ﻿package com.eventfinder.app.ui.screens.profile
 
+import com.eventfinder.app.ui.theme.LocalAccentText
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -349,7 +350,7 @@ private fun StatCard(
                 text = value,
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.ExtraBold,
-                color = MaterialTheme.colorScheme.primary
+                color = LocalAccentText.current
             )
 
             Spacer(Modifier.height(4.dp))

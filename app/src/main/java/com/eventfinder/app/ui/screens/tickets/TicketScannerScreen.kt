@@ -1,5 +1,7 @@
 package com.eventfinder.app.ui.screens.tickets
 
+import androidx.compose.runtime.Composable
+import com.eventfinder.app.ui.theme.LocalAccentText
 import android.content.Intent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -28,7 +30,8 @@ import kotlinx.coroutines.launch
 import java.io.File
 import java.io.FileWriter
 
-private val BrandGreen = Color(0xFF00C98D)
+private val BrandGreen: Color
+    @Composable get() = LocalAccentText.current
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

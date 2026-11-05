@@ -1,5 +1,7 @@
 package com.eventfinder.app.ui.screens.auth
 
+import com.eventfinder.app.ui.theme.LocalAccentText
+
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -418,7 +420,7 @@ fun LoginScreen(
                                 stringResource(R.string.forgot_password),
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.primary
+                                color = LocalAccentText.current
                             )
                         }
                     }
@@ -502,7 +504,7 @@ fun LoginScreen(
                             Icon(
                                 Icons.Outlined.Fingerprint,
                                 contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary
+                                tint = LocalAccentText.current
                             )
                             Spacer(Modifier.width(10.dp))
                             Text(stringResource(R.string.login_with_biometrics))
@@ -526,7 +528,7 @@ fun LoginScreen(
                                 stringResource(R.string.sign_up),
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.primary
+                                color = LocalAccentText.current
                             )
                         }
                     }
@@ -585,7 +587,7 @@ private fun LoginHero() {
                 Icon(
                     Icons.Outlined.EventAvailable,
                     contentDescription = null,
-                    tint = primary,
+                    tint = LocalAccentText.current,
                     modifier = Modifier.size(30.dp)
                 )
             }
@@ -601,7 +603,7 @@ private fun LoginHero() {
                 fontSize = 11.sp,
                 fontWeight = FontWeight.SemiBold,
                 letterSpacing = 3.sp,
-                color = primary
+                color = LocalAccentText.current
             )
             Spacer(Modifier.height(6.dp))
             Text(
@@ -683,8 +685,8 @@ private fun loginFieldColors() = OutlinedTextFieldDefaults.colors(
     unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.7f),
     focusedContainerColor = MaterialTheme.colorScheme.surface,
     unfocusedContainerColor = MaterialTheme.colorScheme.surface,
-    focusedLeadingIconColor = MaterialTheme.colorScheme.primary,
+    focusedLeadingIconColor = LocalAccentText.current,
     unfocusedLeadingIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-    focusedTrailingIconColor = MaterialTheme.colorScheme.primary,
+    focusedTrailingIconColor = LocalAccentText.current,
     unfocusedTrailingIconColor = MaterialTheme.colorScheme.onSurfaceVariant
 )

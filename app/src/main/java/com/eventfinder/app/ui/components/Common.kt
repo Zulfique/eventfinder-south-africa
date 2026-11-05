@@ -1,5 +1,6 @@
 ﻿package com.eventfinder.app.ui.components
 
+import com.eventfinder.app.ui.theme.LocalAccentText
 import androidx.annotation.DrawableRes
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -298,7 +299,7 @@ fun EventCard(
                     text = event.category.name.lowercase()
                         .replaceFirstChar { it.uppercase() },
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.primary,
+                    color = LocalAccentText.current,
                     fontWeight = FontWeight.Bold
                 )
 

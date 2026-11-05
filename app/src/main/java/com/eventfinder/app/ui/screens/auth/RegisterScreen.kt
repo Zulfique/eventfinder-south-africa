@@ -1,5 +1,6 @@
 package com.eventfinder.app.ui.screens.auth
 
+import com.eventfinder.app.ui.theme.LocalAccentText
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -206,7 +207,7 @@ private fun PasswordStrengthRow(strength: PasswordStrength) {
     val color = when (strength) {
         PasswordStrength.WEAK -> MaterialTheme.colorScheme.error
         PasswordStrength.MEDIUM -> MaterialTheme.colorScheme.secondary
-        PasswordStrength.STRONG -> MaterialTheme.colorScheme.primary
+        PasswordStrength.STRONG -> LocalAccentText.current
     }
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text(
