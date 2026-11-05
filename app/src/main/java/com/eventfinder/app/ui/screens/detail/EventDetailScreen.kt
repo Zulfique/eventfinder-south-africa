@@ -49,6 +49,7 @@ import androidx.compose.material.icons.outlined.Group
 import androidx.compose.material.icons.outlined.LocationOn
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.Navigation
+import androidx.compose.material.icons.outlined.NotificationsOff
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.QrCodeScanner
 import androidx.compose.material.icons.outlined.Share
@@ -803,6 +804,42 @@ fun EventDetailScreen(
                                 onCancel = { viewModel.setRsvp(RsvpStatus.DECLINED) },
                                 modifier = Modifier.fillMaxWidth()
                             )
+                            Spacer(Modifier.height(10.dp))
+                            // Per-event reminder mute ("this event only"), so a
+                            // single noisy event never forces the global
+                            // reminders switch off.
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(16.dp))
+                                    .background(MaterialTheme.colorScheme.surface)
+                                    .padding(horizontal = 14.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Outlined.NotificationsOff,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Spacer(Modifier.size(12.dp))
+                                Column(Modifier.weight(1f)) {
+                                    Text(
+                                        text = "Skip reminders",
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                    Text(
+                                        text = "For this event only",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                Switch(
+                                    checked = state.reminderSkipped,
+                                    onCheckedChange = viewModel::setReminderSkipped
+                                )
+                            }
                             Spacer(Modifier.height(10.dp))
                             OutlinedButton(
                                 onClick = { openDirections(context, event) },

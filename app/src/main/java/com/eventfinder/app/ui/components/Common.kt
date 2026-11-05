@@ -37,6 +37,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -376,9 +377,27 @@ fun EventCard(
     }
 }
 
+/**
+ * True when Settings → Accessibility → Reduced motion is on. Components read
+ * this instead of animating unconditionally: it respects the user's motion
+ * preference and removes continuous animation work on low-RAM devices.
+ */
+val LocalReducedMotion = staticCompositionLocalOf { false }
+
 /** Shimmer placeholder used for skeleton loading states. */
 @Composable
 fun ShimmerBox(modifier: Modifier = Modifier) {
+    // A static block instead of an endless shimmer when motion is reduced.
+    if (LocalReducedMotion.current) {
+        Box(
+            modifier = modifier.background(
+                MaterialTheme.colorScheme.surfaceVariant,
+                RoundedCornerShape(8.dp)
+            )
+        )
+        return
+    }
+
     val transition = rememberInfiniteTransition(label = "shimmer")
     val x = transition.animateFloat(
         initialValue = 0f,

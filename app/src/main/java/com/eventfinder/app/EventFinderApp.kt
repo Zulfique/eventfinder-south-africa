@@ -42,9 +42,27 @@ class EventFinderApp : Application(), ImageLoaderFactory {
             .build()
     }
 
+    /**
+     * Image memory is deliberately conservative: entry-level South African
+     * phones ship 2-4 GB of RAM, where Coil's default 25% bitmap cache and
+     * full-colour bitmaps push the app towards the low-memory killer. A 15%
+     * cache, RGB_565 bitmaps and a bounded 64 MB disk cache keep it smooth.
+     */
     override fun newImageLoader(): ImageLoader =
         ImageLoader.Builder(this)
             .callFactory(imageHttpClient)
+            .memoryCache {
+                coil.memory.MemoryCache.Builder(this)
+                    .maxSizePercent(0.15)
+                    .build()
+            }
+            .diskCache {
+                coil.disk.DiskCache.Builder()
+                    .directory(cacheDir.resolve("image_cache"))
+                    .maxSizeBytes(64L * 1024 * 1024)
+                    .build()
+            }
+            .allowRgb565(true)
             .build()
 
     override fun onCreate() {
@@ -107,6 +125,10 @@ class EventFinderApp : Application(), ImageLoaderFactory {
             createDeviceProtectedStorageContext().getSharedPreferences("${packageName}_preferences", Context.MODE_PRIVATE)
         )
         Configuration.getInstance().userAgentValue = IMAGE_USER_AGENT
+        // Keep the offline tile cache bounded so map browsing cannot slowly
+        // consume a low-storage device.
+        Configuration.getInstance().tileFileSystemCacheMaxBytes = 40L * 1024 * 1024
+        Configuration.getInstance().tileFileSystemCacheTrimBytes = 20L * 1024 * 1024
         AppLogger.d("EventFinderApp", "osmdroid configured with ${TileSourceFactory.MAPNIK.name()}")
     }
 

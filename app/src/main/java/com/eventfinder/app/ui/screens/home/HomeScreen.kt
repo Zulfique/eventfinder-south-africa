@@ -378,7 +378,16 @@ fun HomeScreen(
                     onUseGps = viewModel::useCurrentLocation,
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
                 )
-                if (state.lastRefreshAt > 0L) {
+                if (state.isRefreshing) {
+                    // Sync status is visible instead of silent: the user can
+                    // tell a pull-to-refresh or background sync is in flight.
+                    Text(
+                        "Syncing…",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp)
+                    )
+                } else if (state.lastRefreshAt > 0L) {
                     Text(
                         "Last updated ${((System.currentTimeMillis() - state.lastRefreshAt) / 60000)} min ago",
                         style = MaterialTheme.typography.labelSmall,

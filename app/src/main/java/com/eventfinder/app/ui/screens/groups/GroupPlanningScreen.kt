@@ -33,7 +33,10 @@ import com.eventfinder.app.utils.DateTimeUtils
 import kotlinx.coroutines.launch
 import java.util.UUID
 
-private val BrandGreen = Color(0xFF00C98D)
+private val BrandGreen: Color
+    /** Brand accent that stays legible: emerald on night surfaces, the
+     *  darker brand green on white surfaces. */
+    @Composable get() = MaterialTheme.colorScheme.primary
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

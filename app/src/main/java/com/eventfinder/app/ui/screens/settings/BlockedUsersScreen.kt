@@ -39,7 +39,10 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
-private val BrandGreen = Color(0xFF00C98D)
+private val BrandGreen: Color
+    /** Brand accent that stays legible: emerald on night surfaces, the
+     *  darker brand green on white surfaces. */
+    @Composable get() = MaterialTheme.colorScheme.primary
 
 /**
  * "Blocked users" — the management screen behind the block action on organizer

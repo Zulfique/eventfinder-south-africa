@@ -53,7 +53,10 @@ import java.util.UUID
 import androidx.compose.foundation.Image
 import androidx.compose.ui.res.painterResource
 
-private val BrandGreen = Color(0xFF00C98D)
+private val BrandGreen: Color
+    /** Brand accent that stays legible: emerald on night surfaces, the
+     *  darker brand green on white surfaces. */
+    @Composable get() = MaterialTheme.colorScheme.primary
 
 /**
  * "Event Collections" — user-made lists of events (2026 showcase, screen 12).

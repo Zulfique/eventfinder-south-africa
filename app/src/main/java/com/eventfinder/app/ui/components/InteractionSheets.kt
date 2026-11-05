@@ -56,7 +56,10 @@ import kotlinx.coroutines.launch
 import java.io.File
 import java.io.FileWriter
 
-private val BrandGreen = Color(0xFF00C98D)
+private val BrandGreen: Color
+    /** Brand accent that stays legible: emerald on night surfaces, the
+     *  darker brand green on white surfaces. */
+    @Composable get() = MaterialTheme.colorScheme.primary
 
 /**
  * "Bring a Friend" — the invite sheet from the 2026 showcase.

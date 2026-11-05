@@ -290,11 +290,18 @@ class HomeViewModel(
 
 
                 if (!alerts.isEmpty) {
-                    NotificationHelper.postEventAlerts(
-                        context = appContext,
-                        newEvents = alerts.newEvents,
-                        updatedFavorites = alerts.updatedFavorites
-                    )
+                    // The Smart notifications switches gate this: "Nearby
+                    // events" covers new events in the feed, "Personalised
+                    // picks" covers updates to favourited events.
+                    val nearbyEnabled = preferences.notifyNearbyEvents.first()
+                    val picksEnabled = preferences.notifyPersonalisedPicks.first()
+                    if (nearbyEnabled || picksEnabled) {
+                        NotificationHelper.postEventAlerts(
+                            context = appContext,
+                            newEvents = if (nearbyEnabled) alerts.newEvents else emptyList(),
+                            updatedFavorites = if (picksEnabled) alerts.updatedFavorites else emptyList()
+                        )
+                    }
                 }
 
 

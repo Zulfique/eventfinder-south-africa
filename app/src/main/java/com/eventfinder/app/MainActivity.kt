@@ -73,6 +73,7 @@ class MainActivity : FragmentActivity() {
 
         setContent {
             val themeMode by container.preferences.themeMode.collectAsState(initial = "system")
+            val reducedMotion by container.preferences.reducedMotion.collectAsState(initial = false)
             // Material You is opt-in (Settings): without it the app always uses
             // the brand-green light scheme and the #0B1929 night scheme.
             val dynamicColor by container.preferences.dynamicColorEnabled.collectAsState(initial = false)
@@ -90,14 +91,18 @@ class MainActivity : FragmentActivity() {
                 controller.isAppearanceLightStatusBars = !darkTheme
                 controller.isAppearanceLightNavigationBars = !darkTheme
             }
-            EventFinderTheme(
-                darkTheme = darkTheme,
-                dynamicColor = dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+            androidx.compose.runtime.CompositionLocalProvider(
+                com.eventfinder.app.ui.components.LocalReducedMotion provides reducedMotion
             ) {
-                EventFinderNavHost(
-                    container = container,
-                    deepLinkEventId = deepLinkEventId
-                )
+                EventFinderTheme(
+                    darkTheme = darkTheme,
+                    dynamicColor = dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+                ) {
+                    EventFinderNavHost(
+                        container = container,
+                        deepLinkEventId = deepLinkEventId
+                    )
+                }
             }
         }
     }

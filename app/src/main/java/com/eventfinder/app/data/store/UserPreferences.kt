@@ -749,6 +749,37 @@ class UserPreferences(private val context: Context) : SessionProvider {
         }
     }
 
+    // ---- Per-event reminder opt-out ("Skip reminders: this event only") ----
+
+    /** Events whose reminder the user muted individually. */
+    val skippedReminderEventIds: Flow<Set<String>> = sessionUserId.flatMapLatest { userId ->
+        if (userId.isNullOrBlank()) {
+            flowOf(emptySet())
+        } else {
+            context.eventFinderDataStore.data.map { prefs ->
+                prefs[userStringKey("skipped_reminder_events", userId)]
+                    ?.split(',')
+                    ?.filter { it.isNotBlank() }
+                    ?.toSet()
+                    .orEmpty()
+            }
+        }
+    }
+
+    suspend fun setReminderSkipped(eventId: String, skipped: Boolean) {
+        val userId = sessionUserId.first() ?: return
+        context.eventFinderDataStore.edit { prefs ->
+            val key = userStringKey("skipped_reminder_events", userId)
+            val current = prefs[key]
+                ?.split(',')
+                ?.filter { it.isNotBlank() }
+                ?.toMutableSet()
+                ?: mutableSetOf()
+            if (skipped) current.add(eventId) else current.remove(eventId)
+            prefs[key] = current.joinToString(",")
+        }
+    }
+
     // ---- Smart notification tuning (Settings) ----
 
     val notifyGroupUpdates: Flow<Boolean> = smartToggle("smart_group_updates")

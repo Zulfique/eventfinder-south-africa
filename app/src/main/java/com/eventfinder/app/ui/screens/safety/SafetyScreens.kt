@@ -75,7 +75,10 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
-private val BrandGreen = Color(0xFF00C98D)
+private val BrandGreen: Color
+    /** Brand accent that stays legible: emerald on night surfaces, the
+     *  darker brand green on white surfaces. */
+    @Composable get() = MaterialTheme.colorScheme.primary
 private val DangerRed = Color(0xFFEF4444)
 
 /** Reasons offered on the Report a Scam screen, in showcase order. */

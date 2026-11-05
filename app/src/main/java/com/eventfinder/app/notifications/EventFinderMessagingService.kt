@@ -15,6 +15,7 @@ import com.eventfinder.app.utils.AppLogger
 import com.google.firebase.messaging.FirebaseMessaging
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
+import kotlinx.coroutines.flow.first
 
 /**
  * Firebase Cloud Messaging service (POE: "Real-time Notifications").
@@ -31,6 +32,21 @@ class EventFinderMessagingService : FirebaseMessagingService() {
 
     override fun onMessageReceived(message: RemoteMessage) {
         AppLogger.i("FCM", "Push received from ${message.from}")
+
+        // "Group updates" only concerns group-plan pushes; other pushes stay
+        // unaffected. The preference is read synchronously because FCM gives
+        // the service a short window to display the notification.
+        if (message.data["type"] == "group") {
+            val preferences = (application as? com.eventfinder.app.EventFinderApp)
+                ?.container?.preferences
+            val enabled = preferences != null && kotlinx.coroutines.runBlocking {
+                preferences.notifyGroupUpdates.first()
+            }
+            if (!enabled) {
+                AppLogger.i("FCM", "Group updates disabled - dropping push")
+                return
+            }
+        }
         val title = message.notification?.title
             ?: message.data["title"]
             ?: getString(R.string.new_events_alert_title)

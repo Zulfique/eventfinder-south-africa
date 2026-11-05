@@ -74,6 +74,8 @@ data class EventDetailUiState(
     val myTicket: com.eventfinder.app.domain.model.EventTicket? = null,
     /** True while an RSVP write (and its reminder/ticket side-effects) runs. */
     val rsvpSaving: Boolean = false,
+    /** "Skip reminders" is on for this event only. */
+    val reminderSkipped: Boolean = false,
     /** Authors the signed-in user has blocked; their reviews stay hidden. */
     val blockedUserIds: Set<String> = emptySet(),
     /** Nearby events in the same category, loaded on demand. */
@@ -119,6 +121,11 @@ class EventDetailViewModel(
             currentUserId = container.preferences.sessionUserId.first()
             loadMyTicket()
             loadBlockedUsers()
+        }
+        viewModelScope.launch {
+            container.preferences.skippedReminderEventIds.collect { skipped ->
+                _uiState.update { it.copy(reminderSkipped = eventId in skipped) }
+            }
         }
         viewModelScope.launch {
             kotlinx.coroutines.flow.combine(
@@ -305,7 +312,9 @@ class EventDetailViewModel(
                         _uiState.update { it.copy(myTicket = ticket) }
                     }
                     val remindersEnabled = container.preferences.remindersEnabled.first()
-                    if (event != null && remindersEnabled && !userId.isNullOrBlank()) {
+                    val reminderSkipped = eventId in
+                        container.preferences.skippedReminderEventIds.first()
+                    if (event != null && remindersEnabled && !reminderSkipped && !userId.isNullOrBlank()) {
                         val scheduled = NotificationHelper.scheduleEventReminders(appContext, event, userId)
                         _messages.emit(
                             if (scheduled > 0) UiMessage.Resource(R.string.reminder_scheduled)
@@ -322,6 +331,30 @@ class EventDetailViewModel(
             }
             } finally {
                 _uiState.update { it.copy(rsvpSaving = false) }
+            }
+        }
+    }
+
+    /**
+     * Mutes or restores this event's reminder without touching the global
+     * reminders setting, matching the showcase's "Skip reminders: this event
+     * only" control.
+     */
+    fun setReminderSkipped(skip: Boolean) {
+        viewModelScope.launch {
+            container.preferences.setReminderSkipped(eventId, skip)
+            val event = eventRepository.getEvent(eventId)
+            val userId = container.preferences.sessionUserId.first()
+            if (skip) {
+                NotificationHelper.cancelEventReminders(appContext, eventId)
+                _messages.emit(UiMessage.Resource(R.string.reminders_cancelled))
+            } else if (
+                event != null &&
+                !userId.isNullOrBlank() &&
+                container.preferences.remindersEnabled.first()
+            ) {
+                NotificationHelper.scheduleEventReminders(appContext, event, userId)
+                _messages.emit(UiMessage.Resource(R.string.reminder_scheduled))
             }
         }
     }
