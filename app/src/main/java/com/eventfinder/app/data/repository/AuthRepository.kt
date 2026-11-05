@@ -49,6 +49,12 @@ interface AuthRepository {
     suspend fun verifyEmailChange(token: String): Result<Unit>
     suspend fun setBiometricEnabled(enabled: Boolean)
 
+    /**
+     * Drops a stale enrolment — device biometrics changed or the Keystore key
+     * was invalidated — without needing an active session.
+     */
+    suspend fun clearBiometricEnrollment() = setBiometricEnabled(false)
+
     /** Signs in (or provisions) an account from a verified Google ID token. */
     suspend fun googleSignIn(idToken: String, language: String = "en"): Result<User>
 
@@ -381,11 +387,25 @@ class AuthRepositoryImpl(
             preferences.setBiometricUserId(user.id)
         } else {
             preferences.setBiometricUserId(null)
+            // Removing the enrolment should also remove the key that guarded it.
+            com.eventfinder.app.security.BiometricAuth.clearKey()
         }
         userDao.findById(user.id)?.let {
             userDao.upsert(it.copy(biometricEnabled = enabled))
         }
         AppLogger.i("AuthRepository", "Biometric preference updated: $enabled")
+    }
+
+    override suspend fun clearBiometricEnrollment() {
+        val userId = preferences.biometricUserId.first()
+        if (userId != null) {
+            userDao.findById(userId)?.let {
+                userDao.upsert(it.copy(biometricEnabled = false))
+            }
+        }
+        preferences.setBiometricUserId(null)
+        com.eventfinder.app.security.BiometricAuth.clearKey()
+        AppLogger.w("AuthRepository", "Biometric enrolment cleared; password required")
     }
 
     override suspend fun requestPasswordReset(email: String): Result<Unit> {

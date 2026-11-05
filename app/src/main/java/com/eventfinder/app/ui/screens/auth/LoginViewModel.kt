@@ -142,6 +142,17 @@ class LoginViewModel(
     }
 
     /**
+     * Drops a stale biometric enrolment after the device's biometrics changed,
+     * so the login screen stops offering an unlock that can never succeed.
+     */
+    fun clearBiometricEnrollment() {
+        viewModelScope.launch {
+            authRepository.clearBiometricEnrollment()
+            AppLogger.w("LoginViewModel", "Stale biometric enrolment cleared")
+        }
+    }
+
+    /**
      * Password reset step 1 — emails a single-use token to the address typed
      * in the login form. The API never reveals whether the account exists.
      */

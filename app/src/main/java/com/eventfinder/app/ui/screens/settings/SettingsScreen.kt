@@ -80,6 +80,7 @@ import kotlinx.coroutines.launch
 import com.eventfinder.app.di.AppContainer
 import com.eventfinder.app.domain.model.SupportedLanguage
 import com.eventfinder.app.security.BiometricAuth
+import com.eventfinder.app.security.BiometricFailure
 import com.eventfinder.app.ui.components.resolve
 
 /**
@@ -109,6 +110,9 @@ fun SettingsScreen(
     val adminMode by container.preferences.adminMode.collectAsState(initial = false)
     var unlockTaps by remember { androidx.compose.runtime.mutableIntStateOf(0) }
     val biometricSupported = BiometricAuth.isAvailable(context)
+    val hostActivity = context as? androidx.fragment.app.FragmentActivity
+    // Held so the prompt's callbacks stay reachable while the system dialog is up.
+    var biometricPrompt by remember { mutableStateOf<BiometricAuth?>(null) }
     val snackbarHostState = remember { SnackbarHostState() }
     val screenScope = rememberCoroutineScope()
 
@@ -525,7 +529,31 @@ fun SettingsScreen(
                             Switch(
                                 checked = state.biometricEnabled,
                                 enabled = biometricSupported,
-                                onCheckedChange = viewModel::setBiometric
+                                onCheckedChange = { wanted ->
+                                    if (!wanted) {
+                                        viewModel.setBiometric(false)
+                                    } else if (hostActivity == null) {
+                                        viewModel.setBiometric(true)
+                                    } else {
+                                        // Prove the prompt and Keystore key work before
+                                        // promising an unlock on the next launch.
+                                        val prompt = BiometricAuth(
+                                            activity = hostActivity,
+                                            onAuthenticated = { viewModel.setBiometric(true) },
+                                            onError = { failure ->
+                                                if (failure != BiometricFailure.CANCELLED) {
+                                                    android.widget.Toast.makeText(
+                                                        context,
+                                                        R.string.biometric_enable_failed,
+                                                        android.widget.Toast.LENGTH_LONG
+                                                    ).show()
+                                                }
+                                            }
+                                        )
+                                        biometricPrompt = prompt
+                                        prompt.authenticate()
+                                    }
+                                }
                             )
                         }
                     )

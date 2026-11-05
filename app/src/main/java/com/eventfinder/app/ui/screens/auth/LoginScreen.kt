@@ -58,6 +58,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.eventfinder.app.R
 import com.eventfinder.app.di.AppContainer
 import com.eventfinder.app.security.BiometricAuth
+import com.eventfinder.app.security.BiometricFailure
 import com.eventfinder.app.security.GoogleSignInHelper
 import com.eventfinder.app.ui.components.resolve
 import com.eventfinder.app.utils.AppLogger
@@ -89,7 +90,9 @@ fun LoginScreen(
     val coroutineScope = rememberCoroutineScope()
     val googleSignInHelper = remember { GoogleSignInHelper(activity) }
 
-    // Biometric prompt wiring: falls back silently to password login on error.
+    // Biometric prompt wiring: the prompt is bound to a Keystore key, so a
+    // changed enrolment is reported as INVALIDATED and the stale entry is
+    // removed instead of leaving a button that can never succeed.
     var biometricPrompt by remember {
         mutableStateOf<BiometricAuth?>(null)
     }
@@ -98,8 +101,34 @@ fun LoginScreen(
         biometricPrompt = BiometricAuth(
             activity = activity,
             onAuthenticated = { viewModel.confirmBiometricLogin(onLoggedIn) },
-            onError = {
-                AppLogger.w("LoginScreen", "Biometric prompt error: $it")
+            onError = { failure ->
+                AppLogger.w("LoginScreen", "Biometric prompt failed: $failure")
+                when (failure) {
+                    BiometricFailure.CANCELLED -> Unit
+                    BiometricFailure.INVALIDATED -> {
+                        viewModel.clearBiometricEnrollment()
+                        coroutineScope.launch {
+                            snackbarHostState.showSnackbar(
+                                activity.getString(R.string.biometric_invalidated)
+                            )
+                        }
+                    }
+                    BiometricFailure.LOCKED_OUT -> coroutineScope.launch {
+                        snackbarHostState.showSnackbar(
+                            activity.getString(R.string.biometric_locked_out)
+                        )
+                    }
+                    BiometricFailure.UNAVAILABLE -> coroutineScope.launch {
+                        snackbarHostState.showSnackbar(
+                            activity.getString(R.string.biometric_unavailable_now)
+                        )
+                    }
+                    BiometricFailure.FAILED -> coroutineScope.launch {
+                        snackbarHostState.showSnackbar(
+                            activity.getString(R.string.login_failed)
+                        )
+                    }
+                }
             }
         )
     }
