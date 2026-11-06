@@ -163,6 +163,7 @@ fun EventDetailScreen(
     onOpenScanner: (String) -> Unit = {},
     onOrganizerClick: (String) -> Unit = {},
     onReportEvent: (String) -> Unit = {},
+    onRateEvent: (String) -> Unit = {},
     onOpenEvent: (String) -> Unit = {}
 ) {
     val context = LocalContext.current
@@ -572,7 +573,24 @@ fun EventDetailScreen(
                             WeatherCard(state)
                             Spacer(Modifier.height(12.dp))
 
-                            Text(stringResource(R.string.reviews), style = MaterialTheme.typography.titleMedium)
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    stringResource(R.string.reviews),
+                                    style = MaterialTheme.typography.titleMedium,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                TextButton(onClick = { onRateEvent(event.id) }) {
+                                    Text(
+                                        stringResource(R.string.rating_rate_event),
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = LocalAccentText.current
+                                    )
+                                }
+                            }
                             Spacer(Modifier.height(4.dp))
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 val average = state.averageRating

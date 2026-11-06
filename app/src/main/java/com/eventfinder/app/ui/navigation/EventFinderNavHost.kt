@@ -69,6 +69,7 @@ import com.eventfinder.app.ui.screens.auth.LoginScreen
 import com.eventfinder.app.ui.screens.auth.RegisterScreen
 import com.eventfinder.app.ui.screens.create.CreateEventScreen
 import com.eventfinder.app.ui.screens.detail.EventDetailScreen
+import com.eventfinder.app.ui.screens.rating.ContentRatingScreen
 import com.eventfinder.app.ui.screens.editprofile.EditProfileScreen
 import com.eventfinder.app.ui.screens.favorites.FavoritesScreen
 import com.eventfinder.app.ui.screens.groups.GroupPlanningScreen
@@ -109,6 +110,7 @@ object AppDestinations {
 
     // 2026 feature set
     const val REPORT_SCAM = "reportScam/{targetId}"
+    const val CONTENT_RATING = "contentRating/{eventId}"
     const val MODERATION = "moderation"
     const val ACCESSIBILITY = "accessibility"
     const val ACCESSIBILITY_PROFILE = "accessibilityProfile"
@@ -128,6 +130,7 @@ object AppDestinations {
     fun ticketScanner(eventId: String) = "ticketScanner/$eventId"
     fun organizerProfile(organizerId: String) = "organizerProfile/$organizerId"
     fun reportScam(targetId: String) = "reportScam/$targetId"
+    fun contentRating(eventId: String) = "contentRating/$eventId"
 }
 
 /**
@@ -235,6 +238,7 @@ fun EventFinderNavHost(
                                 onOpenScanner = { navController.navigate(AppDestinations.ticketScanner(it)) },
                                 onOrganizerClick = { navController.navigate(AppDestinations.organizerProfile(it)) },
                                 onReportEvent = { navController.navigate(AppDestinations.reportScam(it)) },
+                                onRateEvent = { navController.navigate(AppDestinations.contentRating(it)) },
                                 onOpenEvent = { navController.navigate(AppDestinations.eventDetail(it)) }
                             )
                         }
@@ -374,6 +378,17 @@ fun EventFinderNavHost(
                             arguments = listOf(navArgument("eventId") { type = NavType.StringType })
                         ) { entry ->
                             GroupPlanningScreen(
+                                container = container,
+                                eventId = entry.arguments?.getString("eventId").orEmpty(),
+                                onBack = { navController.popBackStack() }
+                            )
+                        }
+
+                        composable(
+                            route = AppDestinations.CONTENT_RATING,
+                            arguments = listOf(navArgument("eventId") { type = NavType.StringType })
+                        ) { entry ->
+                            ContentRatingScreen(
                                 container = container,
                                 eventId = entry.arguments?.getString("eventId").orEmpty(),
                                 onBack = { navController.popBackStack() }

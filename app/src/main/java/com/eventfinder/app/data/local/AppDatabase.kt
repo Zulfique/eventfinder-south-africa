@@ -326,6 +326,26 @@ private val MIGRATION_20_21 = object : Migration(20, 21) {
     }
 }
 
+private val MIGRATION_21_22 = object : Migration(21, 22) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        // Community content ratings: one row per (event, user).
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS `content_ratings` (
+                `eventId` TEXT NOT NULL,
+                `userId` TEXT NOT NULL,
+                `stars` INTEGER NOT NULL,
+                `contentType` TEXT NOT NULL,
+                `tags` TEXT NOT NULL,
+                `concerns` TEXT NOT NULL,
+                `createdAt` INTEGER NOT NULL,
+                PRIMARY KEY(`eventId`, `userId`)
+            )
+            """.trimIndent()
+        )
+    }
+}
+
   @Database(
     entities = [
         UserEntity::class,
@@ -339,9 +359,10 @@ private val MIGRATION_20_21 = object : Migration(20, 21) {
         TicketEntity::class,
         ReportEntity::class,
         BlockedUserEntity::class,
-        DraftEntity::class
+        DraftEntity::class,
+        ContentRatingEntity::class
     ],
-    version = 21,
+    version = 22,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase(), DatabaseTransactionHelper {
@@ -355,6 +376,8 @@ abstract class AppDatabase : RoomDatabase(), DatabaseTransactionHelper {
     abstract fun groupPlanDao(): GroupPlanDao
     abstract fun ticketDao(): TicketDao
     abstract fun reportDao(): ReportDao
+
+    abstract fun contentRatingDao(): ContentRatingDao
     abstract fun draftDao(): DraftDao
 
 
@@ -411,7 +434,7 @@ abstract class AppDatabase : RoomDatabase(), DatabaseTransactionHelper {
                 AppDatabase::class.java,
                 DB_NAME
             )
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18, MIGRATION_18_19, MIGRATION_19_20, MIGRATION_20_21)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18, MIGRATION_18_19, MIGRATION_19_20, MIGRATION_20_21, MIGRATION_21_22)
                                 .build()
     }
 }

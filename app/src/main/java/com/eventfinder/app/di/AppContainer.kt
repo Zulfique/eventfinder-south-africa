@@ -130,6 +130,13 @@ class AppContainer(context: Context) {
         ReportRepositoryImpl(database.reportDao())
     }
 
+    val contentRatingRepository: com.eventfinder.app.data.repository.ContentRatingRepository by lazy {
+        com.eventfinder.app.data.repository.ContentRatingRepositoryImpl(
+            dao = database.contentRatingDao(),
+            preferences = preferences
+        )
+    }
+
     /** Real road routing (Valhalla → OSRM) with an offline route cache. */
     val routeRepository: RouteRepository by lazy {
         RouteRepositoryImpl(httpClient = httpClient, cacheDir = appContext.cacheDir)
