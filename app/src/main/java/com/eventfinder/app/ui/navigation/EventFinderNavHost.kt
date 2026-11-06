@@ -62,7 +62,9 @@ import androidx.navigation.navArgument
 import com.eventfinder.app.R
 import com.eventfinder.app.di.AppContainer
 import com.eventfinder.app.ui.components.CreatePngButton
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.withContext
 import com.eventfinder.app.ui.screens.auth.LoginScreen
 import com.eventfinder.app.ui.screens.auth.RegisterScreen
 import com.eventfinder.app.ui.screens.create.CreateEventScreen
@@ -182,8 +184,12 @@ fun EventFinderNavHost(
             if (requestGuestLogin) {
                 androidx.compose.runtime.LaunchedEffect(Unit) {
                     container.authRepository.continueAsGuest()
-                    navController.navigate(AppDestinations.MAIN) {
-                        popUpTo(AppDestinations.LOGIN) { inclusive = true }
+                    // Creating the guest session suspends while Room writes, so
+                    // pin the navigation back to the main thread before it runs.
+                    withContext(Dispatchers.Main) {
+                        navController.navigate(AppDestinations.MAIN) {
+                            popUpTo(AppDestinations.LOGIN) { inclusive = true }
+                        }
                     }
                 }
             }

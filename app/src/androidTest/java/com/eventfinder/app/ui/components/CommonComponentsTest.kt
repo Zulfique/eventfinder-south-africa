@@ -5,10 +5,13 @@ import androidx.compose.material.icons.outlined.EventBusy
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotSelected
 import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.hasScrollAction
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollToNode
 import androidx.test.platform.app.InstrumentationRegistry
 import com.eventfinder.app.R
 import com.eventfinder.app.domain.model.Event
@@ -111,9 +114,20 @@ class CommonComponentsTest {
             CategoryChips(selected = EventCategory.SPORTS, onSelect = {})
         }
 
-        composeRule.onNodeWithText(context.getString(R.string.cat_sports)).assertIsSelected()
-        composeRule.onNodeWithText(context.getString(R.string.cat_music)).assertIsNotSelected()
-        composeRule.onNodeWithText(context.getString(R.string.all_categories)).assertIsNotSelected()
+        val sports = context.getString(R.string.cat_sports)
+        val music = context.getString(R.string.cat_music)
+        val allCategories = context.getString(R.string.all_categories)
+
+        // The chips live in a horizontal lazy row, so a chip only exists once
+        // the row has been scrolled to it.
+        composeRule.onNode(hasScrollAction()).performScrollToNode(hasText(sports))
+        composeRule.onNodeWithText(sports).assertIsSelected()
+
+        composeRule.onNode(hasScrollAction()).performScrollToNode(hasText(music))
+        composeRule.onNodeWithText(music).assertIsNotSelected()
+
+        composeRule.onNode(hasScrollAction()).performScrollToNode(hasText(allCategories))
+        composeRule.onNodeWithText(allCategories).assertIsNotSelected()
     }
 
     @Test
