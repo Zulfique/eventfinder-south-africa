@@ -140,6 +140,7 @@
     <string name="events_nearby">Events near you</string>
     <string name="locate_me">Locate me</string>
     <string name="continue_as_guest">Continue as Guest</string>
+    <string name="continue_as_guest_loading">Continue as Guest...</string>
     <string name="radius_value">%1$d km</string>
     <string name="your_location">Your location</string>
     <string name="location_unavailable">Unable to determine your location. Enable GPS and try again.</string>

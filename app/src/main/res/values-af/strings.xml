@@ -140,6 +140,7 @@
     <string name="events_nearby">Gebeurtenisse naby jou</string>
     <string name="locate_me">Vind my ligging</string>
     <string name="continue_as_guest">Gaan voort as gas</string>
+    <string name="continue_as_guest_loading">Gaan voort as gas...</string>
     <string name="radius_value">%1$d km</string>
     <string name="your_location">Jou ligging</string>
     <string name="location_unavailable">Kan nie jou ligging bepaal nie. Skakel GPS aan en probeer weer.</string>

@@ -2,11 +2,15 @@ package com.eventfinder.app.ui.screens.auth
 
 import com.eventfinder.app.ui.theme.LocalAccentText
 
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -25,6 +29,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowForward
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.outlined.EventAvailable
 import androidx.compose.material.icons.outlined.Fingerprint
 import androidx.compose.material.icons.outlined.Lock
@@ -60,12 +65,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
@@ -118,6 +126,8 @@ fun LoginScreen(
     var biometricRetryAllowed by remember { mutableStateOf(true) }
     // Kept in state so the prompt's callbacks outlive the trigger.
     var biometricPrompt by remember { mutableStateOf<BiometricAuth?>(null) }
+    // Kept true while the guest session is created so the pill can show its loading state.
+    var guestLoading by remember { mutableStateOf(false) }
 
     fun startBiometric() {
         val prompt = BiometricAuth(
@@ -455,6 +465,17 @@ fun LoginScreen(
                         }
                     }
 
+                    Spacer(Modifier.height(12.dp))
+
+                    GuestPillButton(
+                        onClick = {
+                            guestLoading = true
+                            onGuestLogin()
+                        },
+                        enabled = !uiState.isSubmitting && !uiState.isGoogleSigningIn,
+                        loading = guestLoading
+                    )
+
                     if (GoogleSignInHelper.isConfigured) {
                         Spacer(Modifier.height(10.dp))
                         OutlinedButton(
@@ -533,18 +554,101 @@ fun LoginScreen(
                         }
                     }
 
-                    TextButton(
-                        onClick = onGuestLogin,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text(
-                            stringResource(R.string.continue_as_guest),
-                            fontSize = 13.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
                     Spacer(Modifier.height(24.dp))
                 }
+            }
+        }
+    }
+}
+
+/**
+ * Guest access action from the 2026 sheet: a full-width pill that keeps one
+ * shape across its default, pressed, hover, disabled and loading states.
+ */
+@Composable
+private fun GuestPillButton(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    loading: Boolean = false
+) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressed by interactionSource.collectIsPressedAsState()
+    val hovered by interactionSource.collectIsHoveredAsState()
+    val isDark = MaterialTheme.colorScheme.background.luminance() < 0.5f
+
+    val container by animateColorAsState(
+        targetValue = when {
+            !enabled -> if (isDark) Color(0xFF1A3D36) else Color(0xFFB2F5E1)
+            pressed -> Color(0xFF00A579)
+            hovered -> Color(0xFF42FFC6)
+            else -> Color(0xFF00C98D)
+        },
+        label = "guestPillContainer"
+    )
+    // 38% label on the disabled fills, full-strength navy on every live state.
+    val labelColor = when {
+        !enabled && isDark -> Color.White.copy(alpha = 0.38f)
+        !enabled -> Color(0xFF0B1929).copy(alpha = 0.38f)
+        else -> Color(0xFF0B1929)
+    }
+    val shape = RoundedCornerShape(28.dp)
+
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(56.dp)
+            .shadow(
+                elevation = if (hovered && enabled) 18.dp else 0.dp,
+                shape = shape,
+                ambientColor = Color(0xFF42FFC6),
+                spotColor = Color(0xFF42FFC6)
+            )
+            .clip(shape)
+            .background(container)
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                enabled = enabled && !loading,
+                role = Role.Button,
+                onClick = onClick
+            ),
+        contentAlignment = Alignment.Center
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            if (loading) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(24.dp),
+                    color = labelColor,
+                    strokeWidth = 2.dp
+                )
+                Spacer(Modifier.width(10.dp))
+                Text(
+                    stringResource(R.string.continue_as_guest_loading),
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = labelColor
+                )
+            } else {
+                Icon(
+                    Icons.Filled.Person,
+                    contentDescription = null,
+                    modifier = Modifier.size(20.dp),
+                    tint = labelColor
+                )
+                Spacer(Modifier.width(10.dp))
+                Text(
+                    stringResource(R.string.continue_as_guest),
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = labelColor
+                )
             }
         }
     }
