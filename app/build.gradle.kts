@@ -29,12 +29,12 @@ localProperties.forEach { (key, value) -> extra[key.toString()] = value }
 
 android {
     namespace = "com.eventfinder.app"
-    compileSdk = 34
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.eventfinder.app"
         minSdk = 26
-        targetSdk = 34
+        targetSdk = 36
         versionCode = 4
         versionName = "1.2.0"
 
